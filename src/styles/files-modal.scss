@@ -1,0 +1,211 @@
+// src/styles/files-modal.scss
+
+.files-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+}
+
+.files-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  z-index: -1;
+}
+
+.files-modal {
+  background: rgba(var(--bs-body-bg-rgb, 33, 37, 41), 0.95);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border-radius: 16px;
+  border: 1px solid rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.1);
+  color: var(--bs-body-color);
+  display: flex;
+  flex-direction: column;
+  max-width: 700px;
+  width: 100%;
+  max-height: 80vh;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.files-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.1);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+    flex: 0 1 auto;
+  }
+}
+
+.files-modal-path {
+  font-size: 0.875rem;
+  color: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.6);
+  font-family: monospace;
+  flex: 1 1 100%;
+  word-break: break-all;
+}
+
+.files-modal-close {
+  background: transparent;
+  border: 0;
+  color: var(--bs-body-color);
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+
+  &:hover {
+    background: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.1);
+  }
+
+  &:active {
+    background: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.2);
+  }
+}
+
+.files-modal-content {
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.files-loading,
+.files-error,
+.files-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 16px;
+  min-height: 200px;
+
+  p {
+    margin: 0;
+    font-size: 1rem;
+    color: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.6);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  font-size: 2rem;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.retry-btn {
+  padding: 8px 16px;
+  background: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.1);
+  border: 1px solid rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.2);
+  color: var(--bs-body-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.2);
+  }
+}
+
+.file-item-parent,
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  color: var(--bs-body-color);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  width: 100%;
+  font-size: 1rem;
+
+  &:hover {
+    background: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.08);
+  }
+
+  &:active {
+    background: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.12);
+  }
+}
+
+.file-item-parent {
+  border-bottom: 1px solid rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.1);
+}
+
+.file-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+}
+
+.file-name {
+  flex: 1;
+  font-weight: 500;
+}
+
+.file-size {
+  font-size: 0.875rem;
+  color: rgba(var(--bs-body-color-rgb, 255, 255, 255), 0.5);
+  flex-shrink: 0;
+}
+
+.file-item--directory {
+  font-weight: 600;
+}
