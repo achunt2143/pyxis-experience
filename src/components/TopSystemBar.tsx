@@ -1,31 +1,25 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   IconButton,
   TextField,
-  Modal,
   Paper,
   Grid,
   Switch,
   FormControlLabel,
-  Typography,
-  Slider,
 } from '@mui/material';
 import {
   Search,
   Bell,
   Settings,
   Wifi,
-  Battery as BatteryIcon,
-  Menu,
+  WifiOff,
   Battery,
+  BatteryCharging,
+  BatteryLow,
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
-
-interface QuickSettingsPanel {
-  type: 'notifications' | 'settings' | 'wifi' | 'battery' | null;
-  anchorEl: HTMLElement | null;
-}
+import { motion } from 'framer-motion';
+import { useBatteryStatus, useNetworkStatus } from '../services/useEcho';
 
 export const TopSystemBar: React.FC = () => {
   const [activePanel, setActivePanel] = useState<{
@@ -33,6 +27,17 @@ export const TopSystemBar: React.FC = () => {
     anchorEl: HTMLElement | null;
   }>({ type: null, anchorEl: null });
   const [darkMode, setDarkMode] = useState(false);
+
+  const battery = useBatteryStatus();
+  const network = useNetworkStatus();
+
+  // Pick a battery icon based on level/charging state.
+  const BatteryGlyph = battery?.charging
+    ? BatteryCharging
+    : (battery && battery.level <= 20)
+    ? BatteryLow
+    : Battery;
+  const WifiGlyph = network?.connected ? Wifi : WifiOff;
 
   const currentTime = new Date().toLocaleTimeString('en-US', {
     hour: '2-digit',
@@ -129,19 +134,39 @@ export const TopSystemBar: React.FC = () => {
             sx={{
               color: activePanel.type === 'wifi' ? 'primary.main' : 'text.primary',
             }}
+            title={network?.connected ? `Connected: ${network.ssid}` : 'Offline'}
           >
-            <Wifi size={20} />
+            <WifiGlyph size={20} />
           </IconButton>
 
-          <IconButton
-            size="small"
-            onClick={(e) => handleQuickSettingsClick('battery', e)}
+          <Box
             sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              cursor: 'pointer',
               color: activePanel.type === 'battery' ? 'primary.main' : 'text.primary',
             }}
+            onClick={(e) =>
+              handleQuickSettingsClick(
+                'battery',
+                e as unknown as React.MouseEvent<HTMLButtonElement>
+              )
+            }
+            title={battery ? `${battery.level}% ${battery.charging ? '(charging)' : ''}` : 'Battery'}
           >
-            <Battery size={20} />
-          </IconButton>
+            <IconButton size="small" sx={{ color: 'inherit' }}>
+              <BatteryGlyph size={20} />
+            </IconButton>
+            {battery && (
+              <Box
+                component="span"
+                sx={{ fontSize: '0.78rem', fontWeight: 600, mr: 0.5 }}
+              >
+                {battery.level}%
+              </Box>
+            )}
+          </Box>
 
           <Box
             sx={{
@@ -253,13 +278,15 @@ export const TopSystemBar: React.FC = () => {
                   <Grid container spacing={2}>
                     <Grid item xs={12}>
                       <FormControlLabel
-                        control={<Switch defaultChecked />}
+                        control={<Switch checked={network?.connected ?? false} readOnly />}
                         label="WiFi Enabled"
                       />
                     </Grid>
                     <Grid item xs={12}>
                       <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                        Connected to: Home Network
+                        {network?.connected
+                          ? `Connected to: ${network.ssid} (${network.type})`
+                          : 'Not connected'}
                       </Box>
                     </Grid>
                   </Grid>
@@ -274,10 +301,10 @@ export const TopSystemBar: React.FC = () => {
                   </Box>
                   <Box sx={{ mb: 2 }}>
                     <Box sx={{ fontSize: '2rem', fontWeight: 600, mb: 0.5 }}>
-                      87%
+                      {battery ? `${battery.level}%` : '—'}
                     </Box>
                     <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                      About 5 hours remaining
+                      {battery?.charging ? 'Charging' : 'On battery power'}
                     </Box>
                   </Box>
                   <Grid container spacing={2}>

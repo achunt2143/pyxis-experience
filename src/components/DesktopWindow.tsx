@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React from 'react';
 import { Box, Typography } from '@mui/material';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
 import { X } from 'lucide-react';
@@ -14,6 +14,46 @@ interface DesktopWindowProps {
   onPositionChange?: (id: string, x: number, y: number) => void;
   children?: React.ReactNode;
 }
+
+// Render the app component bound to this window, or a styled placeholder.
+const WindowContent: React.FC<{
+  win: DesktopWindowType;
+  onClose?: (id: string) => void;
+}> = ({ win, onClose }) => {
+  if (win.component) {
+    const AppComponent = win.component;
+    return (
+      <AppComponent windowId={win.id} onClose={() => onClose?.(win.id)} />
+    );
+  }
+  return (
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        textAlign: 'center',
+        color: 'text.secondary',
+        background:
+          'repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.05) 12px 24px)',
+        borderRadius: 2,
+      }}
+    >
+      <Typography variant="h6" sx={{ fontWeight: 600 }} color="text.primary">
+        {win.title}
+      </Typography>
+      <Typography variant="body2">
+        No app component is registered for <code>{win.appId}</code>.
+      </Typography>
+      <Typography variant="caption">
+        Register one in <code>src/hooks/useWindows.ts</code>.
+      </Typography>
+    </Box>
+  );
+};
 
 // UI boundaries
 const TOP_BAR_HEIGHT = 48;
@@ -33,8 +73,6 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
   onPositionChange,
   children,
 }) => {
-  const constraintsRef = useRef<HTMLDivElement>(null);
-
   // Calculate maximized dimensions
   const isMaximized = window.state === 'maximized';
   const leftOffset = isMaximized ? LEFT_LAUNCHER_WIDTH_COMPACT : LEFT_LAUNCHER_WIDTH;
@@ -56,7 +94,7 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
     ? TOP_BAR_HEIGHT
     : window.position.y;
 
-  const handleDragEnd = (event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
+  const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     let newX = window.position.x + info.offset.x;
     let newY = window.position.y + info.offset.y;
 
@@ -264,16 +302,7 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
               p: 2,
             }}
           >
-            {children || (
-              <Box>
-                <Typography variant="h6" sx={{ mb: 1 }} color="text.primary">
-                  {window.title}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  App content would render here
-                </Typography>
-              </Box>
-            )}
+            {children || <WindowContent win={window} onClose={onClose} />}
           </Box>
         </Box>
       )}

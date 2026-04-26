@@ -3,6 +3,7 @@ import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { DesktopWindowType } from '../types';
 import { Terminal, Folder, FileText, Globe, Settings, X } from 'lucide-react';
+import { useEcho } from '../services/useEcho';
 
 // Icon mapping
 const APP_ICONS: { [key: string]: React.FC<{ size?: number }> } = {
@@ -32,6 +33,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [hoveredWindow, setHoveredWindow] = useState<string | null>(null);
+  const echo = useEcho();
   const iconSize = isCompact ? 28 : 56;
   const badgeSize = isCompact ? 16 : 20;
   const padding = isCompact ? 1 : 1.5;
@@ -295,6 +297,10 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                             setExpandedGroup(appId);
                           } else {
                             onWindowSelect?.(win.id);
+                            // Notify the AppManager via Echo that this app
+                            // was activated. In native context this triggers
+                            // SIGUSR1 raise-to-front; in dev it's a no-op mock.
+                            echo.launchApp(appId).catch(() => {});
                             setExpandedGroup(null);
                           }
                         }}

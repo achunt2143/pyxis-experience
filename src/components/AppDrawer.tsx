@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Box, Paper, TextField, Typography, List, ListItem, ListItemButton, ListItemIcon, Divider } from '@mui/material';
+import { Box, TextField, Typography, List, ListItemButton, ListItemIcon } from '@mui/material';
 import { Search, Terminal, Folder, FileText, Globe, Settings, Chrome, Code, Music } from 'lucide-react';
 import { Glass } from './Glass';
 
