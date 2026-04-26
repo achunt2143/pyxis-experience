@@ -2,8 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { DesktopWindowType } from '../types';
-import { Terminal, Folder, FileText, Globe, Settings, X } from 'lucide-react';
-import { useEcho } from '../services/useEcho';
+import { Terminal, Folder, FileText, Globe, Settings, X, AlertTriangle } from 'lucide-react';
+import { useAppHost } from '../services/useEcho';
 
 // Icon mapping
 const APP_ICONS: { [key: string]: React.FC<{ size?: number }> } = {
@@ -33,12 +33,31 @@ export const BottomDock: React.FC<BottomDockProps> = ({
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [hoveredWindow, setHoveredWindow] = useState<string | null>(null);
-  const echo = useEcho();
+  const { stateForApp, sessionForApp, sessions } = useAppHost();
   const iconSize = isCompact ? 28 : 56;
   const badgeSize = isCompact ? 16 : 20;
   const padding = isCompact ? 1 : 1.5;
 
-  // Group windows by app
+  // Apps with running sessions but no open windows still belong on the dock
+  // — the dock now reflects "running sessions" not just "open windows". We
+  // synthesize phantom-window groups for any orphan running session.
+  const orphanAppIds = useMemo(() => {
+    const openAppIds = new Set(windows.map((w) => w.appId));
+    const seen = new Set<string>();
+    Object.values(sessions).forEach((s) => {
+      if (
+        (s.state === 'running' ||
+          s.state === 'starting' ||
+          s.state === 'crashed') &&
+        !openAppIds.has(s.appId)
+      ) {
+        seen.add(s.appId);
+      }
+    });
+    return Array.from(seen);
+  }, [windows, sessions]);
+
+  // Group windows by app, then add phantom entries for orphan running sessions.
   const groupedWindows = useMemo(() => {
     const groups: { [key: string]: DesktopWindowType[] } = {};
     windows.forEach((w) => {
@@ -47,10 +66,15 @@ export const BottomDock: React.FC<BottomDockProps> = ({
       }
       groups[w.appId].push(w);
     });
+    orphanAppIds.forEach((appId) => {
+      if (!groups[appId]) groups[appId] = [];
+    });
     return groups;
-  }, [windows]);
+  }, [windows, orphanAppIds]);
 
   const visibleWindows = windows.filter((w) => w.state !== 'minimized');
+  const hasAnythingToShow =
+    visibleWindows.length > 0 || orphanAppIds.length > 0;
 
   // Calculate dynamic dock width for subdock expansion
   const dockWidth = useMemo(() => {
@@ -61,7 +85,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
     return 'auto';
   }, [EXPAND_TO_SUBDOCK, expandedGroup, groupedWindows]);
 
-  if (visibleWindows.length === 0) {
+  if (!hasAnythingToShow) {
     return null;
   }
 
@@ -107,6 +131,8 @@ export const BottomDock: React.FC<BottomDockProps> = ({
           const isHovered = hoveredGroup === appId;
           const isExpanded = expandedGroup === appId;
           const hasMultiple = appWindows.length > 1;
+          const lifecycleState = stateForApp(appId);
+          const session = sessionForApp(appId);
 
           return (
             <Box
@@ -276,58 +302,94 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                   transformStyle: 'preserve-3d',
                 }}
               >
-                {appWindows.map((win, idx) => {
-                  const isLast = idx === appWindows.length - 1;
-                  const shouldShowStacked = hasMultiple && !isExpanded;
+                {appWindows.length === 0 ? (
+                  // Orphan running session — has a host-side process but no
+                  // visible window. Render a single placeholder icon.
+                  <Tooltip
+                    key={`orphan-${appId}`}
+                    title={`${appId}${
+                      session?.pid ? ` · pid ${session.pid}` : ''
+                    } · ${lifecycleState ?? 'running'}`}
+                    placement="top"
+                  >
+                    <IconButton
+                      component={motion.button}
+                      animate={{
+                        scale: isHovered ? 1.1 : 1,
+                        y: isHovered ? -8 : 0,
+                      }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                      sx={{
+                        width: iconSize,
+                        height: iconSize,
+                        borderRadius: '12px',
+                        background: 'rgba(255, 255, 255, 0.10)',
+                        border: '1px dashed rgba(255, 255, 255, 0.3)',
+                        position: 'relative',
+                        '&:hover': {
+                          background: 'rgba(255, 255, 255, 0.20)',
+                        },
+                      }}
+                    >
+                      <Icon size={isCompact ? 20 : 28} />
+                    </IconButton>
+                  </Tooltip>
+                ) : (
+                  appWindows.map((win, idx) => {
+                    const isLast = idx === appWindows.length - 1;
+                    const shouldShowStacked = hasMultiple && !isExpanded;
 
-                  return (
-                    <Tooltip key={win.id} title={win.title} placement="top">
-                      <IconButton
-                        component={motion.button}
-                        animate={{
-                          scale: isHovered ? 1.1 : 1,
-                          y: isHovered ? -8 : 0,
-                          x: shouldShowStacked ? idx * 8 : 0,
-                          z: shouldShowStacked ? idx * -5 : 0,
-                          rotateY: shouldShowStacked ? -25 : 0, // 3D stacking rotation
-                        }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                        onClick={() => {
-                          if (hasMultiple && !isExpanded) {
-                            setExpandedGroup(appId);
-                          } else {
-                            onWindowSelect?.(win.id);
-                            // Notify the AppManager via Echo that this app
-                            // was activated. In native context this triggers
-                            // SIGUSR1 raise-to-front; in dev it's a no-op mock.
-                            echo.launchApp(appId).catch(() => {});
-                            setExpandedGroup(null);
-                          }
-                        }}
-                        sx={{
-                          width: iconSize,
-                          height: iconSize,
-                          borderRadius: '12px',
-                          background: 'rgba(255, 255, 255, 0.15)',
-                          border: '1px solid rgba(255, 255, 255, 0.3)',
-                          position: shouldShowStacked && !isLast ? 'absolute' : 'relative',
-                          top: 0,
-                          left: 0,
-                          boxShadow: shouldShowStacked 
-                            ? '2px 2px 8px rgba(0,0,0,0.2)' 
-                            : '0px 2px 4px rgba(0,0,0,0.1)',
-                          zIndex: idx,
-                          transformStyle: 'preserve-3d',
-                          '&:hover': {
-                            background: 'rgba(255, 255, 255, 0.25)',
-                          },
-                        }}
+                    return (
+                      <Tooltip
+                        key={win.id}
+                        title={`${win.title}${
+                          session?.pid ? ` · pid ${session.pid}` : ''
+                        }${lifecycleState ? ` · ${lifecycleState}` : ''}`}
+                        placement="top"
                       >
-                        <Icon size={isCompact ? 20 : 28} />
-                      </IconButton>
-                    </Tooltip>
-                  );
-                })}
+                        <IconButton
+                          component={motion.button}
+                          animate={{
+                            scale: isHovered ? 1.1 : 1,
+                            y: isHovered ? -8 : 0,
+                            x: shouldShowStacked ? idx * 8 : 0,
+                            z: shouldShowStacked ? idx * -5 : 0,
+                            rotateY: shouldShowStacked ? -25 : 0, // 3D stacking rotation
+                          }}
+                          transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                          onClick={() => {
+                            if (hasMultiple && !isExpanded) {
+                              setExpandedGroup(appId);
+                            } else {
+                              onWindowSelect?.(win.id);
+                              setExpandedGroup(null);
+                            }
+                          }}
+                          sx={{
+                            width: iconSize,
+                            height: iconSize,
+                            borderRadius: '12px',
+                            background: 'rgba(255, 255, 255, 0.15)',
+                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            position: shouldShowStacked && !isLast ? 'absolute' : 'relative',
+                            top: 0,
+                            left: 0,
+                            boxShadow: shouldShowStacked
+                              ? '2px 2px 8px rgba(0,0,0,0.2)'
+                              : '0px 2px 4px rgba(0,0,0,0.1)',
+                            zIndex: idx,
+                            transformStyle: 'preserve-3d',
+                            '&:hover': {
+                              background: 'rgba(255, 255, 255, 0.25)',
+                            },
+                          }}
+                        >
+                          <Icon size={isCompact ? 20 : 28} />
+                        </IconButton>
+                      </Tooltip>
+                    );
+                  })
+                )}
               </Box>
 
               {/* Badge for multiple windows */}
@@ -358,6 +420,60 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                   }}
                 >
                   {appWindows.length}
+                </Box>
+              )}
+
+              {/* Lifecycle indicator under the icon (running / starting). */}
+              {lifecycleState === 'running' && (
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    backgroundColor: '#4CAF50',
+                    boxShadow: '0 0 4px #4CAF50',
+                  }}
+                />
+              )}
+              {lifecycleState === 'starting' && (
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    backgroundColor: '#FFB74D',
+                    boxShadow: '0 0 4px #FFB74D',
+                    animation: 'pyxisDockPulse 1s ease-in-out infinite',
+                    '@keyframes pyxisDockPulse': {
+                      '0%, 100%': { opacity: 1 },
+                      '50%': { opacity: 0.3 },
+                    },
+                  }}
+                />
+              )}
+
+              {/* Crashed warning overlay. */}
+              {lifecycleState === 'crashed' && (
+                <Box
+                  component={motion.div}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  sx={{
+                    position: 'absolute',
+                    top: -4,
+                    left: -4,
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    backgroundColor: '#F44336',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid rgba(255,255,255,0.6)',
+                    zIndex: 11,
+                  }}
+                >
+                  <AlertTriangle size={10} color="#fff" />
                 </Box>
               )}
             </Box>

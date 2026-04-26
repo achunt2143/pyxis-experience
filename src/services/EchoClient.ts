@@ -63,6 +63,11 @@ function uuid(): string {
 }
 
 // ---------- Mock backend ----------
+//
+// The mock holds enough state to drive the AppHost lifecycle UX (launching,
+// running, crashed badges) without a real daemon. The mock is intentionally
+// only used when `window.__gecko_ipc` is absent.
+
 const MOCK_APPS = [
   { id: 'terminal', name: 'Terminal', icon: '💻', running: false },
   { id: 'files', name: 'Files', icon: '📁', running: false },
@@ -70,30 +75,187 @@ const MOCK_APPS = [
   { id: 'browser', name: 'Browser', icon: '🌐', running: false },
 ];
 
+interface MockSession {
+  sessionId: string;
+  appId: string;
+  pid: number;
+  startedAt: number;
+  state: 'starting' | 'running' | 'stopped' | 'crashed';
+}
+
+const mockSessions = new Map<string, MockSession>();
+
+function mockNowSecs() {
+  return Math.floor(Date.now() / 1000);
+}
+
+function mockManifests() {
+  return MOCK_APPS.map((a) => ({
+    id: a.id,
+    name: a.name,
+    icon: a.icon,
+    exec: './launch',
+    version: '0.1.0',
+    category: 'system',
+    entry:
+      a.id === 'terminal'
+        ? 'TerminalApp'
+        : a.id === 'files'
+        ? 'FilesApp'
+        : a.id === 'settings'
+        ? 'SettingsApp'
+        : a.id === 'browser'
+        ? 'BrowserApp'
+        : null,
+  }));
+}
+
+function sessionsForApp(appId: string): MockSession[] {
+  return Array.from(mockSessions.values()).filter((s) => s.appId === appId);
+}
+
 function mockResponse(
   iface: string,
   method: string,
-  args: Record<string, unknown>
+  args: Record<string, unknown>,
+  fanOut?: (signal: string, data: any) => void
 ): any {
-  // AppManager
-  if (iface.endsWith('AppManager')) {
+  // ---- AppHost (new lifecycle interface) ----
+  if (iface.endsWith('appHost') || iface.endsWith('AppHost')) {
+    switch (method) {
+      case 'LaunchApp': {
+        const appId = String(args.appId ?? args.app_id ?? '');
+        const sessionId = uuid();
+        const startedAt = mockNowSecs();
+        const pid = Math.floor(Math.random() * 32000) + 1000;
+
+        // Starting -> Running with a small delay so the UI sees the
+        // "launching" badge transition.
+        const starting: MockSession = {
+          sessionId,
+          appId,
+          pid: 0,
+          startedAt,
+          state: 'starting',
+        };
+        mockSessions.set(sessionId, starting);
+        fanOut?.('AppStarting', { ...starting });
+
+        const running: MockSession = { ...starting, pid, state: 'running' };
+        // Defer running emission to next tick so transitions are observable.
+        setTimeout(() => {
+          mockSessions.set(sessionId, running);
+          fanOut?.('AppRunning', { ...running });
+        }, 250);
+
+        return {
+          sessionId,
+          appId,
+          pid,
+          startedAt,
+          state: 'running',
+        };
+      }
+      case 'CloseApp': {
+        const sid = String(args.sessionId ?? '');
+        const s = mockSessions.get(sid);
+        if (!s) {
+          return { sessionId: sid, state: 'stopped' };
+        }
+        const stopped: MockSession = { ...s, state: 'stopped' };
+        mockSessions.delete(sid);
+        fanOut?.('AppStopped', { ...stopped });
+        return stopped;
+      }
+      case 'KillApp': {
+        const sid = String(args.sessionId ?? '');
+        const s = mockSessions.get(sid);
+        if (!s) {
+          return { sessionId: sid, state: 'crashed' };
+        }
+        const crashed: MockSession = { ...s, state: 'crashed' };
+        mockSessions.delete(sid);
+        fanOut?.('AppCrashed', { ...crashed });
+        return crashed;
+      }
+      case 'RestartApp': {
+        const sid = String(args.sessionId ?? '');
+        const existing = mockSessions.get(sid);
+        if (existing) {
+          mockSessions.delete(sid);
+          fanOut?.('AppStopped', { ...existing, state: 'stopped' });
+          return mockResponse(
+            iface,
+            'LaunchApp',
+            { appId: existing.appId },
+            fanOut
+          );
+        }
+        return { success: false, error: 'unknown sessionId' };
+      }
+      case 'ListApps': {
+        const apps = mockManifests().map((m) => {
+          const sessions = sessionsForApp(m.id);
+          return {
+            ...m,
+            running: sessions.length > 0,
+            sessions,
+          };
+        });
+        return { apps, count: apps.length };
+      }
+      case 'ListRunningApps': {
+        const sessions = Array.from(mockSessions.values());
+        return { sessions, count: sessions.length };
+      }
+      case 'GetAppState': {
+        const sid = String(args.sessionId ?? '');
+        const s = mockSessions.get(sid);
+        return s
+          ? { sessionId: sid, state: s.state }
+          : { sessionId: sid, state: 'stopped' };
+      }
+      case 'SubscribeAppLifecycle':
+        return {
+          success: true,
+          interface: 'org.geckoOS.appHost',
+          signals: ['AppStarting', 'AppRunning', 'AppStopped', 'AppCrashed'],
+        };
+      default:
+        return { success: false, error: `unknown method ${method}` };
+    }
+  }
+
+  // ---- AppManager (legacy shim) ----
+  if (iface.endsWith('AppManager') || iface.endsWith('appManager')) {
     switch (method) {
       case 'launch':
-        return { success: true, pid: Math.floor(Math.random() * 32000) + 1000, appId: args.app_id };
+      case 'Launch':
+        return {
+          success: true,
+          pid: Math.floor(Math.random() * 32000) + 1000,
+          appId: args.app_id ?? args.appId,
+        };
       case 'close':
+      case 'Close':
         return { success: true };
       case 'list':
+      case 'List':
         return { apps: MOCK_APPS, count: MOCK_APPS.length };
       case 'get_active':
+      case 'getActive':
         return { appId: null };
       case 'set_active':
+      case 'setActive':
         return { success: true };
       case 'kill':
+      case 'Kill':
       case 'restart':
+      case 'Restart':
         return { success: true };
       case 'install':
       case 'uninstall':
-        return { success: true, appId: args.app_id ?? null };
+        return { success: true, appId: args.app_id ?? args.appId ?? null };
       default:
         return { success: false, error: `unknown method ${method}` };
     }
@@ -145,11 +307,30 @@ export class EchoClient {
         return res.body;
       } catch (err) {
         console.warn('[EchoClient] native call failed, falling back to mock', err);
-        return mockResponse(iface, method, args);
+        return mockResponse(iface, method, args, this.mockFanOut(iface));
       }
     }
-    // Mock path — resolve immediately
-    return Promise.resolve(mockResponse(iface, method, args));
+    // Mock path — resolve immediately, with a fanOut shim so callers see the
+    // same lifecycle signals they would in native mode.
+    return Promise.resolve(mockResponse(iface, method, args, this.mockFanOut(iface)));
+  }
+
+  /**
+   * Returns a fan-out helper that emits a signal on this client's local
+   * subscriber map. Used by the mock backend to replay AppStarting/etc.
+   */
+  private mockFanOut(iface: string) {
+    return (signal: string, data: any) => {
+      const key = `${iface}::${signal}`;
+      const subs = this.signalSubs.get(key);
+      subs?.forEach((cb) => {
+        try {
+          cb(data);
+        } catch (err) {
+          console.error('[EchoClient] mock signal subscriber threw', err);
+        }
+      });
+    };
   }
 
   async emitSignal(

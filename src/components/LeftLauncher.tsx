@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { Box, IconButton, Tooltip, Modal } from '@mui/material';
-import { Grid3x3, Terminal, Folder, FileText, Globe } from 'lucide-react';
+import { Grid3x3, Terminal, Folder, FileText, Globe, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import AppDrawer from './AppDrawer';
+import { useAppHost } from '../services/useEcho';
+import type { AppLifecycleState } from '../types';
 
 const PINNED_APPS = [
   { id: 'terminal', label: 'Terminal', Icon: Terminal },
@@ -10,6 +12,21 @@ const PINNED_APPS = [
   { id: 'editor', label: 'Editor', Icon: FileText },
   { id: 'browser', label: 'Browser', Icon: Globe },
 ];
+
+// Visual styling per AppHost lifecycle state. Centralised here so the dock
+// and other consumers can reuse the same vocabulary.
+function badgeColor(state: AppLifecycleState | null): string | null {
+  switch (state) {
+    case 'starting':
+      return '#FFB74D'; // amber
+    case 'running':
+      return '#4CAF50'; // green
+    case 'crashed':
+      return '#F44336'; // red
+    default:
+      return null;
+  }
+}
 
 interface LeftLauncherProps {
   onAppSelect?: (appId: string) => void;
@@ -24,6 +41,7 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
 }) => {
   const [appDrawerOpen, setAppDrawerOpen] = useState(false);
   const [hoveredApp, setHoveredApp] = useState<string | null>(null);
+  const { stateForApp, sessionForApp, manifests } = useAppHost();
 
   // Calculate dimensions based on compact mode
   const width = isCompact ? 40 : 64;
@@ -94,8 +112,21 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
         {/* Pinned Apps */}
         {PINNED_APPS.map(({ id, label, Icon }) => {
           const isActive = activeApp === id;
+          const lifecycleState = stateForApp(id);
+          const session = sessionForApp(id);
+          const manifest = manifests.find((m) => m.id === id);
+          const dot = badgeColor(lifecycleState);
           // hovered state still tracked via hoveredApp for descendant styles
           void hoveredApp;
+
+          // Tooltip surfaces id/version/state per spec when running.
+          const tooltipTitle = lifecycleState
+            ? `${label} · ${manifest?.id ?? id}${
+                manifest?.version ? ` v${manifest.version}` : ''
+              } · ${lifecycleState}${
+                session?.pid ? ` (pid ${session.pid})` : ''
+              }`
+            : label;
 
           return (
             <Box
@@ -104,7 +135,7 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
               onMouseEnter={() => setHoveredApp(id)}
               onMouseLeave={() => setHoveredApp(null)}
             >
-              <Tooltip title={label} placement="right" arrow>
+              <Tooltip title={tooltipTitle} placement="right" arrow>
                 <IconButton
                   onClick={() => onAppSelect?.(id)}
                   component={motion.button}
@@ -128,10 +159,63 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
                   }}
                 >
                   <Icon size={iconSize} />
+
+                  {/* Lifecycle dot — amber=starting, green=running */}
+                  {dot && lifecycleState !== 'crashed' && (
+                    <Box
+                      component={motion.div}
+                      key={lifecycleState}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      sx={{
+                        position: 'absolute',
+                        bottom: 4,
+                        right: 4,
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        backgroundColor: dot,
+                        boxShadow: `0 0 6px ${dot}`,
+                        ...(lifecycleState === 'starting'
+                          ? {
+                              animation: 'pyxisPulse 1s ease-in-out infinite',
+                              '@keyframes pyxisPulse': {
+                                '0%, 100%': { opacity: 1 },
+                                '50%': { opacity: 0.4 },
+                              },
+                            }
+                          : {}),
+                      }}
+                    />
+                  )}
+
+                  {/* Crashed warning badge */}
+                  {lifecycleState === 'crashed' && (
+                    <Box
+                      component={motion.div}
+                      initial={{ scale: 0 }}
+                      animate={{ scale: 1 }}
+                      sx={{
+                        position: 'absolute',
+                        top: -4,
+                        right: -4,
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        backgroundColor: '#F44336',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        border: '2px solid rgba(255,255,255,0.6)',
+                      }}
+                    >
+                      <AlertTriangle size={10} color="#fff" />
+                    </Box>
+                  )}
                 </IconButton>
               </Tooltip>
 
-              {/* Active Indicator Dot */}
+              {/* Active Indicator Bar */}
               <AnimatePresence>
                 {isActive && (
                   <Box
