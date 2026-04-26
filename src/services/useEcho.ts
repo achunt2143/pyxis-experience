@@ -300,6 +300,12 @@ export interface AppHostState {
   surfacesForApp: (appId: string) => number[];
   /** True iff the app has at least one mapped compositor surface. */
   hasLiveSurface: (appId: string) => boolean;
+  /**
+   * Relaunch an app cleanly: closes/kills any existing session for this
+   * appId first, then issues a fresh `launchAppHost`. Used by crash
+   * overlays to give users a one-click recovery path.
+   */
+  relaunch: (appId: string) => Promise<AppSession | null>;
   refresh: () => Promise<void>;
 }
 
@@ -451,6 +457,27 @@ export function useAppHost(): AppHostState {
     [surfacesForApp]
   );
 
+  const relaunch = useCallback(
+    async (appId: string): Promise<AppSession | null> => {
+      // Best-effort: kill any lingering session for this app before relaunch.
+      const lingering = Object.values(sessions).filter((s) => s.appId === appId);
+      for (const s of lingering) {
+        try {
+          if (s.state === 'crashed' || s.state === 'stopped') continue;
+          await echo.killSession(s.sessionId);
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        return await echo.launchAppHost(appId);
+      } catch {
+        return null;
+      }
+    },
+    [echo, sessions]
+  );
+
   return {
     manifests,
     sessions,
@@ -459,6 +486,7 @@ export function useAppHost(): AppHostState {
     surfaceBindings,
     surfacesForApp,
     hasLiveSurface,
+    relaunch,
     refresh,
   };
 }

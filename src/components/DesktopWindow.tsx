@@ -1,7 +1,7 @@
 import React from 'react';
-import { Box, Tooltip, Typography } from '@mui/material';
+import { Box, Button, Tooltip, Typography } from '@mui/material';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { AlertTriangle, Layers, X } from 'lucide-react';
+import { AlertTriangle, Layers, RotateCcw, X } from 'lucide-react';
 import { type DesktopWindowType, type AppLifecycleState } from '../types';
 import { useAppHost } from '../services/useEcho';
 
@@ -97,6 +97,85 @@ interface DesktopWindowProps {
   children?: React.ReactNode;
 }
 
+/**
+ * CrashOverlay — shown over a window's content when the bound app session
+ * has entered the `crashed` lifecycle state (e.g. the SIGCHLD reaper picked
+ * up an unexpected exit on the daemon side). Gives the user a one-click
+ * recovery via `useAppHost().relaunch`.
+ */
+const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
+  appId,
+  pid,
+}) => {
+  const { relaunch } = useAppHost();
+  const [busy, setBusy] = React.useState(false);
+  const onRelaunch = async () => {
+    setBusy(true);
+    try {
+      await relaunch(appId);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Box
+      sx={{
+        position: 'absolute',
+        inset: 0,
+        zIndex: 5,
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1.5,
+        textAlign: 'center',
+        background:
+          'linear-gradient(180deg, rgba(40,0,0,0.65) 0%, rgba(20,0,0,0.85) 100%)',
+        backdropFilter: 'blur(6px)',
+        borderRadius: 2,
+        color: '#fff',
+        padding: 3,
+      }}
+      data-crash-overlay="true"
+      data-app-id={appId}
+    >
+      <Box
+        sx={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          background: '#FF525222',
+          border: '2px solid #FF5252',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 0 24px #FF525266',
+        }}
+      >
+        <AlertTriangle size={26} color="#FF5252" />
+      </Box>
+      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+        {appId} stopped unexpectedly
+      </Typography>
+      <Typography variant="body2" sx={{ opacity: 0.85 }}>
+        {pid > 0
+          ? `Process ${pid} exited with a non-zero status.`
+          : 'The session ended without a clean shutdown.'}
+      </Typography>
+      <Button
+        variant="contained"
+        color="error"
+        startIcon={<RotateCcw size={16} />}
+        disabled={busy}
+        onClick={onRelaunch}
+        sx={{ mt: 1 }}
+      >
+        {busy ? 'Relaunching…' : 'Relaunch app'}
+      </Button>
+    </Box>
+  );
+};
+
 // Render the app component bound to this window, or, if the AppHost has a
 // live compositor surface for this app, an embedded-surface slot. Falls back
 // to a styled placeholder when neither path applies.
@@ -105,20 +184,20 @@ const WindowContent: React.FC<{
   onClose?: (id: string) => void;
 }> = ({ win, onClose }) => {
   const { sessionForApp, surfacesForApp, hasLiveSurface } = useAppHost();
+  const session = sessionForApp(win.appId);
+  const crashed = session?.state === 'crashed';
 
+  // Inner content resolution preserves prior precedence: explicit component
+  // first, then native compositor surface, then placeholder. The crash
+  // overlay floats on top regardless.
+  let inner: React.ReactNode;
   if (win.component) {
     const AppComponent = win.component;
-    return (
+    inner = (
       <AppComponent windowId={win.id} onClose={() => onClose?.(win.id)} />
     );
-  }
-
-  // Native path: a real session is running with a mapped surface — mount the
-  // compositor slot. The shell does not own pixel data here; the Smithay
-  // compositor (evo) will reparent the surface into this slot.
-  if (hasLiveSurface(win.appId)) {
-    const session = sessionForApp(win.appId);
-    return (
+  } else if (hasLiveSurface(win.appId)) {
+    inner = (
       <WaylandSurfaceView
         appId={win.appId}
         surfaceIds={surfacesForApp(win.appId)}
@@ -126,33 +205,51 @@ const WindowContent: React.FC<{
         pid={session?.pid ?? 0}
       />
     );
+  } else {
+    inner = null;
+  }
+
+  if (inner) {
+    return (
+      <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+        {inner}
+        {crashed ? (
+          <CrashOverlay appId={win.appId} pid={session?.pid ?? 0} />
+        ) : null}
+      </Box>
+    );
   }
 
   return (
-    <Box
-      sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 1,
-        textAlign: 'center',
-        color: 'text.secondary',
-        background:
-          'repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.05) 12px 24px)',
-        borderRadius: 2,
-      }}
-    >
-      <Typography variant="h6" sx={{ fontWeight: 600 }} color="text.primary">
-        {win.title}
-      </Typography>
-      <Typography variant="body2">
-        No app component is registered for <code>{win.appId}</code>.
-      </Typography>
-      <Typography variant="caption">
-        Register one in <code>src/hooks/useWindows.ts</code>.
-      </Typography>
+    <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1,
+          textAlign: 'center',
+          color: 'text.secondary',
+          background:
+            'repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.05) 12px 24px)',
+          borderRadius: 2,
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 600 }} color="text.primary">
+          {win.title}
+        </Typography>
+        <Typography variant="body2">
+          No app component is registered for <code>{win.appId}</code>.
+        </Typography>
+        <Typography variant="caption">
+          Register one in <code>src/hooks/useWindows.ts</code>.
+        </Typography>
+      </Box>
+      {crashed ? (
+        <CrashOverlay appId={win.appId} pid={session?.pid ?? 0} />
+      ) : null}
     </Box>
   );
 };
