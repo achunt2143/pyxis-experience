@@ -81,6 +81,26 @@ export interface AppSession {
   /** Seconds since UNIX epoch. */
   startedAt: number;
   state: AppLifecycleState;
+  /**
+   * Compositor surfaces (Wayland window ids) currently bound to this
+   * session. Empty while the app is starting or has not yet produced a
+   * window. The shell uses this to decide which DesktopWindow slots have
+   * a live native surface to embed.
+   */
+  surfaces?: number[];
+}
+
+/**
+ * Lightweight summary of a single compositor surface mapped into a session.
+ * Returned by useEcho.listSurfaceSessions / used by useAppHost to feed the
+ * embedded-surface slots in DesktopWindow.
+ */
+export interface AppSurfaceBinding {
+  surfaceId: number;
+  sessionId: string;
+  appId: string;
+  pid: number;
+  state: AppLifecycleState;
 }
 
 /**
