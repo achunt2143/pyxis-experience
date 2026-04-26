@@ -5,6 +5,7 @@ import type {
   AppLifecycleState,
   AppManifest,
   AppSession,
+  AppSurfaceBinding,
 } from '../types';
 
 export interface BatteryStatus {
@@ -49,6 +50,8 @@ export const APPHOST_SIGNALS = {
   running: 'AppRunning',
   stopped: 'AppStopped',
   crashed: 'AppCrashed',
+  surfaceMapped: 'AppSurfaceMapped',
+  surfaceUnmapped: 'AppSurfaceUnmapped',
 } as const;
 
 /**
@@ -191,6 +194,57 @@ export function useEcho() {
         return res?.sessionId ? res : null;
       },
 
+      // ---------- AppHost surface bindings ----------
+      //
+      // These are normally driven by the systems-side compositor (evo) when
+      // it maps an XDG toplevel. The shell calls them only to:
+      //   - render an authoritative dock when the daemon and compositor are
+      //     racing each other on startup (`listSurfaceSessions`)
+      //   - manually unbind a surface during a controlled close.
+      //
+      // The dev-browser mock has no real Wayland; calls succeed and return
+      // empty bindings so the UI stays consistent.
+
+      async listSurfaceSessions(): Promise<{ sessions: AppSession[]; count: number }> {
+        const res = await echoClient.callMethod(
+          APPHOST_SERVICE,
+          APPHOST_IFACE,
+          'ListSurfaceSessions',
+          {}
+        );
+        return res ?? { sessions: [], count: 0 };
+      },
+
+      async bindSurface(
+        appId: string,
+        surfaceId: number,
+        sessionId?: string,
+        pid?: number
+      ): Promise<AppSession | null> {
+        const res = await echoClient.callMethod(
+          APPHOST_SERVICE,
+          APPHOST_IFACE,
+          'BindSurface',
+          {
+            appId,
+            surfaceId,
+            ...(sessionId ? { sessionId } : {}),
+            ...(pid !== undefined ? { pid } : {}),
+          }
+        );
+        return res && res.sessionId ? (res as AppSession) : null;
+      },
+
+      async unbindSurface(surfaceId: number): Promise<AppSession | null> {
+        const res = await echoClient.callMethod(
+          APPHOST_SERVICE,
+          APPHOST_IFACE,
+          'UnbindSurface',
+          { surfaceId }
+        );
+        return res && res.sessionId ? (res as AppSession) : null;
+      },
+
       async subscribeAppLifecycle(): Promise<{
         success: boolean;
         interface: string;
@@ -236,6 +290,22 @@ export interface AppHostState {
   stateForApp: (appId: string) => AppLifecycleState | null;
   /** Convenience: most recent session for an appId, or null. */
   sessionForApp: (appId: string) => AppSession | null;
+  /**
+   * Convenience: surface bindings derived from `sessions[*].surfaces`.
+   * One entry per mapped compositor surface, keyed by surface id. Used
+   * by DesktopWindow to embed live native surfaces.
+   */
+  surfaceBindings: Record<number, AppSurfaceBinding>;
+  /** All surfaces (Wayland window ids) currently bound to this app. */
+  surfacesForApp: (appId: string) => number[];
+  /** True iff the app has at least one mapped compositor surface. */
+  hasLiveSurface: (appId: string) => boolean;
+  /**
+   * Relaunch an app cleanly: closes/kills any existing session for this
+   * appId first, then issues a fresh `launchAppHost`. Used by crash
+   * overlays to give users a one-click recovery path.
+   */
+  relaunch: (appId: string) => Promise<AppSession | null>;
   refresh: () => Promise<void>;
 }
 
@@ -294,11 +364,24 @@ export function useAppHost(): AppHostState {
       }, 4000);
     };
 
+    // Surface map/unmap signals piggyback on the same session payload — the
+    // payload carries an updated `surfaces` array. We just upsert; the
+    // derived `surfaceBindings` map is recomputed from `sessions`.
     const unsubs = [
       echoRef.current.onSignal(APPHOST_IFACE, APPHOST_SIGNALS.starting, upsert),
       echoRef.current.onSignal(APPHOST_IFACE, APPHOST_SIGNALS.running, upsert),
       echoRef.current.onSignal(APPHOST_IFACE, APPHOST_SIGNALS.stopped, drop),
       echoRef.current.onSignal(APPHOST_IFACE, APPHOST_SIGNALS.crashed, drop),
+      echoRef.current.onSignal(
+        APPHOST_IFACE,
+        APPHOST_SIGNALS.surfaceMapped,
+        upsert
+      ),
+      echoRef.current.onSignal(
+        APPHOST_IFACE,
+        APPHOST_SIGNALS.surfaceUnmapped,
+        upsert
+      ),
     ];
     return () => {
       cancelled = true;
@@ -338,7 +421,74 @@ export function useAppHost(): AppHostState {
     [sessions]
   );
 
-  return { manifests, sessions, stateForApp, sessionForApp, refresh };
+  // Derive surface bindings from `sessions[*].surfaces`. One entry per
+  // mapped compositor surface; recomputed only when sessions change.
+  const surfaceBindings = useMemo<Record<number, AppSurfaceBinding>>(() => {
+    const out: Record<number, AppSurfaceBinding> = {};
+    for (const s of Object.values(sessions)) {
+      if (!s.surfaces || s.surfaces.length === 0) continue;
+      for (const surfaceId of s.surfaces) {
+        out[surfaceId] = {
+          surfaceId,
+          sessionId: s.sessionId,
+          appId: s.appId,
+          pid: s.pid,
+          state: s.state,
+        };
+      }
+    }
+    return out;
+  }, [sessions]);
+
+  const surfacesForApp = useCallback(
+    (appId: string): number[] => {
+      const ids: number[] = [];
+      for (const s of Object.values(sessions)) {
+        if (s.appId !== appId) continue;
+        if (s.surfaces) ids.push(...s.surfaces);
+      }
+      return ids;
+    },
+    [sessions]
+  );
+
+  const hasLiveSurface = useCallback(
+    (appId: string): boolean => surfacesForApp(appId).length > 0,
+    [surfacesForApp]
+  );
+
+  const relaunch = useCallback(
+    async (appId: string): Promise<AppSession | null> => {
+      // Best-effort: kill any lingering session for this app before relaunch.
+      const lingering = Object.values(sessions).filter((s) => s.appId === appId);
+      for (const s of lingering) {
+        try {
+          if (s.state === 'crashed' || s.state === 'stopped') continue;
+          await echo.killSession(s.sessionId);
+        } catch {
+          /* ignore */
+        }
+      }
+      try {
+        return await echo.launchAppHost(appId);
+      } catch {
+        return null;
+      }
+    },
+    [echo, sessions]
+  );
+
+  return {
+    manifests,
+    sessions,
+    stateForApp,
+    sessionForApp,
+    surfaceBindings,
+    surfacesForApp,
+    hasLiveSurface,
+    relaunch,
+    refresh,
+  };
 }
 
 /**

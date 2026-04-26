@@ -1,8 +1,90 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Button, Tooltip, Typography } from '@mui/material';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { X } from 'lucide-react';
-import { type DesktopWindowType } from '../types';
+import { AlertTriangle, Layers, RotateCcw, X } from 'lucide-react';
+import { type DesktopWindowType, type AppLifecycleState } from '../types';
+import { useAppHost } from '../services/useEcho';
+
+// Visual map for lifecycle dots in the title bar.
+const STATE_COLOR: Record<AppLifecycleState, string> = {
+  starting: '#FFB300',
+  running: '#4CAF50',
+  stopped: '#9E9E9E',
+  crashed: '#FF5252',
+};
+
+/**
+ * WaylandSurfaceView — placeholder slot for an embedded compositor surface.
+ *
+ * In native mode (when running inside Smithay), this is the position where a
+ * subsurface/foreign-toplevel-managed parented surface should be reparented
+ * by the compositor. The shell paints a styled host element; the compositor
+ * positions the real GL surface above it on demand.
+ *
+ * In dev/browser mode there is no Wayland — we just render a lit panel
+ * showing the bound surface ids and lifecycle state so the UX is exercised.
+ */
+const WaylandSurfaceView: React.FC<{
+  appId: string;
+  surfaceIds: number[];
+  state: AppLifecycleState;
+  pid: number;
+}> = ({ appId, surfaceIds, state, pid }) => {
+  const accent = STATE_COLOR[state];
+  return (
+    <Box
+      // Tag the slot so a native compositor can find and reparent into it.
+      data-app-id={appId}
+      data-surface-ids={surfaceIds.join(',')}
+      data-surface-slot="true"
+      sx={{
+        height: '100%',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        textAlign: 'center',
+        color: 'text.primary',
+        position: 'relative',
+        background: `radial-gradient(circle at 50% 30%, ${accent}33 0%, rgba(0,0,0,0.4) 60%)`,
+        border: `1px solid ${accent}66`,
+        borderRadius: 2,
+        overflow: 'hidden',
+      }}
+    >
+      <Box
+        sx={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          background: `${accent}22`,
+          border: `2px solid ${accent}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: `0 0 24px ${accent}55`,
+        }}
+      >
+        <Layers size={26} color={accent} />
+      </Box>
+      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+        Embedded compositor surface
+      </Typography>
+      <Typography variant="body2" color="text.secondary">
+        <code>{appId}</code> — {state}
+        {pid > 0 ? ` · pid ${pid}` : ''}
+      </Typography>
+      <Typography variant="caption" color="text.secondary">
+        Surface ids: {surfaceIds.length > 0 ? surfaceIds.join(', ') : '—'}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, opacity: 0.7 }}>
+        Native Wayland subsurface will mount here.
+      </Typography>
+    </Box>
+  );
+};
 
 interface DesktopWindowProps {
   window: DesktopWindowType;
@@ -15,43 +97,239 @@ interface DesktopWindowProps {
   children?: React.ReactNode;
 }
 
-// Render the app component bound to this window, or a styled placeholder.
-const WindowContent: React.FC<{
-  win: DesktopWindowType;
-  onClose?: (id: string) => void;
-}> = ({ win, onClose }) => {
-  if (win.component) {
-    const AppComponent = win.component;
-    return (
-      <AppComponent windowId={win.id} onClose={() => onClose?.(win.id)} />
-    );
-  }
+/**
+ * CrashOverlay — shown over a window's content when the bound app session
+ * has entered the `crashed` lifecycle state (e.g. the SIGCHLD reaper picked
+ * up an unexpected exit on the daemon side). Gives the user a one-click
+ * recovery via `useAppHost().relaunch`.
+ */
+const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
+  appId,
+  pid,
+}) => {
+  const { relaunch } = useAppHost();
+  const [busy, setBusy] = React.useState(false);
+  const onRelaunch = async () => {
+    setBusy(true);
+    try {
+      await relaunch(appId);
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <Box
       sx={{
-        height: '100%',
+        position: 'absolute',
+        inset: 0,
+        zIndex: 5,
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 1,
+        gap: 1.5,
         textAlign: 'center',
-        color: 'text.secondary',
         background:
-          'repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.05) 12px 24px)',
+          'linear-gradient(180deg, rgba(40,0,0,0.65) 0%, rgba(20,0,0,0.85) 100%)',
+        backdropFilter: 'blur(6px)',
         borderRadius: 2,
+        color: '#fff',
+        padding: 3,
       }}
+      data-crash-overlay="true"
+      data-app-id={appId}
     >
-      <Typography variant="h6" sx={{ fontWeight: 600 }} color="text.primary">
-        {win.title}
+      <Box
+        sx={{
+          width: 56,
+          height: 56,
+          borderRadius: '50%',
+          background: '#FF525222',
+          border: '2px solid #FF5252',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          boxShadow: '0 0 24px #FF525266',
+        }}
+      >
+        <AlertTriangle size={26} color="#FF5252" />
+      </Box>
+      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+        {appId} stopped unexpectedly
       </Typography>
-      <Typography variant="body2">
-        No app component is registered for <code>{win.appId}</code>.
+      <Typography variant="body2" sx={{ opacity: 0.85 }}>
+        {pid > 0
+          ? `Process ${pid} exited with a non-zero status.`
+          : 'The session ended without a clean shutdown.'}
       </Typography>
+      <Button
+        variant="contained"
+        color="error"
+        startIcon={<RotateCcw size={16} />}
+        disabled={busy}
+        onClick={onRelaunch}
+        sx={{ mt: 1 }}
+      >
+        {busy ? 'Relaunching…' : 'Relaunch app'}
+      </Button>
+    </Box>
+  );
+};
+
+// Render the app component bound to this window, or, if the AppHost has a
+// live compositor surface for this app, an embedded-surface slot. Falls back
+// to a styled placeholder when neither path applies.
+const WindowContent: React.FC<{
+  win: DesktopWindowType;
+  onClose?: (id: string) => void;
+}> = ({ win, onClose }) => {
+  const { sessionForApp, surfacesForApp, hasLiveSurface } = useAppHost();
+  const session = sessionForApp(win.appId);
+  const crashed = session?.state === 'crashed';
+
+  // Inner content resolution preserves prior precedence: explicit component
+  // first, then native compositor surface, then placeholder. The crash
+  // overlay floats on top regardless.
+  let inner: React.ReactNode;
+  if (win.component) {
+    const AppComponent = win.component;
+    inner = (
+      <AppComponent windowId={win.id} onClose={() => onClose?.(win.id)} />
+    );
+  } else if (hasLiveSurface(win.appId)) {
+    inner = (
+      <WaylandSurfaceView
+        appId={win.appId}
+        surfaceIds={surfacesForApp(win.appId)}
+        state={session?.state ?? 'running'}
+        pid={session?.pid ?? 0}
+      />
+    );
+  } else {
+    inner = null;
+  }
+
+  if (inner) {
+    return (
+      <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+        {inner}
+        {crashed ? (
+          <CrashOverlay appId={win.appId} pid={session?.pid ?? 0} />
+        ) : null}
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+      <Box
+        sx={{
+          height: '100%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1,
+          textAlign: 'center',
+          color: 'text.secondary',
+          background:
+            'repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.05) 12px 24px)',
+          borderRadius: 2,
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 600 }} color="text.primary">
+          {win.title}
+        </Typography>
+        <Typography variant="body2">
+          No app component is registered for <code>{win.appId}</code>.
+        </Typography>
+        <Typography variant="caption">
+          Register one in <code>src/hooks/useWindows.ts</code>.
+        </Typography>
+      </Box>
+      {crashed ? (
+        <CrashOverlay appId={win.appId} pid={session?.pid ?? 0} />
+      ) : null}
+    </Box>
+  );
+};
+
+// Tiny lifecycle indicator rendered in the title bar so users can see a
+// window's host state (and any surfaces bound to it) without opening the dock.
+const SurfaceIndicator: React.FC<{ appId: string }> = ({ appId }) => {
+  const { stateForApp, sessionForApp, surfacesForApp } = useAppHost();
+  const state = stateForApp(appId);
+  if (!state) return null;
+  const session = sessionForApp(appId);
+  const surfaces = surfacesForApp(appId);
+  const color = STATE_COLOR[state];
+  const tooltip = (
+    <Box>
+      <Typography variant="caption" sx={{ fontWeight: 600 }}>
+        {appId}
+      </Typography>
+      <br />
+      <Typography variant="caption">state: {state}</Typography>
+      {session && session.pid > 0 ? (
+        <>
+          <br />
+          <Typography variant="caption">pid: {session.pid}</Typography>
+        </>
+      ) : null}
+      <br />
       <Typography variant="caption">
-        Register one in <code>src/hooks/useWindows.ts</code>.
+        surfaces: {surfaces.length > 0 ? surfaces.join(', ') : 'none'}
       </Typography>
     </Box>
+  );
+  return (
+    <Tooltip title={tooltip} arrow placement="bottom">
+      <Box
+        data-no-drag
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          px: 1,
+          py: 0.25,
+          borderRadius: 999,
+          background: `${color}22`,
+          border: `1px solid ${color}66`,
+          cursor: 'default',
+        }}
+      >
+        <Box
+          component={motion.div}
+          animate={
+            state === 'starting'
+              ? { opacity: [0.4, 1, 0.4] }
+              : { opacity: 1 }
+          }
+          transition={
+            state === 'starting'
+              ? { duration: 1.2, repeat: Infinity }
+              : undefined
+          }
+          sx={{
+            width: 8,
+            height: 8,
+            borderRadius: '50%',
+            backgroundColor: color,
+          }}
+        />
+        {surfaces.length > 0 ? (
+          <Typography
+            variant="caption"
+            sx={{ fontSize: '0.7rem', color: 'text.primary', lineHeight: 1 }}
+          >
+            {surfaces.length}× surface
+          </Typography>
+        ) : null}
+        {state === 'crashed' ? (
+          <AlertTriangle size={12} color={color} />
+        ) : null}
+      </Box>
+    </Tooltip>
   );
 };
 
@@ -170,18 +448,21 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
               cursor: window.state === 'maximized' ? 'default' : 'move',
             }}
           >
-            {/* Window Title */}
-            <Typography
-              variant="body2"
-              sx={{
-                fontWeight: 600,
-                fontSize: '0.875rem',
-                userSelect: 'none',
-                color: isActive ? 'text.primary' : 'text.secondary',
-              }}
-            >
-              {window.title}
-            </Typography>
+            {/* Window Title + lifecycle indicator */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight: 600,
+                  fontSize: '0.875rem',
+                  userSelect: 'none',
+                  color: isActive ? 'text.primary' : 'text.secondary',
+                }}
+              >
+                {window.title}
+              </Typography>
+              <SurfaceIndicator appId={window.appId} />
+            </Box>
 
             {/* Custom Window Controls */}
             <Box

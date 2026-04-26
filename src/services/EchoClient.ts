@@ -81,7 +81,16 @@ interface MockSession {
   pid: number;
   startedAt: number;
   state: 'starting' | 'running' | 'stopped' | 'crashed';
+  /**
+   * Mock compositor surface ids attached to this session. In the dev
+   * browser there's no real Wayland — we synthesize an integer id per
+   * session so the shell can exercise the embedded-surface UI.
+   */
+  surfaces: number[];
 }
+
+// Monotonic counter for fake Wayland window ids in mock mode.
+let mockSurfaceSeq = 1;
 
 const mockSessions = new Map<string, MockSession>();
 
@@ -137,15 +146,36 @@ function mockResponse(
           pid: 0,
           startedAt,
           state: 'starting',
+          surfaces: [],
         };
         mockSessions.set(sessionId, starting);
-        fanOut?.('AppStarting', { ...starting });
+        fanOut?.('AppStarting', { ...starting, surfaces: [...starting.surfaces] });
 
         const running: MockSession = { ...starting, pid, state: 'running' };
         // Defer running emission to next tick so transitions are observable.
         setTimeout(() => {
           mockSessions.set(sessionId, running);
-          fanOut?.('AppRunning', { ...running });
+          fanOut?.('AppRunning', { ...running, surfaces: [...running.surfaces] });
+
+          // Synthesize a compositor surface a beat later so the
+          // embedded-surface slot in DesktopWindow can show its
+          // "live surface" indicator. Real systems get this from evo.
+          setTimeout(() => {
+            const current = mockSessions.get(sessionId);
+            if (!current || current.state === 'stopped' || current.state === 'crashed') {
+              return;
+            }
+            const surfaceId = mockSurfaceSeq++;
+            const withSurface: MockSession = {
+              ...current,
+              surfaces: [...current.surfaces, surfaceId],
+            };
+            mockSessions.set(sessionId, withSurface);
+            fanOut?.('AppSurfaceMapped', {
+              ...withSurface,
+              surfaces: [...withSurface.surfaces],
+            });
+          }, 200);
         }, 250);
 
         return {
@@ -154,28 +184,41 @@ function mockResponse(
           pid,
           startedAt,
           state: 'running',
+          surfaces: [],
         };
       }
       case 'CloseApp': {
         const sid = String(args.sessionId ?? '');
         const s = mockSessions.get(sid);
         if (!s) {
-          return { sessionId: sid, state: 'stopped' };
+          return { sessionId: sid, state: 'stopped', surfaces: [] };
         }
-        const stopped: MockSession = { ...s, state: 'stopped' };
+        // Detach any mock surfaces first so subscribers see them disappear
+        // before the session itself is reaped.
+        if (s.surfaces.length > 0) {
+          const drained: MockSession = { ...s, surfaces: [] };
+          fanOut?.('AppSurfaceUnmapped', {
+            ...drained,
+            surfaces: [...drained.surfaces],
+          });
+        }
+        const stopped: MockSession = { ...s, state: 'stopped', surfaces: [] };
         mockSessions.delete(sid);
-        fanOut?.('AppStopped', { ...stopped });
+        fanOut?.('AppStopped', { ...stopped, surfaces: [...stopped.surfaces] });
         return stopped;
       }
       case 'KillApp': {
         const sid = String(args.sessionId ?? '');
         const s = mockSessions.get(sid);
         if (!s) {
-          return { sessionId: sid, state: 'crashed' };
+          return { sessionId: sid, state: 'crashed', surfaces: [] };
         }
-        const crashed: MockSession = { ...s, state: 'crashed' };
+        if (s.surfaces.length > 0) {
+          fanOut?.('AppSurfaceUnmapped', { ...s, surfaces: [] });
+        }
+        const crashed: MockSession = { ...s, state: 'crashed', surfaces: [] };
         mockSessions.delete(sid);
-        fanOut?.('AppCrashed', { ...crashed });
+        fanOut?.('AppCrashed', { ...crashed, surfaces: [...crashed.surfaces] });
         return crashed;
       }
       case 'RestartApp': {
@@ -215,11 +258,94 @@ function mockResponse(
           ? { sessionId: sid, state: s.state }
           : { sessionId: sid, state: 'stopped' };
       }
+      case 'BindSurface': {
+        const appId = String(args.appId ?? '');
+        const surfaceId = Number(args.surfaceId ?? 0);
+        const explicitSid = args.sessionId
+          ? String(args.sessionId)
+          : null;
+
+        // Find or synthesize the target session.
+        let target: MockSession | null = null;
+        if (explicitSid) {
+          target = mockSessions.get(explicitSid) ?? null;
+        }
+        if (!target) {
+          const candidate = sessionsForApp(appId).find(
+            (s) => s.state === 'running' || s.state === 'starting'
+          );
+          target = candidate ?? null;
+        }
+        if (!target) {
+          // Synthesize a foreign-process session so the dock surfaces
+          // unknown windows in the lifecycle stream.
+          const sessionId = uuid();
+          target = {
+            sessionId,
+            appId,
+            pid: Number(args.pid ?? 0),
+            startedAt: mockNowSecs(),
+            state: 'running',
+            surfaces: [],
+          };
+          mockSessions.set(sessionId, target);
+          fanOut?.('AppRunning', { ...target, surfaces: [...target.surfaces] });
+        }
+        if (!target.surfaces.includes(surfaceId)) {
+          target = { ...target, surfaces: [...target.surfaces, surfaceId] };
+          mockSessions.set(target.sessionId, target);
+        }
+        fanOut?.('AppSurfaceMapped', {
+          ...target,
+          surfaces: [...target.surfaces],
+        });
+        return { ...target, surfaces: [...target.surfaces] };
+      }
+      case 'UnbindSurface': {
+        const surfaceId = Number(args.surfaceId ?? 0);
+        let owner: MockSession | null = null;
+        for (const s of mockSessions.values()) {
+          if (s.surfaces.includes(surfaceId)) {
+            owner = s;
+            break;
+          }
+        }
+        if (!owner) {
+          return { surfaceId, unbound: false };
+        }
+        const updated: MockSession = {
+          ...owner,
+          surfaces: owner.surfaces.filter((s) => s !== surfaceId),
+        };
+        mockSessions.set(updated.sessionId, updated);
+        fanOut?.('AppSurfaceUnmapped', {
+          ...updated,
+          surfaces: [...updated.surfaces],
+        });
+        // Reap synthesized foreign sessions when their last surface goes.
+        if (updated.surfaces.length === 0 && updated.pid === 0) {
+          mockSessions.delete(updated.sessionId);
+        }
+        return { ...updated, surfaces: [...updated.surfaces] };
+      }
+      case 'ListSurfaceSessions': {
+        const sessions = Array.from(mockSessions.values()).filter(
+          (s) => s.surfaces.length > 0
+        );
+        return { sessions, count: sessions.length };
+      }
       case 'SubscribeAppLifecycle':
         return {
           success: true,
           interface: 'org.geckoOS.appHost',
-          signals: ['AppStarting', 'AppRunning', 'AppStopped', 'AppCrashed'],
+          signals: [
+            'AppStarting',
+            'AppRunning',
+            'AppStopped',
+            'AppCrashed',
+            'AppSurfaceMapped',
+            'AppSurfaceUnmapped',
+          ],
         };
       default:
         return { success: false, error: `unknown method ${method}` };
