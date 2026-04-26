@@ -6,6 +6,7 @@ import { TopSystemBar } from './TopSystemBar';
 import { LeftLauncher } from './LeftLauncher';
 import BottomDock from './BottomDock';
 import DesktopWindow from './DesktopWindow';
+import { useEcho } from '../services/useEcho';
 
 const DEFAULT_WALLPAPER = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
 const WALLPAPER_KEY = 'pyxis.wallpaper';
@@ -27,6 +28,8 @@ export const Desktop: React.FC = () => {
     mockApps,
     activeWindowId,
   } = useWindows();
+
+  const echo = useEcho();
 
   const [wallpaper, setWallpaper] = useState<string>(() => {
     const saved = localStorage.getItem(WALLPAPER_KEY);
@@ -86,6 +89,9 @@ export const Desktop: React.FC = () => {
           const app = mockApps.find((a) => a.id === appId);
           if (app) {
             createWindow(appId, app.name);
+            // Also notify the AppHost so a real session is tracked.
+            // Best-effort: ignore errors so the shell still works in mock/dev.
+            echo.launchAppHost(appId).catch(() => {});
           }
         }}
         isCompact={hasMaximizedWindow}

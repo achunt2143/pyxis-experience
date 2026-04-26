@@ -49,3 +49,44 @@ export interface WindowContextType {
   updateWindowPosition: (windowId: string, x: number, y: number) => void;
   updateWindowSize: (windowId: string, width: number, height: number) => void;
 }
+
+// ---------- AppHost (lifecycle) types ----------
+
+/**
+ * Lifecycle states emitted by the systems-side AppHost over Echo.
+ */
+export type AppLifecycleState = 'starting' | 'running' | 'stopped' | 'crashed';
+
+/**
+ * Manifest as discovered by the AppHost. Mirrors echo/services/apphost.rs::AppManifest.
+ */
+export interface AppManifest {
+  id: string;
+  name: string;
+  exec: string;
+  icon?: string;
+  version?: string;
+  category?: string | null;
+  /** Optional shell-side hint identifying which built-in component to render. */
+  entry?: string | null;
+}
+
+/**
+ * One launched instance of an app. Mirrors echo/services/apphost.rs::AppSession.
+ */
+export interface AppSession {
+  sessionId: string;
+  appId: string;
+  pid: number;
+  /** Seconds since UNIX epoch. */
+  startedAt: number;
+  state: AppLifecycleState;
+}
+
+/**
+ * AppHost ListApps response — installed apps merged with running sessions.
+ */
+export interface AppHostAppEntry extends AppManifest {
+  running: boolean;
+  sessions: AppSession[];
+}
