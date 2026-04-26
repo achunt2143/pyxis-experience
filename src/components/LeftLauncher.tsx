@@ -94,7 +94,8 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
         {/* Pinned Apps */}
         {PINNED_APPS.map(({ id, label, Icon }) => {
           const isActive = activeApp === id;
-          const isHovered = hoveredApp === id;
+          // hovered state still tracked via hoveredApp for descendant styles
+          void hoveredApp;
 
           return (
             <Box

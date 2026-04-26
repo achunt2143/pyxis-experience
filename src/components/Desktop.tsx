@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Box } from '@mui/material';
 import { AnimatePresence } from 'framer-motion';
 import { useWindows } from '../hooks/useWindows';
@@ -6,7 +6,14 @@ import { TopSystemBar } from './TopSystemBar';
 import { LeftLauncher } from './LeftLauncher';
 import BottomDock from './BottomDock';
 import DesktopWindow from './DesktopWindow';
-import background from '../assets/background.png';
+
+const DEFAULT_WALLPAPER = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+const WALLPAPER_KEY = 'pyxis.wallpaper';
+const WALLPAPERS: Record<string, string> = {
+  aurora: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+  sunset: 'linear-gradient(135deg, #ff7e5f 0%, #feb47b 100%)',
+  forest: 'linear-gradient(135deg, #134e5e 0%, #71b280 100%)',
+};
 
 export const Desktop: React.FC = () => {
   const {
@@ -21,6 +28,20 @@ export const Desktop: React.FC = () => {
     activeWindowId,
   } = useWindows();
 
+  const [wallpaper, setWallpaper] = useState<string>(() => {
+    const saved = localStorage.getItem(WALLPAPER_KEY);
+    return (saved && WALLPAPERS[saved]) || DEFAULT_WALLPAPER;
+  });
+
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ css: string; id: string }>;
+      if (ce.detail?.css) setWallpaper(ce.detail.css);
+    };
+    window.addEventListener('pyxis:wallpaper-change', handler);
+    return () => window.removeEventListener('pyxis:wallpaper-change', handler);
+  }, []);
+
   // Check if any window is maximized
   const hasMaximizedWindow = useMemo(
     () => windows.some(w => w.state === 'maximized'),
@@ -34,8 +55,8 @@ export const Desktop: React.FC = () => {
         height: '100vh',
         overflow: 'hidden',
         position: 'relative',
-        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-        // background: background,
+        background: wallpaper,
+        transition: 'background 0.4s ease',
       }}
     >
       {/* Animated gradient overlay for depth */}
