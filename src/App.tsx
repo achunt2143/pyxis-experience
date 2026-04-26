@@ -1,36 +1,15 @@
-// src/App.tsx
-import React, { useState } from "react";
-import Background from "./components/Background";
-import TopBar from "./components/TopBar";
-import Sidebar from "./components/Sidebar";
-import AppLauncher from "./components/AppLauncher";
-import "./styles/app.scss";
-import FilesModal from "./components/FilesModal";
+import React from 'react';
+import { ThemeProvider, CssBaseline } from '@mui/material';
+import { theme } from './theme/theme';
+import Desktop from './components/Desktop';
 
-const App: React.FC = () => {
-  const [isAppLauncherOpen, setIsAppLauncherOpen] = useState(false);
-  const [isFilesModalOpen, setIsFilesModalOpen] = useState(false);
-
+function App() {
   return (
-    <div className="app-container">
-      <Background />
-      <div className="app-content">
-        <TopBar />
-        <Sidebar 
-        onAppsClick={() => setIsAppLauncherOpen(true)} 
-        onFilesClick={() => setIsFilesModalOpen(true)} 
-        />
-        <AppLauncher
-          isOpen={isAppLauncherOpen}
-          onClose={() => setIsAppLauncherOpen(false)}
-        />
-        <FilesModal
-          isOpen={isFilesModalOpen}
-          onClose={() => setIsFilesModalOpen(false)}
-        />
-      </div>
-    </div>
+    <ThemeProvider theme={theme}>
+      <CssBaseline />
+      <Desktop />
+    </ThemeProvider>
   );
-};
+}
 
 export default App;
