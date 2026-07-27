@@ -1,0 +1,10 @@
+{
+  "id": "installer",
+  "version": "0.1.0",
+  "vendor": "Pyxis Project",
+  "title": "App Installer",
+  "type": "web",
+  "main": "index.html",
+  "icon": "icon.png",
+  "uiRevision": 1
+}

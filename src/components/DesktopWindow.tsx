@@ -1,89 +1,18 @@
 import React from 'react';
 import { Box, Button, Tooltip, Typography } from '@mui/material';
 import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
-import { AlertTriangle, Layers, RotateCcw, X } from 'lucide-react';
+import { AlertTriangle, RotateCcw, X } from 'lucide-react';
 import { type DesktopWindowType, type AppLifecycleState } from '../types';
-import { useAppHost } from '../services/useEcho';
+import { useAppHost } from '@pyxis/app-sdk';
+import { IN_COMPOSITOR } from '../utils/environment';
 
 // Visual map for lifecycle dots in the title bar.
 const STATE_COLOR: Record<AppLifecycleState, string> = {
   starting: '#FFB300',
   running: '#4CAF50',
+  suspended: '#FFA726',
   stopped: '#9E9E9E',
   crashed: '#FF5252',
-};
-
-/**
- * WaylandSurfaceView — placeholder slot for an embedded compositor surface.
- *
- * In native mode (when running inside Smithay), this is the position where a
- * subsurface/foreign-toplevel-managed parented surface should be reparented
- * by the compositor. The shell paints a styled host element; the compositor
- * positions the real GL surface above it on demand.
- *
- * In dev/browser mode there is no Wayland — we just render a lit panel
- * showing the bound surface ids and lifecycle state so the UX is exercised.
- */
-const WaylandSurfaceView: React.FC<{
-  appId: string;
-  surfaceIds: number[];
-  state: AppLifecycleState;
-  pid: number;
-}> = ({ appId, surfaceIds, state, pid }) => {
-  const accent = STATE_COLOR[state];
-  return (
-    <Box
-      // Tag the slot so a native compositor can find and reparent into it.
-      data-app-id={appId}
-      data-surface-ids={surfaceIds.join(',')}
-      data-surface-slot="true"
-      sx={{
-        height: '100%',
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 1,
-        textAlign: 'center',
-        color: 'text.primary',
-        position: 'relative',
-        background: `radial-gradient(circle at 50% 30%, ${accent}33 0%, rgba(0,0,0,0.4) 60%)`,
-        border: `1px solid ${accent}66`,
-        borderRadius: 2,
-        overflow: 'hidden',
-      }}
-    >
-      <Box
-        sx={{
-          width: 56,
-          height: 56,
-          borderRadius: '50%',
-          background: `${accent}22`,
-          border: `2px solid ${accent}`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          boxShadow: `0 0 24px ${accent}55`,
-        }}
-      >
-        <Layers size={26} color={accent} />
-      </Box>
-      <Typography variant="h6" sx={{ fontWeight: 600 }}>
-        Embedded compositor surface
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        <code>{appId}</code> — {state}
-        {pid > 0 ? ` · pid ${pid}` : ''}
-      </Typography>
-      <Typography variant="caption" color="text.secondary">
-        Surface ids: {surfaceIds.length > 0 ? surfaceIds.join(', ') : '—'}
-      </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, opacity: 0.7 }}>
-        Native Wayland subsurface will mount here.
-      </Typography>
-    </Box>
-  );
 };
 
 interface DesktopWindowProps {
@@ -176,33 +105,42 @@ const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
   );
 };
 
-// Render the app component bound to this window, or, if the AppHost has a
-// live compositor surface for this app, an embedded-surface slot. Falls back
-// to a styled placeholder when neither path applies.
+// Render this window's content. This component (and the rest of
+// DesktopWindow's DOM-drawn frame/title-bar) is only ever mounted in
+// !IN_COMPOSITOR (local dev/design preview, no compositor) mode — see
+// Desktop.tsx, which gates DesktopWindow rendering on that. In real
+// production use (IN_COMPOSITOR), a launched app is a separate Nova-launched
+// vela process that Evo composites AND decorates directly in its own real
+// xdg-toplevel; Bloom draws no window/frame for it at all (a second,
+// DOM-drawn frame around an already-decorated real window is exactly the
+// double-decoration bug this split exists to prevent — see
+// pyxis-webos-parity-analysis.md's "surfaces — a myth to retire"). Bloom's
+// only UI for a running app in that mode is a chrome-only dock icon (see
+// BottomDock's orphan-session handling), not a window.
+//
+// Dev/design (http): embed the app's own dev server by URL (see registry.ts's
+// per-app localhost ports) so the shell renders real app UI for local
+// iteration without a compositor. The crash overlay floats on top regardless.
 const WindowContent: React.FC<{
   win: DesktopWindowType;
-  onClose?: (id: string) => void;
-}> = ({ win, onClose }) => {
-  const { sessionForApp, surfacesForApp, hasLiveSurface } = useAppHost();
+}> = ({ win }) => {
+  const { sessionForApp } = useAppHost();
   const session = sessionForApp(win.appId);
   const crashed = session?.state === 'crashed';
 
-  // Inner content resolution preserves prior precedence: explicit component
-  // first, then native compositor surface, then placeholder. The crash
-  // overlay floats on top regardless.
   let inner: React.ReactNode;
-  if (win.component) {
-    const AppComponent = win.component;
+  if (win.entryHtml) {
     inner = (
-      <AppComponent windowId={win.id} onClose={() => onClose?.(win.id)} />
-    );
-  } else if (hasLiveSurface(win.appId)) {
-    inner = (
-      <WaylandSurfaceView
-        appId={win.appId}
-        surfaceIds={surfacesForApp(win.appId)}
-        state={session?.state ?? 'running'}
-        pid={session?.pid ?? 0}
+      <iframe
+        src={`${win.entryHtml}?windowId=${encodeURIComponent(win.id)}`}
+        title={win.title}
+        style={{
+          width: '100%',
+          height: '100%',
+          border: 'none',
+          display: 'block',
+          background: 'var(--color-background, #f5f5f5)',
+        }}
       />
     );
   } else {
@@ -351,6 +289,13 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
   onPositionChange,
   children,
 }) => {
+  // Belt-and-suspenders: Desktop.tsx is the real gate (it doesn't mount this
+  // component at all in compositor mode), but guard here too so a future
+  // caller mounting DesktopWindow directly in production can't reintroduce
+  // the double-decoration bug (a DOM-drawn frame around an app that Evo is
+  // already compositing and decorating as its own real xdg-toplevel).
+  if (IN_COMPOSITOR) return null;
+
   // Calculate maximized dimensions
   const isMaximized = window.state === 'maximized';
   const leftOffset = isMaximized ? LEFT_LAUNCHER_WIDTH_COMPACT : LEFT_LAUNCHER_WIDTH;
@@ -424,16 +369,19 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
             zIndex: window.zIndex,
             display: 'flex',
             flexDirection: 'column',
-            borderRadius: '16px',
+            borderRadius: '12px',
             overflow: 'hidden',
+            border: isActive
+              ? '1px solid var(--color-primary)'
+              : '1px solid var(--color-border)',
             boxShadow: isActive
-              ? '0px 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 2px rgba(33, 150, 243, 0.4)'
-              : '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)',
-            transition: 'box-shadow 0.2s ease',
+              ? '0px 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 2px var(--mochi-primary-soft)'
+              : '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14)',
+            transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
             cursor: window.state === 'maximized' ? 'default' : 'move',
           }}
         >
-          {/* Glassy Title Bar */}
+          {/* Mochi Title Bar */}
           <Box
             sx={{
               height: TITLE_BAR_HEIGHT,
@@ -441,10 +389,8 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
               alignItems: 'center',
               justifyContent: 'space-between',
               px: 2,
-              background: 'rgba(255, 255, 255, 0.2)',
-              backdropFilter: 'blur(15px)',
-              border: '1px solid rgba(255, 255, 255, 0.3)',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
+              background: 'var(--color-surface)',
+              borderBottom: '1px solid var(--color-border-light)',
               cursor: window.state === 'maximized' ? 'default' : 'move',
             }}
           >
@@ -453,10 +399,10 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
               <Typography
                 variant="body2"
                 sx={{
-                  fontWeight: 600,
+                  fontWeight: 700,
                   fontSize: '0.875rem',
                   userSelect: 'none',
-                  color: isActive ? 'text.primary' : 'text.secondary',
+                  color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
                 }}
               >
                 {window.title}
@@ -473,7 +419,7 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                 cursor: 'default',
               }}
             >
-              {/* Yellow Upside-Down Triangle - Minimize */}
+              {/* Warm-yellow Mochi pill - Minimize */}
               <Box
                 component={motion.div}
                 whileHover={{ scale: 1.1 }}
@@ -485,15 +431,15 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                 sx={{
                   width: 28,
                   height: 28,
-                  borderRadius: '6px',
-                  background: 'linear-gradient(135deg, #FFC107 0%, #FFB300 100%)',
+                  borderRadius: '9px',
+                  background: 'linear-gradient(135deg, #ffd479 0%, #ffb300 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
                   transition: 'box-shadow 0.2s ease',
                   '&:hover': {
-                    boxShadow: '0 4px 12px rgba(255, 193, 7, 0.4)',
+                    boxShadow: '0 4px 12px rgba(255, 179, 0, 0.4)',
                   },
                 }}
                 title="Minimize"
@@ -521,15 +467,16 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                 sx={{
                   width: 28,
                   height: 28,
-                  borderRadius: '6px',
-                  background: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)',
+                  borderRadius: '9px',
+                  background:
+                    'linear-gradient(135deg, var(--color-secondary, #6aaedb) 0%, var(--color-primary, #4a8bc2) 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
                   transition: 'box-shadow 0.2s ease',
                   '&:hover': {
-                    boxShadow: '0 4px 12px rgba(33, 150, 243, 0.4)',
+                    boxShadow: '0 4px 12px rgba(74, 139, 194, 0.4)',
                   },
                 }}
                 title="Maximize"
@@ -557,14 +504,15 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #FF5252 0%, #D32F2F 100%)',
+                  background:
+                    'linear-gradient(135deg, var(--color-error, #c62828) 0%, #a02020 100%)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
                   transition: 'box-shadow 0.2s ease',
                   '&:hover': {
-                    boxShadow: '0 4px 12px rgba(255, 82, 82, 0.4)',
+                    boxShadow: '0 4px 12px rgba(198, 40, 40, 0.4)',
                   },
                 }}
                 title="Close"
@@ -574,16 +522,28 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
             </Box>
           </Box>
 
-          {/* Content Area - Solid Background */}
+          {/* Content Area — no padding for embedded app documents, which
+              own their whole viewport (they are separate processes). */}
           <Box
             sx={{
               flex: 1,
-              overflow: 'auto',
-              backgroundColor: 'background.default',
-              p: 2,
+              overflow: window.entryHtml ? 'hidden' : 'auto',
+              backgroundColor: 'var(--color-background)',
+              p: window.entryHtml ? 0 : 2,
+              position: 'relative',
             }}
           >
-            {children || <WindowContent win={window} onClose={onClose} />}
+            {children || <WindowContent win={window} />}
+            {/* Iframes swallow pointer events, so an inactive window with an
+                embedded app would never receive the focusing click — this
+                transparent veil catches the first click and raises the
+                window, then disappears. */}
+            {!isActive && window.entryHtml ? (
+              <Box
+                onMouseDown={() => onFocus?.(window.id)}
+                sx={{ position: 'absolute', inset: 0, zIndex: 3 }}
+              />
+            ) : null}
           </Box>
         </Box>
       )}

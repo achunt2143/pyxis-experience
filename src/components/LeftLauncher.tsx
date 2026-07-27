@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
-import { Box, IconButton, Tooltip, Modal } from '@mui/material';
-import { Grid3x3, Terminal, Folder, FileText, Globe, AlertTriangle } from 'lucide-react';
+import { Box, IconButton, Tooltip } from '@mui/material';
+import { Repanel, Item } from 'remochi';
+import { Grid3x3, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import AppDrawer from './AppDrawer';
-import { useAppHost } from '../services/useEcho';
+import { useAppHost, usePyxisTheme } from '@pyxis/app-sdk';
+import { PYXIS_APPS } from '../apps/registry';
 import type { AppLifecycleState } from '../types';
+import '../styles/pinned-item-overrides.css';
 
-const PINNED_APPS = [
-  { id: 'terminal', label: 'Terminal', Icon: Terminal },
-  { id: 'files', label: 'Files', Icon: Folder },
-  { id: 'editor', label: 'Editor', Icon: FileText },
-  { id: 'browser', label: 'Browser', Icon: Globe },
-];
+// Pinned strip mirrors the registry (src/apps/registry.ts) — one source of
+// truth for which apps exist and how they open.
+const PINNED_APPS = PYXIS_APPS.filter((a) => a.pinned).map((a) => ({
+  id: a.id,
+  label: a.name,
+  Icon: a.icon,
+}));
 
 // Visual styling per AppHost lifecycle state. Centralised here so the dock
 // and other consumers can reuse the same vocabulary.
@@ -32,54 +35,72 @@ interface LeftLauncherProps {
   onAppSelect?: (appId: string) => void;
   activeApp?: string;
   isCompact?: boolean; // New prop
+  appDrawerOpen: boolean;
+  onOpenAppDrawer: () => void;
 }
 
-export const LeftLauncher: React.FC<LeftLauncherProps> = ({ 
-  onAppSelect, 
+export const LeftLauncher: React.FC<LeftLauncherProps> = ({
+  onAppSelect,
   activeApp,
-  isCompact = false 
+  isCompact = false,
+  appDrawerOpen,
+  onOpenAppDrawer,
 }) => {
-  const [appDrawerOpen, setAppDrawerOpen] = useState(false);
   const [hoveredApp, setHoveredApp] = useState<string | null>(null);
   const { stateForApp, sessionForApp, manifests } = useAppHost();
 
+  // remochi Panel style follows the shell theme: dark mode uses the
+  // "shadow" variant, light mode uses "default".
+  const theme = usePyxisTheme('light');
+  const panelStyle = theme === 'dark' ? 'shadow' : 'default';
+
   // Calculate dimensions based on compact mode
-  const width = isCompact ? 40 : 64;
+  const height = isCompact ? 40 : 64;
   const iconSize = isCompact ? 20 : 24;
   const buttonSize = isCompact ? 36 : 48;
 
+  // Pinned apps render as remochi `Item`s with padding/gap stripped via
+  // .pinned-item (src/styles/pinned-item-overrides.css), so each Item is
+  // exactly icon-sized — no dead trailing content slot to work around.
+  const itemVariant = isCompact ? 'compact' : 'default';
+
   return (
     <>
-      {/* Left Launcher Bar */}
+      {/* Left Launcher Dock — app drawer + pinned apps, bottom-left corner.
+          The Panel is flipped horizontally about its own origin (transform:
+          scaleX(-1)) to mirror its default rounded-corner shape; the
+          content wrapper carries the same flip again to cancel it back
+          out so icons/tooltips render upright. */}
       <Box
         component={motion.div}
-        animate={{
-          width: width,
-        }}
+        animate={{ height }}
         transition={{ duration: 0.3, ease: 'easeInOut' }}
         sx={{
           position: 'fixed',
-          left: 8,
-          top: 56,
-          bottom: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 1,
-          py: 2,
-          px: isCompact ? 0.5 : 1,
-          background: 'rgba(255, 255, 255, 0.2)',
-          backdropFilter: 'blur(15px)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
-          borderRadius: '16px',
-          boxShadow: '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)',
+          left: 0,
+          bottom: 0,
           zIndex: 1100,
+          display: 'inline-flex',
+          transform: 'scaleX(-1)',
         }}
       >
+        <Repanel style={panelStyle}>
+          <Box
+            sx={{
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 1,
+              px: 2,
+              py: isCompact ? 0.5 : 1,
+              transform: 'scaleX(-1)',
+            }}
+          >
         {/* App Drawer Button */}
-        <Tooltip title="App Drawer" placement="right">
+        <Tooltip title="App Drawer" placement="top">
           <IconButton
-            onClick={() => setAppDrawerOpen(true)}
+            onClick={onOpenAppDrawer}
             component={motion.button}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
@@ -87,11 +108,12 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
               width: buttonSize,
               height: buttonSize,
               borderRadius: '12px',
-              backgroundColor: appDrawerOpen ? 'rgba(33, 150, 243, 0.2)' : 'transparent',
-              border: appDrawerOpen ? '2px solid rgba(33, 150, 243, 0.5)' : '2px solid transparent',
+              color: 'var(--color-text)',
+              backgroundColor: appDrawerOpen ? 'var(--mochi-primary-soft)' : 'transparent',
+              border: appDrawerOpen ? '2px solid var(--color-primary)' : '2px solid transparent',
               transition: 'all 0.2s ease',
               '&:hover': {
-                backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                backgroundColor: 'var(--mochi-hover)',
               },
             }}
           >
@@ -102,10 +124,10 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
         {/* Divider */}
         <Box
           sx={{
-            width: '80%',
-            height: '1px',
-            backgroundColor: 'rgba(255, 255, 255, 0.3)',
-            my: 0.5,
+            height: '70%',
+            width: '1px',
+            backgroundColor: 'var(--color-border)',
+            mx: 0.5,
           }}
         />
 
@@ -135,103 +157,95 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
               onMouseEnter={() => setHoveredApp(id)}
               onMouseLeave={() => setHoveredApp(null)}
             >
-              <Tooltip title={tooltipTitle} placement="right" arrow>
-                <IconButton
-                  onClick={() => onAppSelect?.(id)}
-                  component={motion.button}
-                  whileHover={{ scale: 1.1 }}
-                  whileTap={{ scale: 0.95 }}
-                  sx={{
-                    width: buttonSize,
-                    height: buttonSize,
-                    borderRadius: '12px',
-                    backgroundColor: isActive
-                      ? 'rgba(33, 150, 243, 0.2)'
-                      : 'transparent',
-                    border: isActive
-                      ? '2px solid rgba(33, 150, 243, 0.5)'
-                      : '2px solid transparent',
-                    transition: 'all 0.2s ease',
-                    position: 'relative',
-                    '&:hover': {
-                      backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                    },
-                  }}
-                >
-                  <Icon size={iconSize} />
-
-                  {/* Lifecycle dot — amber=starting, green=running */}
-                  {dot && lifecycleState !== 'crashed' && (
-                    <Box
-                      component={motion.div}
-                      key={lifecycleState}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      sx={{
-                        position: 'absolute',
-                        bottom: 4,
-                        right: 4,
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: dot,
-                        boxShadow: `0 0 6px ${dot}`,
-                        ...(lifecycleState === 'starting'
-                          ? {
-                              animation: 'pyxisPulse 1s ease-in-out infinite',
-                              '@keyframes pyxisPulse': {
-                                '0%, 100%': { opacity: 1 },
-                                '50%': { opacity: 0.4 },
-                              },
-                            }
-                          : {}),
-                      }}
-                    />
-                  )}
-
-                  {/* Crashed warning badge */}
-                  {lifecycleState === 'crashed' && (
-                    <Box
-                      component={motion.div}
-                      initial={{ scale: 0 }}
-                      animate={{ scale: 1 }}
-                      sx={{
-                        position: 'absolute',
-                        top: -4,
-                        right: -4,
-                        width: 16,
-                        height: 16,
-                        borderRadius: '50%',
-                        backgroundColor: '#F44336',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '2px solid rgba(255,255,255,0.6)',
-                      }}
-                    >
-                      <AlertTriangle size={10} color="#fff" />
-                    </Box>
-                  )}
-                </IconButton>
+              <Tooltip title={tooltipTitle} placement="top" arrow>
+                {/* span wrapper: Item doesn't forward a ref, so MUI's
+                    Tooltip needs a DOM-forwarding child to anchor to. */}
+                <span>
+                  <Item
+                    className="pinned-item"
+                    icon={<Icon size={iconSize} />}
+                    selected={isActive}
+                    variant={itemVariant}
+                    onClick={() => onAppSelect?.(id)}
+                  />
+                </span>
               </Tooltip>
 
-              {/* Active Indicator Bar */}
+              {/* Lifecycle dot — amber=starting, green=running */}
+              {dot && lifecycleState !== 'crashed' && (
+                <Box
+                  component={motion.div}
+                  key={lifecycleState}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  sx={{
+                    position: 'absolute',
+                    bottom: 4,
+                    right: 4,
+                    width: 8,
+                    height: 8,
+                    borderRadius: '50%',
+                    backgroundColor: dot,
+                    boxShadow: `0 0 6px ${dot}`,
+                    pointerEvents: 'none',
+                    ...(lifecycleState === 'starting'
+                      ? {
+                          animation: 'pyxisPulse 1s ease-in-out infinite',
+                          '@keyframes pyxisPulse': {
+                            '0%, 100%': { opacity: 1 },
+                            '50%': { opacity: 0.4 },
+                          },
+                        }
+                      : {}),
+                  }}
+                />
+              )}
+
+              {/* Crashed warning badge */}
+              {lifecycleState === 'crashed' && (
+                <Box
+                  component={motion.div}
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  sx={{
+                    position: 'absolute',
+                    top: -4,
+                    right: -4,
+                    width: 16,
+                    height: 16,
+                    borderRadius: '50%',
+                    backgroundColor: '#F44336',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid rgba(255,255,255,0.6)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <AlertTriangle size={10} color="#fff" />
+                </Box>
+              )}
+
+              {/* Active Indicator Bar — mirrors remochi's ViewSelectButton
+                  .mochi-button-bar underline (flush, 2px, primary, square
+                  corners) instead of a floating pill, offset -8px below
+                  the icon so it doesn't sit flush against it. */}
               <AnimatePresence>
                 {isActive && (
                   <Box
                     component={motion.div}
-                    initial={{ scale: 0, opacity: 0 }}
-                    animate={{ scale: 1, opacity: 1 }}
-                    exit={{ scale: 0, opacity: 0 }}
+                    initial={{ scaleX: 0, opacity: 0 }}
+                    animate={{ scaleX: 1, opacity: 1 }}
+                    exit={{ scaleX: 0, opacity: 0 }}
+                    transition={{ duration: 0.3, ease: 'easeInOut' }}
                     sx={{
                       position: 'absolute',
-                      left: -8,
-                      top: '50%',
-                      transform: 'translateY(-50%)',
-                      width: 4,
-                      height: isCompact ? 16 : 24,
-                      backgroundColor: 'primary.main',
-                      borderRadius: '2px',
+                      bottom: -8,
+                      left: 0,
+                      width: '100%',
+                      height: '2px',
+                      backgroundColor: 'var(--mochi-primary)',
+                      pointerEvents: 'none',
                     }}
                   />
                 )}
@@ -239,29 +253,9 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
             </Box>
           );
         })}
+          </Box>
+        </Repanel>
       </Box>
-
-      {/* App Drawer Modal */}
-      <Modal
-        open={appDrawerOpen}
-        onClose={() => setAppDrawerOpen(false)}
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          backdropFilter: 'blur(4px)',
-        }}
-      >
-        <Box
-          component={motion.div}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.9 }}
-          transition={{ duration: 0.2 }}
-        >
-          <AppDrawer onClose={() => setAppDrawerOpen(false)} onAppSelect={onAppSelect} />
-        </Box>
-      </Modal>
     </>
   );
 };

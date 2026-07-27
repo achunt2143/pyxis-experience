@@ -1,23 +1,26 @@
 import React, { useState, useMemo } from 'react';
 import { Box, IconButton, Tooltip, Typography } from '@mui/material';
+import { Repanel } from 'remochi';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { DesktopWindowType } from '../types';
-import { Terminal, Folder, FileText, Globe, Settings, X, AlertTriangle } from 'lucide-react';
-import { useAppHost } from '../services/useEcho';
+import { Globe, X, AlertTriangle } from 'lucide-react';
+import { useAppHost, usePyxisTheme } from '@pyxis/app-sdk';
+import { PYXIS_APPS } from '../apps/registry';
 
-// Icon mapping
-const APP_ICONS: { [key: string]: React.FC<{ size?: number }> } = {
-  terminal: Terminal,
-  files: Folder,
-  editor: FileText,
-  browser: Globe,
-  settings: Settings,
-};
+// Icon mapping derived from the app registry; unknown app ids fall back to
+// a generic globe below.
+const APP_ICONS: { [key: string]: React.FC<{ size?: number }> } =
+  Object.fromEntries(PYXIS_APPS.map((a) => [a.id, a.icon]));
 
 interface BottomDockProps {
   windows: DesktopWindowType[];
+  activeWindowId?: string;
   onWindowSelect?: (windowId: string) => void;
   onWindowClose?: (windowId: string) => void;
+  /** Click on an app with a real running session but no local window record
+   * (the orphan-icon branch below) — the normal case in compositor mode,
+   * since real launches never create a local window (see Desktop.tsx). */
+  onOrphanSelect?: (appId: string, crashed: boolean) => void;
   isCompact?: boolean; // New prop
 }
 
@@ -26,8 +29,10 @@ const EXPAND_TO_SUBDOCK = false; // Set to true for horizontal "dock-within-a-do
 
 export const BottomDock: React.FC<BottomDockProps> = ({
   windows,
+  activeWindowId,
   onWindowSelect,
   onWindowClose,
+  onOrphanSelect,
   isCompact = false,
 }) => {
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
@@ -37,6 +42,11 @@ export const BottomDock: React.FC<BottomDockProps> = ({
   const iconSize = isCompact ? 28 : 56;
   const badgeSize = isCompact ? 16 : 20;
   const padding = isCompact ? 1 : 1.5;
+
+  // remochi Panel style follows the shell theme: dark mode uses the
+  // "shadow" variant, light mode uses "default".
+  const theme = usePyxisTheme('light');
+  const panelStyle = theme === 'dark' ? 'shadow' : 'default';
 
   // Apps with running sessions but no open windows still belong on the dock
   // — the dock now reflects "running sessions" not just "open windows". We
@@ -48,6 +58,11 @@ export const BottomDock: React.FC<BottomDockProps> = ({
       if (
         (s.state === 'running' ||
           s.state === 'starting' ||
+          // A suspended app is minimized, not gone — it MUST keep its dock
+          // icon, since clicking it is the only way to restore it (focusApp
+          // -> Nova.Focus -> Evo unminimize + SIGCONT resume). Omitting it
+          // here is exactly why "restore from the dock" did nothing.
+          s.state === 'suspended' ||
           s.state === 'crashed') &&
         !openAppIds.has(s.appId)
       ) {
@@ -83,48 +98,52 @@ export const BottomDock: React.FC<BottomDockProps> = ({
       return Math.max(300, expandedWindows * 70 + 100);
     }
     return 'auto';
-  }, [EXPAND_TO_SUBDOCK, expandedGroup, groupedWindows]);
+  }, [expandedGroup, groupedWindows]);
 
   if (!hasAnythingToShow) {
     return null;
   }
 
   return (
+    // Active Dock — running/open windows, bottom-right corner. Wrapped in a
+    // remochi Panel using its default shape (rounds the left corners, flush
+    // right), which already fits a right-docked panel with no override.
     <Box
       component={motion.div}
       initial={{ y: 100, opacity: 0 }}
-      animate={{ 
-        y: 0, 
+      animate={{
+        y: 0,
         opacity: 1,
         width: dockWidth,
         height: isCompact ? 48 : 'auto'
       }}
       exit={{ y: 100, opacity: 0 }}
-      transition={{ 
-        type: 'spring', 
-        stiffness: 300, 
+      transition={{
+        type: 'spring',
+        stiffness: 300,
         damping: 30,
         width: { duration: 0.3 },
         height: { duration: 0.3 }
       }}
       sx={{
         position: 'fixed',
-        bottom: 8,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        alignItems: 'flex-end',
-        gap: isCompact ? 1 : 2,
-        px: isCompact ? 1 : 2,
-        py: padding,
-        background: 'rgba(255, 255, 255, 0.2)',
-        backdropFilter: 'blur(15px)',
-        border: '1px solid rgba(255, 255, 255, 0.3)',
-        borderRadius: '16px', // 16px border radius per requirements
-        boxShadow: '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)', // Elevation 4
+        right: 0,
+        bottom: 0,
         zIndex: 1100,
       }}
     >
+      <Repanel style={panelStyle}>
+        <Box
+          sx={{
+            height: '100%',
+            display: 'flex',
+            alignItems: 'flex-end',
+            gap: isCompact ? 1 : 2,
+            px: isCompact ? 1 : 2,
+            py: padding,
+            color: 'var(--color-text)',
+          }}
+        >
       <AnimatePresence mode="popLayout">
         {Object.entries(groupedWindows).map(([appId, appWindows]) => {
           const Icon = APP_ICONS[appId] || Globe;
@@ -133,6 +152,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
           const hasMultiple = appWindows.length > 1;
           const lifecycleState = stateForApp(appId);
           const session = sessionForApp(appId);
+          const isActiveGroup = appWindows.some((w) => w.id === activeWindowId);
 
           return (
             <Box
@@ -169,11 +189,10 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                     gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
                     gap: 1.5,
                     p: 2,
-                    background: 'rgba(255, 255, 255, 0.2)',
-                    backdropFilter: 'blur(15px)',
-                    border: '1px solid rgba(255, 255, 255, 0.3)',
+                    background: 'var(--color-surface)',
+                    border: '1px solid var(--color-border)',
                     borderRadius: '16px',
-                    boxShadow: '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)',
+                    boxShadow: '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14)',
                     minWidth: 280,
                     maxWidth: 400,
                     zIndex: 1200,
@@ -199,12 +218,12 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                           p: 1.5,
                           borderRadius: '12px',
                           cursor: 'pointer',
-                          background: hoveredWindow === win.id 
-                            ? 'rgba(33, 150, 243, 0.2)' 
-                            : 'rgba(255, 255, 255, 0.1)',
-                          border: `1px solid ${hoveredWindow === win.id 
-                            ? 'rgba(33, 150, 243, 0.5)' 
-                            : 'rgba(255, 255, 255, 0.2)'}`,
+                          background: hoveredWindow === win.id
+                            ? 'var(--mochi-primary-soft)'
+                            : 'var(--mochi-hover)',
+                          border: `1px solid ${hoveredWindow === win.id
+                            ? 'var(--color-primary)'
+                            : 'var(--color-border-light)'}`,
                           transition: 'all 0.2s ease',
                           display: 'flex',
                           flexDirection: 'column',
@@ -278,11 +297,11 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                             width: iconSize,
                             height: iconSize,
                             borderRadius: '12px',
-                            background: 'rgba(255, 255, 255, 0.1)',
-                            border: '1px solid rgba(255, 255, 255, 0.2)',
+                            background: 'var(--mochi-hover)',
+                            border: '1px solid var(--color-border-light)',
                             '&:hover': {
-                              background: 'rgba(33, 150, 243, 0.2)',
-                              border: '1px solid rgba(33, 150, 243, 0.5)',
+                              background: 'var(--mochi-primary-soft)',
+                              border: '1px solid var(--color-primary)',
                             },
                           }}
                         >
@@ -303,13 +322,21 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                 }}
               >
                 {appWindows.length === 0 ? (
-                  // Orphan running session — has a host-side process but no
-                  // visible window. Render a single placeholder icon.
+                  // Orphan running session — a real Nova-launched process
+                  // that Evo composites/decorates in its own window
+                  // elsewhere on screen, not a local DOM window Bloom
+                  // controls. This is the normal, expected shape for every
+                  // running app in compositor mode (see Desktop.tsx —
+                  // real launches never create a local window record).
                   <Tooltip
                     key={`orphan-${appId}`}
                     title={`${appId}${
                       session?.pid ? ` · pid ${session.pid}` : ''
-                    } · ${lifecycleState ?? 'running'}`}
+                    } · ${lifecycleState ?? 'running'}${
+                      lifecycleState === 'crashed' ? ' · click to relaunch' : ''
+                    }${
+                      lifecycleState === 'suspended' ? ' · click to restore' : ''
+                    }`}
                     placement="top"
                   >
                     <IconButton
@@ -319,15 +346,19 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                         y: isHovered ? -8 : 0,
                       }}
                       transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+                      onClick={() =>
+                        onOrphanSelect?.(appId, lifecycleState === 'crashed')
+                      }
                       sx={{
                         width: iconSize,
                         height: iconSize,
                         borderRadius: '12px',
-                        background: 'rgba(255, 255, 255, 0.10)',
-                        border: '1px dashed rgba(255, 255, 255, 0.3)',
+                        background: 'var(--mochi-hover)',
+                        border: '1px dashed var(--color-border)',
+                        color: 'var(--color-text)',
                         position: 'relative',
                         '&:hover': {
-                          background: 'rgba(255, 255, 255, 0.20)',
+                          background: 'var(--mochi-active)',
                         },
                       }}
                     >
@@ -369,8 +400,9 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                             width: iconSize,
                             height: iconSize,
                             borderRadius: '12px',
-                            background: 'rgba(255, 255, 255, 0.15)',
-                            border: '1px solid rgba(255, 255, 255, 0.3)',
+                            background: 'var(--mochi-hover)',
+                            border: '1px solid var(--color-border-light)',
+                            color: 'var(--color-text)',
                             position: shouldShowStacked && !isLast ? 'absolute' : 'relative',
                             top: 0,
                             left: 0,
@@ -380,7 +412,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                             zIndex: idx,
                             transformStyle: 'preserve-3d',
                             '&:hover': {
-                              background: 'rgba(255, 255, 255, 0.25)',
+                              background: 'var(--mochi-active)',
                             },
                           }}
                         >
@@ -390,6 +422,32 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                     );
                   })
                 )}
+
+                {/* Active app bar — mirrors remochi's ViewSelectButton
+                    .mochi-button-bar underline (flush, 2px, primary,
+                    square corners) instead of a floating pill, offset
+                    -8px below the icon so it doesn't sit flush against
+                    it. */}
+                <AnimatePresence>
+                  {isActiveGroup && (
+                    <Box
+                      component={motion.div}
+                      initial={{ scaleX: 0, opacity: 0 }}
+                      animate={{ scaleX: 1, opacity: 1 }}
+                      exit={{ scaleX: 0, opacity: 0 }}
+                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                      sx={{
+                        position: 'absolute',
+                        bottom: -8,
+                        left: 0,
+                        width: iconSize,
+                        height: '2px',
+                        backgroundColor: 'var(--mochi-primary)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  )}
+                </AnimatePresence>
               </Box>
 
               {/* Badge for multiple windows */}
@@ -406,7 +464,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                     minWidth: badgeSize,
                     height: badgeSize,
                     borderRadius: '10px',
-                    background: 'linear-gradient(135deg, #2196F3 0%, #1976D2 100%)',
+                    background: 'linear-gradient(135deg, var(--color-secondary, #6aaedb) 0%, var(--color-primary, #4a8bc2) 100%)',
                     color: 'white',
                     fontSize: isCompact ? '0.6rem' : '0.7rem',
                     fontWeight: 600,
@@ -452,6 +510,22 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                 />
               )}
 
+              {/* Suspended (minimized): a static amber dot — distinct from the
+                  running green dot — so a paused app reads as present but
+                  parked, and the user knows there's something to click back. */}
+              {lifecycleState === 'suspended' && (
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 4,
+                    borderRadius: '50%',
+                    backgroundColor: '#FFA726',
+                    boxShadow: '0 0 4px #FFA726',
+                    opacity: 0.85,
+                  }}
+                />
+              )}
+
               {/* Crashed warning overlay. */}
               {lifecycleState === 'crashed' && (
                 <Box
@@ -480,6 +554,8 @@ export const BottomDock: React.FC<BottomDockProps> = ({
           );
         })}
       </AnimatePresence>
+        </Box>
+      </Repanel>
     </Box>
   );
 };

@@ -1,0 +1,21 @@
+{
+  "id": "installer",
+  "title": "App Installer",
+  "vendor": "Pyxis Project",
+  "version": "0.1.0",
+  "runtime": "web",
+  "sourceDir": "src",
+  "entry": "index.html",
+  "icon": "assets/icon.png",
+  "permissions": ["appmanager.install", "appmanager.manage"],
+  "sdk": {
+    "builder": "vite"
+  },
+  "package": {
+    "section": "applications",
+    "priority": "optional",
+    "architecture": "all",
+    "maintainerEmail": "dev@pyxis.local",
+    "description": "Install and manage .ipk application packages"
+  }
+}

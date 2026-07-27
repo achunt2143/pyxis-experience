@@ -1,64 +1,43 @@
-import { useState, useCallback } from 'react';
-import type { ComponentType } from 'react';
-import type { DesktopWindowType, WindowState, AppEntry } from '../types';
-import {
-  TerminalApp,
-  FilesApp,
-  SettingsApp,
-  BrowserApp,
-} from '../apps';
-
-// Real Pyxis built-in apps. The component reference is stored on the window
-// so DesktopWindow can render it directly.
-const REAL_APPS: AppEntry[] = [
-  { id: 'terminal', name: 'Terminal', icon: '💻', component: TerminalApp as ComponentType<any> },
-  { id: 'files', name: 'Files', icon: '📁', component: FilesApp as ComponentType<any> },
-  { id: 'settings', name: 'Settings', icon: '⚙️', component: SettingsApp as ComponentType<any> },
-  { id: 'browser', name: 'Browser', icon: '🌐', component: BrowserApp as ComponentType<any> },
-];
+import { useState, useCallback, useEffect } from 'react';
+import type { DesktopWindowType, WindowState } from '../types';
+import { PYXIS_APPS, appById } from '../apps/registry';
 
 export function useWindows() {
   const generateId = () => Math.random().toString(36).substr(2, 9);
-
-  const findApp = (appId: string) => REAL_APPS.find((a) => a.id === appId);
 
   const buildWindow = (
     appId: string,
     title: string,
     overrides: Partial<DesktopWindowType> = {}
   ): DesktopWindowType => {
-    const app = findApp(appId);
+    const app = appById(appId);
     return {
       id: overrides.id ?? generateId(),
       title,
       appId,
       state: 'normal',
       position: { x: Math.random() * 200 + 50, y: Math.random() * 200 + 50 },
-      size: { width: 800, height: 600 },
+      size: app?.defaultSize ?? { width: 800, height: 600 },
       zIndex: 1,
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
-      component: app?.component,
+      entryHtml: app?.entryHtml,
       ...overrides,
     };
   };
 
-  const [windows, setWindows] = useState<DesktopWindowType[]>([
-    buildWindow('terminal', 'Terminal — gecko@pyxis', {
-      position: { x: 120, y: 120 },
-      size: { width: 760, height: 460 },
-      zIndex: 1,
-    }),
-    buildWindow('files', 'Files', {
-      position: { x: 260, y: 160 },
-      size: { width: 720, height: 500 },
-      zIndex: 2,
-    }),
-  ]);
+  // No windows are seeded at mount. These used to pre-open fake
+  // "terminal"/"notes" windows unconditionally, on every load, whether or
+  // not those apps were actually running — in compositor mode that meant
+  // Bloom drew its own fake decorated window around apps with zero real
+  // Evo-composited surfaces the instant the shell painted, before the user
+  // ever launched anything (see DesktopWindow.tsx's IN_COMPOSITOR gate for
+  // why that DOM-drawn frame shouldn't exist for real app windows at all).
+  const [windows, setWindows] = useState<DesktopWindowType[]>([]);
 
   const createWindow = useCallback((appId: string, title?: string) => {
     setWindows((prev) => {
-      const app = findApp(appId);
+      const app = appById(appId);
       const resolvedTitle = title ?? app?.name ?? appId;
       const newWindow = buildWindow(appId, resolvedTitle, {
         zIndex: Math.max(...prev.map((w) => w.zIndex), 0) + 1,
@@ -71,6 +50,19 @@ export function useWindows() {
   const closeWindow = useCallback((windowId: string) => {
     setWindows((prev) => prev.filter((w) => w.id !== windowId));
   }, []);
+
+  // Standalone app documents request their own close cooperatively via
+  // postMessage (see @pyxis/app-sdk's mountApp.tsx) — the shell owns the window.
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      const data = e.data as { type?: string; windowId?: string };
+      if (data?.type === 'pyxis:app-close' && data.windowId) {
+        closeWindow(data.windowId);
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [closeWindow]);
 
   const minimizeWindow = useCallback((windowId: string) => {
     setWindows((prev) =>
@@ -143,8 +135,8 @@ export function useWindows() {
     focusWindow,
     updateWindowPosition,
     updateWindowSize,
-    mockApps: REAL_APPS,
-    apps: REAL_APPS,
+    mockApps: PYXIS_APPS,
+    apps: PYXIS_APPS,
     activeWindowId,
   };
 }

@@ -1,0 +1,9 @@
+{
+  "appRoot": "/usr/pyxis/applications/notes",
+  "architecture": "all",
+  "entrypoint": "index.html",
+  "id": "notes",
+  "packageFile": "/home/andrew/geckos/pyxis-experience/packages/apps/notes/dist/notes_0.1.0_all.ipk",
+  "runtime": "web",
+  "version": "0.1.0"
+}

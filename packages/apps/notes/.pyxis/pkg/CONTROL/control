@@ -1,0 +1,7 @@
+Package: notes
+Version: 0.1.0
+Architecture: all
+Section: applications
+Priority: optional
+Maintainer: Pyxis Project <dev@pyxis.local>
+Description: Note-taking app for Pyxis

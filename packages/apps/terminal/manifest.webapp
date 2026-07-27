@@ -1,0 +1,11 @@
+{
+  "id": "terminal",
+  "name": "Terminal",
+  "version": "0.1.0",
+  "type": "web",
+  "entry": "index.html",
+  "category": "system",
+  "singleInstance": true,
+  "display": "windowed",
+  "permissions": []
+}

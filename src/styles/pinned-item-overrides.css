@@ -1,0 +1,11 @@
+/*
+ * Explicit override for remochi's Item, requested for the left launcher
+ * dock's pinned apps: strip Item's default padding/gap so the rendered
+ * chip is exactly the icon (no dead trailing content slot), instead of
+ * the default card layout meant for title/subtitle list rows.
+ */
+
+.mochi-item.pinned-item {
+  padding: 0 !important;
+  gap: 0 !important;
+}

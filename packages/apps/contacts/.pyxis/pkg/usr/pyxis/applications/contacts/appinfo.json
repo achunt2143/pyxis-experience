@@ -1,0 +1,14 @@
+{
+  "id": "contacts",
+  "version": "0.1.0",
+  "vendor": "Pyxis Project",
+  "title": "Contacts",
+  "type": "web",
+  "main": "index.html",
+  "icon": "icon.png",
+  "uiRevision": 1,
+  "requiredPermissions": [
+    "filesystem.read",
+    "filesystem.write"
+  ]
+}

@@ -1,13 +1,6 @@
-import React, { useState } from 'react';
-import {
-  Box,
-  IconButton,
-  TextField,
-  Paper,
-  Grid,
-  Switch,
-  FormControlLabel,
-} from '@mui/material';
+import React from 'react';
+import { Box, IconButton } from '@mui/material';
+import { Input, Repanel } from 'remochi';
 import {
   Search,
   Bell,
@@ -18,18 +11,29 @@ import {
   BatteryCharging,
   BatteryLow,
 } from 'lucide-react';
-import { motion } from 'framer-motion';
-import { useBatteryStatus, useNetworkStatus } from '../services/useEcho';
+import { useBatteryStatus, useNetworkStatus, usePyxisTheme } from '@pyxis/app-sdk';
 
-export const TopSystemBar: React.FC = () => {
-  const [activePanel, setActivePanel] = useState<{
-    type: 'notification' | 'settings' | 'wifi' | 'battery' | null;
-    anchorEl: HTMLElement | null;
-  }>({ type: null, anchorEl: null });
-  const [darkMode, setDarkMode] = useState(false);
+interface TopSystemBarProps {
+  quickSettingsOpen: boolean;
+  onToggleQuickSettings: () => void;
+}
 
+/**
+ * The top bar chrome only — the quick-settings sliding menu itself lives at
+ * the Desktop level (see QuickSettingsMenu.tsx), pushing the whole shell
+ * via MochiSlidingMenu.ContentShifter rather than living inside this bar.
+ */
+export const TopSystemBar: React.FC<TopSystemBarProps> = ({
+  quickSettingsOpen,
+  onToggleQuickSettings,
+}) => {
   const battery = useBatteryStatus();
   const network = useNetworkStatus();
+
+  // remochi Panel style follows the shell theme: dark mode uses the
+  // "shadow" variant, light mode uses "default".
+  const theme = usePyxisTheme('light');
+  const panelStyle = theme === 'dark' ? 'shadow' : 'default';
 
   // Pick a battery icon based on level/charging state.
   const BatteryGlyph = battery?.charging
@@ -44,33 +48,15 @@ export const TopSystemBar: React.FC = () => {
     minute: '2-digit',
   });
 
-  const handleQuickSettingsClick = (
-    type: 'notification' | 'settings' | 'wifi' | 'battery',
-    event: React.MouseEvent<HTMLButtonElement>
-  ) => {
-    setActivePanel({
-      type: activePanel.type === type ? null : type,
-      anchorEl: event.currentTarget,
-    });
-  };
-
-  const handleClose = () => {
-    setActivePanel({ type: null, anchorEl: null });
-  };
-
-  const getPanelPosition = () => {
-    if (!activePanel.anchorEl) return {};
-    const rect = activePanel.anchorEl.getBoundingClientRect();
-    return {
-      position: 'absolute' as const,
-      top: rect.bottom + 8,
-      right: window.innerWidth - rect.right,
-    };
-  };
-
   return (
     <>
-      {/* Top System Bar */}
+      {/* Top System Bar — two remochi Panels spanning the screen width,
+          flush against each other with no gap. Each Panel is flipped about
+          its own origin to mirror its default rounded-corner shape; each
+          content wrapper carries the same flip again to cancel it back out
+          so the bar's contents render upright:
+            left panel  — flip vertically only (scaleY(-1))
+            right panel — flip both horizontally and vertically (scale(-1,-1)) */}
       <Box
         sx={{
           position: 'fixed',
@@ -79,254 +65,115 @@ export const TopSystemBar: React.FC = () => {
           right: 0,
           height: 48,
           display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: 2,
-          gap: 2,
-          background: 'rgba(255, 255, 255, 0.2)',
-          backdropFilter: 'blur(15px)',
-          border: '1px solid rgba(255, 255, 255, 0.3)',
-          boxShadow: '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14), 0px 1px 10px 0px rgba(0,0,0,0.12)',
-          borderRadius: 0, // 0px rounding for top bar as per requirements
           zIndex: 1200,
+          color: 'var(--color-text)',
         }}
       >
-        {/* Left: Search Bar */}
-        <TextField
-          placeholder="Search..."
-          size="small"
-          sx={{
-            flex: '0 1 300px',
-            '& .MuiOutlinedInput-root': {
-              height: 36,
-            },
-          }}
-          InputProps={{
-            startAdornment: <Search size={18} style={{ marginRight: 8, opacity: 0.6 }} />,
-          }}
-        />
-
-        {/* Right: Quick Settings Icons */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton
-            size="small"
-            onClick={(e) => handleQuickSettingsClick('notification', e)}
-            sx={{
-              color: activePanel.type === 'notification' ? 'primary.main' : 'text.primary',
-            }}
-          >
-            <Bell size={20} />
-          </IconButton>
-
-          <IconButton
-            size="small"
-            onClick={(e) => handleQuickSettingsClick('settings', e)}
-            sx={{
-              color: activePanel.type === 'settings' ? 'primary.main' : 'text.primary',
-            }}
-          >
-            <Settings size={20} />
-          </IconButton>
-
-          <IconButton
-            size="small"
-            onClick={(e) => handleQuickSettingsClick('wifi', e)}
-            sx={{
-              color: activePanel.type === 'wifi' ? 'primary.main' : 'text.primary',
-            }}
-            title={network?.connected ? `Connected: ${network.ssid}` : 'Offline'}
-          >
-            <WifiGlyph size={20} />
-          </IconButton>
-
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              cursor: 'pointer',
-              color: activePanel.type === 'battery' ? 'primary.main' : 'text.primary',
-            }}
-            onClick={(e) =>
-              handleQuickSettingsClick(
-                'battery',
-                e as unknown as React.MouseEvent<HTMLButtonElement>
-              )
-            }
-            title={battery ? `${battery.level}% ${battery.charging ? '(charging)' : ''}` : 'Battery'}
-          >
-            <IconButton size="small" sx={{ color: 'inherit' }}>
-              <BatteryGlyph size={20} />
-            </IconButton>
-            {battery && (
-              <Box
-                component="span"
-                sx={{ fontSize: '0.78rem', fontWeight: 600, mr: 0.5 }}
-              >
-                {battery.level}%
-              </Box>
-            )}
-          </Box>
-
-          <Box
-            sx={{
-              ml: 1,
-              px: 1.5,
-              py: 0.5,
-              borderRadius: 1,
-              fontSize: '0.875rem',
-              fontWeight: 500,
-              cursor: 'default',
-            }}
-          >
-            {currentTime}
-          </Box>
-        </Box>
-      </Box>
-
-      {/* Quick Settings Panels */}
-      {activePanel.type && (
-        <>
-          {/* Backdrop */}
-          <Box
-            onClick={handleClose}
-            sx={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 1299,
-            }}
-          />
-
-          {/* Panel */}
-          <Box
-            component={motion.div}
-            initial={{ opacity: 0, scale: 0.8, transformOrigin: 'top right' }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
-            sx={{
-              ...getPanelPosition(),
-              zIndex: 1300,
-              minWidth: 320,
-              maxWidth: 400,
-            }}
-          >
-            <Paper
-              elevation={4}
+        {/* Left Panel: Search */}
+        <Box sx={{ flex: '0 0 340px', transform: 'scaleY(-1)' }}>
+          <Repanel style={panelStyle}>
+            <Box
               sx={{
-                p: 2,
-                background: 'rgba(255, 255, 255, 0.2)',
-                backdropFilter: 'blur(15px)',
-                border: '1px solid rgba(255, 255, 255, 0.3)',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                transform: 'scaleY(-1)',
               }}
             >
-              {/* Notification Panel */}
-              {activePanel.type === 'notification' && (
-                <Box>
-                  <Box sx={{ mb: 2, fontSize: '1rem', fontWeight: 600 }}>
-                    Notifications
-                  </Box>
-                  <Box sx={{ color: 'text.secondary', fontSize: '0.875rem' }}>
-                    No new notifications
-                  </Box>
-                </Box>
-              )}
+              <Search size={18} style={{ opacity: 0.6, flexShrink: 0 }} />
+              <Input placeholder="Search..." style={{ width: '100%' }} />
+            </Box>
+          </Repanel>
+        </Box>
 
-              {/* Settings Panel */}
-              {activePanel.type === 'settings' && (
-                <Box>
-                  <Box sx={{ mb: 2, fontSize: '1rem', fontWeight: 600 }}>
-                    Quick Settings
-                  </Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <FormControlLabel
-                        control={
-                          <Switch
-                            checked={darkMode}
-                            onChange={(e) => setDarkMode(e.target.checked)}
-                          />
-                        }
-                        label="Dark Mode"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <FormControlLabel
-                        control={<Switch defaultChecked />}
-                        label="Notifications"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <FormControlLabel
-                        control={<Switch defaultChecked />}
-                        label="Auto-brightness"
-                      />
-                    </Grid>
-                  </Grid>
-                </Box>
-              )}
+        {/* Right Panel: Quick Settings + Clock */}
+        <Box sx={{ flex: '1 1 auto', transform: 'scale(-1, -1)' }}>
+          <Repanel style={panelStyle}>
+            <Box
+              sx={{
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 1,
+                px: 2,
+                transform: 'scale(-1, -1)',
+              }}
+            >
+              <IconButton
+                size="small"
+                onClick={onToggleQuickSettings}
+                sx={{
+                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
+                }}
+              >
+                <Bell size={20} />
+              </IconButton>
 
-              {/* WiFi Panel */}
-              {activePanel.type === 'wifi' && (
-                <Box>
-                  <Box sx={{ mb: 2, fontSize: '1rem', fontWeight: 600 }}>
-                    WiFi
-                  </Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <FormControlLabel
-                        control={<Switch checked={network?.connected ?? false} readOnly />}
-                        label="WiFi Enabled"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                        {network?.connected
-                          ? `Connected to: ${network.ssid} (${network.type})`
-                          : 'Not connected'}
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Box>
-              )}
+              <IconButton
+                size="small"
+                onClick={onToggleQuickSettings}
+                sx={{
+                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
+                }}
+              >
+                <Settings size={20} />
+              </IconButton>
 
-              {/* Battery Panel */}
-              {activePanel.type === 'battery' && (
-                <Box>
-                  <Box sx={{ mb: 2, fontSize: '1rem', fontWeight: 600 }}>
-                    Battery
+              <IconButton
+                size="small"
+                onClick={onToggleQuickSettings}
+                sx={{
+                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
+                }}
+                title={network?.connected ? `Connected: ${network.ssid}` : 'Offline'}
+              >
+                <WifiGlyph size={20} />
+              </IconButton>
+
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  cursor: 'pointer',
+                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
+                }}
+                onClick={onToggleQuickSettings}
+                title={battery ? `${battery.level}% ${battery.charging ? '(charging)' : ''}` : 'Battery'}
+              >
+                <IconButton size="small" sx={{ color: 'inherit' }}>
+                  <BatteryGlyph size={20} />
+                </IconButton>
+                {battery && (
+                  <Box
+                    component="span"
+                    sx={{ fontSize: '0.78rem', fontWeight: 600, mr: 0.5 }}
+                  >
+                    {battery.level}%
                   </Box>
-                  <Box sx={{ mb: 2 }}>
-                    <Box sx={{ fontSize: '2rem', fontWeight: 600, mb: 0.5 }}>
-                      {battery ? `${battery.level}%` : '—'}
-                    </Box>
-                    <Box sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                      {battery?.charging ? 'Charging' : 'On battery power'}
-                    </Box>
-                  </Box>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12}>
-                      <FormControlLabel
-                        control={<Switch />}
-                        label="Low Power Mode"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <FormControlLabel
-                        control={<Switch defaultChecked />}
-                        label="Battery Percentage"
-                      />
-                    </Grid>
-                  </Grid>
-                </Box>
-              )}
-            </Paper>
-          </Box>
-        </>
-      )}
+                )}
+              </Box>
+
+              <Box
+                sx={{
+                  ml: 1,
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 1,
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  cursor: 'default',
+                }}
+              >
+                {currentTime}
+              </Box>
+            </Box>
+          </Repanel>
+        </Box>
+      </Box>
     </>
   );
 };

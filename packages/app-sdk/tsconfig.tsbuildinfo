@@ -1,0 +1,1 @@
+{"root":["./src/AppShell.tsx","./src/EchoClient.ts","./src/appStorage.ts","./src/index.ts","./src/mountApp.tsx","./src/remochi-css.d.ts","./src/safeStorage.ts","./src/settingsBus.ts","./src/types.ts","./src/useEcho.ts","./src/usePyxisTheme.ts","./src/wallpapers.ts"],"version":"5.9.3"}

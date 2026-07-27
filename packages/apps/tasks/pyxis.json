@@ -1,0 +1,24 @@
+{
+  "id": "tasks",
+  "title": "Tasks",
+  "vendor": "Pyxis Project",
+  "version": "0.1.0",
+  "runtime": "web",
+  "sourceDir": "src",
+  "entry": "index.html",
+  "icon": "assets/icon.png",
+  "sdk": {
+    "builder": "vite"
+  },
+  "permissions": [
+    "filesystem.read",
+    "filesystem.write"
+  ],
+  "package": {
+    "section": "applications",
+    "priority": "optional",
+    "architecture": "all",
+    "maintainerEmail": "dev@pyxis.local",
+    "description": "Task and to-do manager for Pyxis"
+  }
+}
