@@ -91,4 +91,8 @@ export function onSettingChange(cb: (change: SettingChange) => void): () => void
 export const SETTING_KEYS = {
   theme: 'pyxis.theme', // 'light' | 'dark'
   wallpaper: 'pyxis.wallpaper', // wallpaper id, see wallpapers.ts
+  showBatteryPercent: 'pyxis.showBatteryPercent', // boolean, top-bar readout
+  volume: 'pyxis.volume', // number 0..100
+  brightness: 'pyxis.brightness', // number 0..100
+  dnd: 'pyxis.dnd', // boolean
 } as const;

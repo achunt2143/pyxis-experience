@@ -9,7 +9,15 @@ import type {
 } from './types';
 
 export interface BatteryStatus {
-  level: number;
+  /**
+   * False on a machine with no battery (a desktop, or the QEMU target).
+   * Distinguishing "no battery" from "battery at some level" is the caller's
+   * job to render — `power.rs` reports it explicitly rather than emitting a
+   * plausible-looking number.
+   */
+  present: boolean;
+  /** Percentage 0-100, or null when `present` is false. */
+  level: number | null;
   charging: boolean;
 }
 
@@ -152,29 +160,68 @@ export function useEcho() {
         return res && res.sessionId ? res : null;
       },
 
-      async getBatteryLevel(): Promise<BatteryStatus> {
+      async getBatteryLevel(): Promise<BatteryStatus | null> {
         // Method name must match echo/src/bin/daemon.rs's registered
         // handler exactly ("getBatteryStatus", not "getBattery") — the
         // mismatch meant every real call failed and silently fell back to
-        // the hardcoded mock below, which is why the status bar always
-        // showed a static 87% regardless of actual battery state.
+        // a hardcoded value, which is why the status bar always showed a
+        // static 87% regardless of actual battery state.
+        //
+        // A failed call now returns null rather than a stand-in reading:
+        // callers can render "unknown", but they can't be handed a number
+        // that was never measured.
         const res = (await echoClient.callMethod(
           'power',
           POWER_IFACE,
           'getBatteryStatus',
           {}
         )) as BatteryStatus | undefined;
-        return res ?? { level: 87, charging: false };
+        return res ?? null;
       },
 
-      async getNetworkStatus(): Promise<NetworkStatus> {
+      async shutdown(delay?: number): Promise<{ success: boolean; action: string }> {
+        const res = (await echoClient.callMethod(
+          'power',
+          POWER_IFACE,
+          'shutdown',
+          delay !== undefined ? { delay } : {}
+        )) as { success: boolean; action: string } | undefined;
+        return res ?? { success: false, action: 'shutdown' };
+      },
+
+      async reboot(delay?: number): Promise<{ success: boolean; action: string }> {
+        const res = (await echoClient.callMethod(
+          'power',
+          POWER_IFACE,
+          'reboot',
+          delay !== undefined ? { delay } : {}
+        )) as { success: boolean; action: string } | undefined;
+        return res ?? { success: false, action: 'reboot' };
+      },
+
+      async sleep(): Promise<{ success: boolean; supported?: boolean; action: string }> {
+        const res = (await echoClient.callMethod(
+          'power',
+          POWER_IFACE,
+          'sleep',
+          {}
+        )) as { success: boolean; supported?: boolean; action: string } | undefined;
+        return res ?? { success: false, action: 'sleep' };
+      },
+
+      async getNetworkStatus(): Promise<NetworkStatus | null> {
+        // Also null-on-failure. The previous fallback claimed
+        // `connected: true, ssid: 'GeckoNet'`, so an unreachable network
+        // service rendered as a healthy connection to a network that does
+        // not exist — the worst-case version of this bug, since it's
+        // indistinguishable from success.
         const res = (await echoClient.callMethod(
           'network',
           NETWORK_IFACE,
           'getStatus',
           {}
         )) as NetworkStatus | undefined;
-        return res ?? { connected: true, ssid: 'GeckoNet', type: 'wifi' };
+        return res ?? null;
       },
 
       async getNotifications(): Promise<NotificationEntry[]> {
@@ -186,6 +233,16 @@ export function useEcho() {
         )) as NotificationEntry[] | { notifications?: NotificationEntry[] } | undefined;
         if (Array.isArray(res)) return res;
         return res?.notifications ?? [];
+      },
+
+      async dismissNotification(id: string): Promise<boolean> {
+        const res = (await echoClient.callMethod(
+          NOTIF_SERVICE,
+          NOTIF_IFACE,
+          'close',
+          { notificationId: id }
+        )) as { success?: boolean } | undefined;
+        return res?.success ?? true;
       },
 
       // ---------- AppHost (lifecycle) ----------

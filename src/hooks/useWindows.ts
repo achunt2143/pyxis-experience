@@ -120,11 +120,13 @@ export function useWindows() {
     []
   );
 
-  // Track active window ID
-  const activeWindowId =
-    windows.length > 0
-      ? windows.reduce((max, w) => (w.zIndex > max.zIndex ? w : max)).id
+  // Track active window ID (only among visible, non-minimized windows)
+  const activeWindowId = (() => {
+    const visibleWindows = windows.filter((w) => w.state !== 'minimized');
+    return visibleWindows.length > 0
+      ? visibleWindows.reduce((max, w) => (w.zIndex > max.zIndex ? w : max)).id
       : null;
+  })();
 
   return {
     windows,

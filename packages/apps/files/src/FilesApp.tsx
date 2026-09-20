@@ -1,35 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
-  Box,
-  Breadcrumbs,
   Button,
-  CircularProgress,
   Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  Link,
-  Menu,
-  MenuItem,
-  Snackbar,
-  TextField,
-  Tooltip,
-  Typography,
-} from '@mui/material';
-import { Repanel, RepanelStack } from 'remochi';
+  Input,
+  PopupPanel,
+  Repanel,
+  RepanelStack,
+  Spinner,
+} from 'remochi';
 import {
   ChevronRight,
-  File as FileIcon,
   FileText,
   Folder,
   FolderPlus,
   Image as ImageIcon,
   MoreVertical,
   Music,
-  Pencil,
-  Trash2,
 } from 'lucide-react';
 import { echoClient } from '@pyxis/app-sdk';
 
@@ -69,9 +55,21 @@ type EntryKind = 'folder' | 'file' | 'image' | 'audio';
 
 const IMAGE_EXT = /\.(jpe?g|png|gif|webp|svg|bmp)$/i;
 const AUDIO_EXT = /\.(mp3|wav|flac|ogg|m4a)$/i;
-// Extensions the daemon can hand back as UTF-8 for inline preview. The real
-// readFile is UTF-8-only (fs::read_to_string), so anything not matched here
-// (or over the size cap) shows a metadata card instead of a garbled read.
+
+/** `data:` MIME type per image extension, for the base64 preview path. */
+const IMAGE_MIME: Record<string, string> = {
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  png: 'image/png',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  svg: 'image/svg+xml',
+  bmp: 'image/bmp',
+};
+
+// Extensions the daemon can hand back as UTF-8 for inline preview. Anything
+// not matched here (or over the size cap) shows a metadata card instead of a
+// garbled read. Images take the separate base64 path below.
 const TEXT_EXT =
   /\.(txt|md|markdown|json|jsonc|js|jsx|ts|tsx|css|scss|less|html?|xml|svg|ya?ml|toml|ini|conf|cfg|log|sh|bash|zsh|rs|py|c|h|cpp|hpp|go|rb|java|kt|sql|csv|tsv|env|lock|gitignore|dockerfile)$/i;
 const MAX_PREVIEW_BYTES = 512 * 1024;
@@ -126,8 +124,10 @@ async function fsCall(
 interface Preview {
   entry: FsEntry;
   loading: boolean;
-  kind: 'text' | 'meta';
+  kind: 'text' | 'image' | 'meta';
   text?: string;
+  /** `data:` URI built from a base64 readFile. Only set when kind === 'image'. */
+  dataUri?: string;
   stat?: FsStat;
   error?: string;
 }
@@ -139,13 +139,8 @@ type DialogState =
   | null;
 
 /**
- * FilesApp — browses AND operates on the real filesystem through the
- * `org.geckoOS.filesystem` Echo service (mock-backed in dev via @pyxis/app-sdk's
- * EchoClient.ts). Beyond Miller-column browsing it now supports opening files
- * (text preview inline, metadata card for binary/large files), creating
- * folders, renaming, and deleting — each mapped to a real service method
- * (createDirectory / move / deleteFile / deleteDirectory), with the affected
- * column reloaded on success.
+ * FilesApp — Mochi-styled Miller-column file browser and manager.
+ * Built 100% on Remochi components (RepanelStack, Dialog, PopupPanel, Button, Input, Spinner).
  */
 export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
   const [crumbs, setCrumbs] = useState<Crumb[]>([{ label: 'Home', path: HOME }]);
@@ -155,7 +150,7 @@ export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [menu, setMenu] = useState<{
-    anchorEl: HTMLElement;
+    anchorRect: DOMRect | null;
     dir: string;
     entry: FsEntry;
   } | null>(null);
@@ -224,15 +219,43 @@ export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
     } catch {
       /* stat is best-effort; keep going */
     }
-    const previewable = TEXT_EXT.test(entry.name) && entry.size <= MAX_PREVIEW_BYTES;
-    if (!previewable) {
+    const withinCap = entry.size <= MAX_PREVIEW_BYTES;
+    const isImage = IMAGE_EXT.test(entry.name) && withinCap;
+    const isText = TEXT_EXT.test(entry.name) && withinCap;
+
+    if (!isImage && !isText) {
       setPreview({ entry, loading: false, kind: 'meta', stat });
       return;
     }
+
     try {
-      const res = (await fsCall('readFile', { path: entry.path, encoding: 'utf-8' })) as
-        | { content?: string }
-        | undefined;
+      if (isImage) {
+        const ext = entry.name.split('.').pop()?.toLowerCase() ?? '';
+        const res = (await fsCall('readFile', {
+          path: entry.path,
+          encoding: 'base64',
+          maxBytes: MAX_PREVIEW_BYTES,
+        })) as { content?: string } | undefined;
+
+        if (!res?.content) {
+          setPreview({ entry, loading: false, kind: 'meta', stat });
+          return;
+        }
+        setPreview({
+          entry,
+          loading: false,
+          kind: 'image',
+          dataUri: `data:${IMAGE_MIME[ext] ?? 'application/octet-stream'};base64,${res.content}`,
+          stat,
+        });
+        return;
+      }
+
+      const res = (await fsCall('readFile', {
+        path: entry.path,
+        encoding: 'utf-8',
+        maxBytes: MAX_PREVIEW_BYTES,
+      })) as { content?: string } | undefined;
       setPreview({
         entry,
         loading: false,
@@ -307,16 +330,16 @@ export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
     const dir = dirs[path];
     if (!dir) {
       return (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-          <CircularProgress size={22} />
-        </Box>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '24px' }}>
+          <Spinner active size="normal" />
+        </div>
       );
     }
     if (dir.error) {
       return (
-        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+        <div style={{ padding: '16px', color: 'var(--color-text-secondary)' }}>
           {dir.error}
-        </Typography>
+        </div>
       );
     }
     const sorted = [...(dir.entries ?? [])].sort((a, b) => {
@@ -325,21 +348,21 @@ export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
     });
     if (sorted.length === 0) {
       return (
-        <Typography variant="body2" color="text.secondary" sx={{ p: 2 }}>
+        <div style={{ padding: '16px', color: 'var(--color-text-secondary)', fontSize: '0.875rem' }}>
           This folder is empty.
-        </Typography>
+        </div>
       );
     }
     return (
-      <Box
-        sx={{
+      <div
+        style={{
           height: '100%',
           overflow: 'auto',
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))',
-          gap: 1.5,
+          gap: '12px',
           alignContent: 'start',
-          p: 1.5,
+          padding: '12px',
         }}
       >
         {sorted.map((entry) => {
@@ -347,54 +370,57 @@ export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
           const Icon = KIND_ICON[kind];
           const isSelected = preview?.entry.path === entry.path;
           return (
-            <Box
+            <div
               key={entry.path}
               onClick={() => (entry.isDirectory ? open(entry, panelIndex) : openPreview(entry))}
-              sx={{
+              style={{
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: 0.75,
-                p: 1.25,
-                borderRadius: 2,
+                gap: '6px',
+                padding: '10px',
+                borderRadius: '12px',
                 cursor: 'pointer',
                 userSelect: 'none',
                 position: 'relative',
                 transition: 'background 0.15s ease, transform 0.15s ease',
-                background: isSelected ? 'rgba(144,202,249,0.14)' : 'transparent',
-                '&:hover': {
-                  background: 'rgba(255,255,255,0.08)',
-                  transform: 'scale(1.02)',
-                },
-                '&:hover .file-actions': { opacity: 1 },
+                background: isSelected ? 'var(--mochi-primary-soft, rgba(74, 139, 194, 0.15))' : 'transparent',
+                border: isSelected ? '1px solid var(--color-primary)' : '1px solid transparent',
               }}
               title={entry.name}
             >
-              <IconButton
-                className="file-actions"
-                size="small"
+              <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setMenu({ anchorEl: e.currentTarget, dir: path, entry });
+                  const target = e.currentTarget;
+                  const rect = target.getBoundingClientRect();
+                  setMenu({ anchorRect: rect, dir: path, entry });
                 }}
-                sx={{
+                style={{
                   position: 'absolute',
-                  top: 2,
-                  right: 2,
-                  opacity: 0,
-                  transition: 'opacity 0.15s ease',
-                  color: 'var(--color-text-secondary, #aaa)',
+                  top: '4px',
+                  right: '4px',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: '6px',
+                  padding: '4px',
+                  cursor: 'pointer',
+                  color: 'var(--color-text-secondary, #888)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
                 }}
                 aria-label={`actions for ${entry.name}`}
               >
-                <MoreVertical size={15} />
-              </IconButton>
-              <Box
-                sx={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 2,
+                <MoreVertical size={14} />
+              </button>
+              <div
+                style={{
+                  width: '52px',
+                  height: '52px',
+                  borderRadius: '12px',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -403,85 +429,81 @@ export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
                   color: KIND_COLOR[kind],
                 }}
               >
-                <Icon size={28} />
-              </Box>
-              <Typography
-                variant="caption"
-                sx={{
+                <Icon size={26} />
+              </div>
+              <span
+                style={{
                   fontSize: '0.78rem',
                   textAlign: 'center',
                   maxWidth: '100%',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
+                  color: 'var(--color-text)',
+                  fontWeight: 500,
                 }}
               >
                 {entry.name}
-              </Typography>
-            </Box>
+              </span>
+            </div>
           );
         })}
-      </Box>
+      </div>
     );
   };
 
   return (
-    <Box
+    <div
       data-window-id={windowId}
-      sx={{
+      style={{
         width: '100%',
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        gap: 1.5,
+        gap: '12px',
+        padding: '8px',
+        boxSizing: 'border-box',
+        background: 'var(--color-background)',
+        color: 'var(--color-text)',
       }}
     >
-      {/* Breadcrumb + actions bar */}
-      <Box
-        sx={{
-          p: 1,
-          borderRadius: 2,
-          background: 'rgba(255,255,255,0.06)',
-          border: '1px solid rgba(255,255,255,0.12)',
+      {/* Breadcrumb + actions toolbar */}
+      <div
+        style={{
+          padding: '8px 12px',
+          borderRadius: '12px',
+          background: 'var(--color-surface)',
+          border: '1px solid var(--color-border)',
           display: 'flex',
           alignItems: 'center',
-          gap: 1,
+          gap: '8px',
         }}
       >
-        <Breadcrumbs
-          separator={<ChevronRight size={14} />}
-          aria-label="path breadcrumb"
-          sx={{ flex: 1, minWidth: 0 }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flex: 1, minWidth: 0, overflow: 'hidden' }}>
           {crumbs.map((c, idx) => (
-            <Link
-              key={c.path + idx}
-              component="button"
-              underline="hover"
-              color={idx === crumbs.length - 1 ? 'primary' : 'inherit'}
-              onClick={() => navigate(idx)}
-              sx={{ fontSize: '0.875rem' }}
-            >
-              {c.label}
-            </Link>
+            <React.Fragment key={c.path + idx}>
+              {idx > 0 && <ChevronRight size={14} style={{ opacity: 0.5, flexShrink: 0 }} />}
+              <Button
+                variant={idx === crumbs.length - 1 ? 'blue' : 'normal'}
+                onClick={() => navigate(idx)}
+              >
+                {c.label}
+              </Button>
+            </React.Fragment>
           ))}
-        </Breadcrumbs>
-        <Tooltip title="New folder">
-          <span>
-            <IconButton
-              size="small"
-              disabled={busy || !!dirs[deepestPath]?.error}
-              onClick={() => setDialog({ type: 'newFolder', dir: deepestPath, value: '' })}
-              aria-label="new folder"
-            >
-              <FolderPlus size={18} />
-            </IconButton>
-          </span>
-        </Tooltip>
-      </Box>
+        </div>
 
-      {/* Folder columns */}
-      <Box sx={{ flex: 1, minHeight: 0 }}>
+        <Button
+          disabled={busy || !!dirs[deepestPath]?.error}
+          onClick={() => setDialog({ type: 'newFolder', dir: deepestPath, value: '' })}
+        >
+          <FolderPlus size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+          New Folder
+        </Button>
+      </div>
+
+      {/* Folder columns (RepanelStack) */}
+      <div style={{ flex: 1, minHeight: 0 }}>
         <RepanelStack
           activeIndex={crumbs.length - 1}
           onActiveIndexChange={(index) => setCrumbs((prev) => prev.slice(0, index + 1))}
@@ -490,212 +512,231 @@ export const FilesApp: React.FC<FilesAppProps> = ({ windowId }) => {
             <Repanel key={c.path}>{renderColumn(c.path, idx)}</Repanel>
           ))}
         </RepanelStack>
-      </Box>
+      </div>
 
-      {/* Per-entry actions menu */}
-      <Menu
-        open={!!menu}
-        anchorEl={menu?.anchorEl ?? null}
+      {/* Contextual actions menu (Remochi PopupPanel) */}
+      <PopupPanel
+        isOpen={!!menu}
         onClose={() => setMenu(null)}
-      >
-        {menu && !menu.entry.isDirectory && (
-          <MenuItem
-            onClick={() => {
-              openPreview(menu.entry);
+        anchorRect={menu?.anchorRect ?? null}
+        title={menu?.entry.name}
+        actions={[
+          ...(menu && !menu.entry.isDirectory
+            ? [
+                {
+                  label: 'Open',
+                  onClick: () => {
+                    openPreview(menu.entry);
+                    setMenu(null);
+                  },
+                },
+              ]
+            : []),
+          {
+            label: 'Rename',
+            onClick: () => {
+              if (menu) {
+                setDialog({
+                  type: 'rename',
+                  dir: menu.dir,
+                  entry: menu.entry,
+                  value: menu.entry.name,
+                });
+              }
               setMenu(null);
-            }}
-          >
-            <FileText size={16} style={{ marginRight: 8 }} /> Open
-          </MenuItem>
-        )}
-        <MenuItem
-          onClick={() => {
-            if (menu) {
-              setDialog({
-                type: 'rename',
-                dir: menu.dir,
-                entry: menu.entry,
-                value: menu.entry.name,
-              });
-            }
-            setMenu(null);
-          }}
-        >
-          <Pencil size={16} style={{ marginRight: 8 }} /> Rename
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (menu) setDialog({ type: 'delete', dir: menu.dir, entry: menu.entry });
-            setMenu(null);
-          }}
-          sx={{ color: 'var(--color-error, #e57373)' }}
-        >
-          <Trash2 size={16} style={{ marginRight: 8 }} /> Delete
-        </MenuItem>
-      </Menu>
-
-      {/* New folder / rename dialog */}
-      <Dialog
-        open={dialog?.type === 'newFolder' || dialog?.type === 'rename'}
-        onClose={() => (busy ? undefined : setDialog(null))}
-        fullWidth
-        maxWidth="xs"
+            },
+          },
+          {
+            label: 'Delete',
+            type: 'warning',
+            onClick: () => {
+              if (menu) {
+                setDialog({ type: 'delete', dir: menu.dir, entry: menu.entry });
+              }
+              setMenu(null);
+            },
+          },
+        ]}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {dialog?.type === 'newFolder' ? (
-            <>
-              <FolderPlus size={18} /> New folder
-            </>
-          ) : (
-            <>
-              <Pencil size={18} /> Rename
-            </>
-          )}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
+        <div style={{ fontSize: '0.8rem', color: 'var(--color-text-secondary)', padding: '4px 0' }}>
+          {menu?.entry.path}
+        </div>
+      </PopupPanel>
+
+      {/* New folder dialog */}
+      <Dialog
+        isOpen={dialog?.type === 'newFolder'}
+        onClose={() => (busy ? undefined : setDialog(null))}
+        title="New Folder"
+        type="default"
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '280px', padding: '8px 0' }}>
+          <Input
             autoFocus
-            fullWidth
-            variant="standard"
-            label="Name"
-            value={dialog && dialog.type !== 'delete' ? dialog.value : ''}
+            placeholder="Folder name"
+            value={dialog?.type === 'newFolder' ? dialog.value : ''}
             onChange={(e) =>
               setDialog((d) =>
-                d && d.type !== 'delete' ? { ...d, value: e.target.value } : d
+                d && d.type === 'newFolder' ? { ...d, value: e.target.value } : d
               )
             }
             onKeyDown={(e) => {
               if (e.key === 'Enter') void submitDialog();
             }}
           />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialog(null)} disabled={busy}>
-            Cancel
-          </Button>
-          <Button onClick={() => void submitDialog()} disabled={busy} variant="contained">
-            {dialog?.type === 'newFolder' ? 'Create' : 'Rename'}
-          </Button>
-        </DialogActions>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <Button onClick={() => setDialog(null)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant="affirmative"
+              onClick={() => void submitDialog()}
+              disabled={busy || !dialog || dialog.type !== 'newFolder' || !dialog.value.trim()}
+            >
+              Create
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
-      {/* Delete confirmation */}
+      {/* Rename dialog */}
       <Dialog
-        open={dialog?.type === 'delete'}
+        isOpen={dialog?.type === 'rename'}
         onClose={() => (busy ? undefined : setDialog(null))}
-        maxWidth="xs"
+        title="Rename"
+        type="default"
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Trash2 size={18} /> Delete {dialog?.type === 'delete' && dialog.entry.isDirectory ? 'folder' : 'file'}
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2">
-            Delete{' '}
-            <strong>{dialog?.type === 'delete' ? dialog.entry.name : ''}</strong>
-            {dialog?.type === 'delete' && dialog.entry.isDirectory
-              ? ' and everything inside it? This cannot be undone.'
-              : '? This cannot be undone.'}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDialog(null)} disabled={busy}>
-            Cancel
-          </Button>
-          <Button
-            onClick={() => void submitDialog()}
-            disabled={busy}
-            color="error"
-            variant="contained"
-          >
-            Delete
-          </Button>
-        </DialogActions>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', minWidth: '280px', padding: '8px 0' }}>
+          <Input
+            autoFocus
+            placeholder="New name"
+            value={dialog?.type === 'rename' ? dialog.value : ''}
+            onChange={(e) =>
+              setDialog((d) =>
+                d && d.type === 'rename' ? { ...d, value: e.target.value } : d
+              )
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submitDialog();
+            }}
+          />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+            <Button onClick={() => setDialog(null)} disabled={busy}>
+              Cancel
+            </Button>
+            <Button
+              variant="affirmative"
+              onClick={() => void submitDialog()}
+              disabled={busy || !dialog || dialog.type !== 'rename' || !dialog.value.trim()}
+            >
+              Rename
+            </Button>
+          </div>
+        </div>
       </Dialog>
 
-      {/* File preview */}
+      {/* Delete confirmation dialog */}
       <Dialog
-        open={!!preview}
-        onClose={() => setPreview(null)}
-        fullWidth
-        maxWidth="md"
+        isOpen={dialog?.type === 'delete'}
+        onClose={() => (busy ? undefined : setDialog(null))}
+        title="Confirm Delete"
+        type="confirm"
+        confirmText="Delete"
+        cancelText="Cancel"
+        onConfirm={() => void submitDialog()}
+        onCancel={() => setDialog(null)}
       >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {preview?.kind === 'text' ? <FileText size={18} /> : <FileIcon size={18} />}
-          <span
-            style={{
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {preview?.entry.name}
-          </span>
-        </DialogTitle>
-        <DialogContent dividers>
+        <p style={{ margin: 0, color: 'var(--color-text)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+          Delete{' '}
+          <strong>{dialog?.type === 'delete' ? dialog.entry.name : ''}</strong>
+          {dialog?.type === 'delete' && dialog.entry.isDirectory
+            ? ' and everything inside it? This cannot be undone.'
+            : '? This cannot be undone.'}
+        </p>
+      </Dialog>
+
+      {/* File preview modal */}
+      <Dialog
+        isOpen={!!preview}
+        onClose={() => setPreview(null)}
+        title={preview?.entry.name}
+        size="large"
+      >
+        <div style={{ minWidth: '360px', maxHeight: '70vh', overflow: 'auto', padding: '8px 0' }}>
           {preview?.loading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-              <CircularProgress size={24} />
-            </Box>
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '32px' }}>
+              <Spinner active size="normal" />
+            </div>
+          ) : preview?.kind === 'image' ? (
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+              <img
+                src={preview.dataUri}
+                alt={preview.entry.name}
+                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
+              />
+            </div>
           ) : preview?.kind === 'text' ? (
-            <Box
-              component="pre"
-              sx={{
-                m: 0,
+            <pre
+              style={{
+                margin: 0,
                 fontFamily: 'Menlo, Monaco, "Courier New", monospace',
                 fontSize: '0.82rem',
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 maxHeight: '60vh',
                 overflow: 'auto',
+                background: 'var(--color-surface)',
+                padding: '12px',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border)',
               }}
             >
               {preview.text}
-            </Box>
+            </pre>
           ) : (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
               {preview?.error && (
-                <Alert severity="warning" sx={{ mb: 1 }}>
+                <div style={{ color: 'var(--color-error)', marginBottom: '8px' }}>
                   {preview.error}
-                </Alert>
+                </div>
               )}
-              <Typography variant="body2" color="text.secondary">
+              <div style={{ fontSize: '0.85rem', color: 'var(--color-text-secondary)' }}>
                 No inline preview for this file type. Details:
-              </Typography>
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 16px', mt: 1 }}>
-                <Typography variant="caption" color="text.secondary">Path</Typography>
-                <Typography variant="caption" sx={{ wordBreak: 'break-all' }}>
-                  {preview?.entry.path}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">Size</Typography>
-                <Typography variant="caption">
-                  {formatBytes(preview?.stat?.size ?? preview?.entry.size ?? 0)}
-                </Typography>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '6px 16px', marginTop: '8px', fontSize: '0.82rem' }}>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Path</span>
+                <span style={{ wordBreak: 'break-all' }}>{preview?.entry.path}</span>
+                <span style={{ color: 'var(--color-text-secondary)' }}>Size</span>
+                <span>{formatBytes(preview?.stat?.size ?? preview?.entry.size ?? 0)}</span>
                 {preview?.stat?.permissions && (
                   <>
-                    <Typography variant="caption" color="text.secondary">Permissions</Typography>
-                    <Typography variant="caption">{preview.stat.permissions}</Typography>
+                    <span style={{ color: 'var(--color-text-secondary)' }}>Permissions</span>
+                    <span>{preview.stat.permissions}</span>
                   </>
                 )}
-              </Box>
-            </Box>
+              </div>
+            </div>
           )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setPreview(null)}>Close</Button>
-        </DialogActions>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '16px' }}>
+            <Button onClick={() => setPreview(null)}>Close</Button>
+          </div>
+        </div>
       </Dialog>
 
-      <Snackbar
-        open={actionError !== null}
-        autoHideDuration={5000}
+      {/* Action error alert dialog */}
+      <Dialog
+        isOpen={actionError !== null}
+        title="Files Error"
+        type="alert"
+        confirmText="OK"
+        onConfirm={() => setActionError(null)}
+        onCancel={() => setActionError(null)}
         onClose={() => setActionError(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert severity="error" onClose={() => setActionError(null)}>
-          {actionError}
-        </Alert>
-      </Snackbar>
-    </Box>
+        <p style={{ margin: 0, color: 'var(--color-error)' }}>{actionError}</p>
+      </Dialog>
+    </div>
   );
 };
 

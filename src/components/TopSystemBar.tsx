@@ -1,8 +1,7 @@
-import React from 'react';
-import { Box, IconButton } from '@mui/material';
-import { Input, Repanel } from 'remochi';
+import React, { useEffect, useState } from 'react';
+import { Repanel } from 'remochi';
+import { motion } from 'framer-motion';
 import {
-  Search,
   Bell,
   Settings,
   Wifi,
@@ -11,11 +10,25 @@ import {
   BatteryCharging,
   BatteryLow,
 } from 'lucide-react';
-import { useBatteryStatus, useNetworkStatus, usePyxisTheme } from '@pyxis/app-sdk';
+import {
+  useBatteryStatus,
+  useNetworkStatus,
+  useBooleanSetting,
+  usePyxisTheme,
+  SETTING_KEYS,
+} from '@pyxis/app-sdk';
+import { DesktopSearch } from './DesktopSearch';
+
+const formatClock = () =>
+  new Date().toLocaleTimeString('en-US', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
 interface TopSystemBarProps {
   quickSettingsOpen: boolean;
   onToggleQuickSettings: () => void;
+  onLaunchApp: (appId: string, name: string) => void;
 }
 
 /**
@@ -26,6 +39,7 @@ interface TopSystemBarProps {
 export const TopSystemBar: React.FC<TopSystemBarProps> = ({
   quickSettingsOpen,
   onToggleQuickSettings,
+  onLaunchApp,
 }) => {
   const battery = useBatteryStatus();
   const network = useNetworkStatus();
@@ -35,18 +49,35 @@ export const TopSystemBar: React.FC<TopSystemBarProps> = ({
   const theme = usePyxisTheme('light');
   const panelStyle = theme === 'dark' ? 'shadow' : 'default';
 
+  // A machine with no battery (desktop, or the QEMU target) reports
+  // `present: false` and a null level — render nothing rather than a
+  // half-full glyph over a number that was never measured.
+  const hasBattery = battery?.present === true && battery.level !== null;
+  const showBatteryPercent = useBooleanSetting(SETTING_KEYS.showBatteryPercent, true);
+
   // Pick a battery icon based on level/charging state.
   const BatteryGlyph = battery?.charging
     ? BatteryCharging
-    : (battery && battery.level <= 20)
+    : (hasBattery && battery.level! <= 20)
     ? BatteryLow
     : Battery;
   const WifiGlyph = network?.connected ? Wifi : WifiOff;
 
-  const currentTime = new Date().toLocaleTimeString('en-US', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  const [currentTime, setCurrentTime] = useState(formatClock);
+
+  useEffect(() => {
+    let intervalId: number | undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      setCurrentTime(formatClock());
+      intervalId = window.setInterval(() => setCurrentTime(formatClock()), 60_000);
+    }, 60_000 - (Date.now() % 60_000));
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      if (intervalId !== undefined) window.clearInterval(intervalId);
+    };
+  }, []);
 
   return (
     <>
@@ -57,123 +88,169 @@ export const TopSystemBar: React.FC<TopSystemBarProps> = ({
           so the bar's contents render upright:
             left panel  — flip vertically only (scaleY(-1))
             right panel — flip both horizontally and vertically (scale(-1,-1)) */}
-      <Box
-        sx={{
+      <div
+        style={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
-          height: 48,
+          height: '48px',
           display: 'flex',
           zIndex: 1200,
           color: 'var(--color-text)',
         }}
       >
         {/* Left Panel: Search */}
-        <Box sx={{ flex: '0 0 340px', transform: 'scaleY(-1)' }}>
+        <div style={{ flex: '0 0 340px', transform: 'scaleY(-1)' }}>
           <Repanel style={panelStyle}>
-            <Box
-              sx={{
+            <div
+              style={{
                 height: '100%',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1,
-                px: 2,
+                padding: '0 16px',
                 transform: 'scaleY(-1)',
               }}
             >
-              <Search size={18} style={{ opacity: 0.6, flexShrink: 0 }} />
-              <Input placeholder="Search..." style={{ width: '100%' }} />
-            </Box>
+              <DesktopSearch onLaunch={onLaunchApp} />
+            </div>
           </Repanel>
-        </Box>
+        </div>
 
         {/* Right Panel: Quick Settings + Clock */}
-        <Box sx={{ flex: '1 1 auto', transform: 'scale(-1, -1)' }}>
+        <div style={{ flex: '1 1 auto', transform: 'scale(-1, -1)' }}>
           <Repanel style={panelStyle}>
-            <Box
-              sx={{
+            <div
+              style={{
                 height: '100%',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'flex-end',
-                gap: 1,
-                px: 2,
+                gap: '8px',
+                padding: '0 16px',
                 transform: 'scale(-1, -1)',
               }}
             >
-              <IconButton
-                size="small"
+              <motion.button
+                type="button"
                 onClick={onToggleQuickSettings}
-                sx={{
-                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
-                }}
-              >
-                <Bell size={20} />
-              </IconButton>
-
-              <IconButton
-                size="small"
-                onClick={onToggleQuickSettings}
-                sx={{
-                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
-                }}
-              >
-                <Settings size={20} />
-              </IconButton>
-
-              <IconButton
-                size="small"
-                onClick={onToggleQuickSettings}
-                sx={{
-                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
-                }}
-                title={network?.connected ? `Connected: ${network.ssid}` : 'Offline'}
-              >
-                <WifiGlyph size={20} />
-              </IconButton>
-
-              <Box
-                sx={{
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.92 }}
+                style={{
+                  background: quickSettingsOpen ? 'var(--mochi-primary-soft)' : 'transparent',
+                  border: quickSettingsOpen ? '1px solid var(--color-primary)' : '1px solid transparent',
+                  padding: '6px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  color: quickSettingsOpen ? 'var(--color-primary)' : 'var(--color-text)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 0.5,
+                  justifyContent: 'center',
+                  transition: 'color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
+                }}
+                aria-label="Notifications"
+              >
+                <Bell size={18} />
+              </motion.button>
+
+              <motion.button
+                type="button"
+                onClick={onToggleQuickSettings}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.92 }}
+                style={{
+                  background: quickSettingsOpen ? 'var(--mochi-primary-soft)' : 'transparent',
+                  border: quickSettingsOpen ? '1px solid var(--color-primary)' : '1px solid transparent',
+                  padding: '6px',
+                  borderRadius: '10px',
                   cursor: 'pointer',
-                  color: quickSettingsOpen ? 'primary.main' : 'text.primary',
+                  color: quickSettingsOpen ? 'var(--color-primary)' : 'var(--color-text)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
+                }}
+                aria-label="Settings"
+              >
+                <Settings size={18} />
+              </motion.button>
+
+              <motion.button
+                type="button"
+                onClick={onToggleQuickSettings}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.92 }}
+                style={{
+                  background: quickSettingsOpen ? 'var(--mochi-primary-soft)' : 'transparent',
+                  border: quickSettingsOpen ? '1px solid var(--color-primary)' : '1px solid transparent',
+                  padding: '6px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  color: quickSettingsOpen ? 'var(--color-primary)' : 'var(--color-text)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
+                }}
+                title={network?.connected ? `Connected: ${network.ssid}` : 'Offline'}
+                aria-label="Network status"
+              >
+                <WifiGlyph size={18} />
+              </motion.button>
+
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.94 }}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '4px 8px',
+                  borderRadius: '10px',
+                  cursor: 'pointer',
+                  background: quickSettingsOpen ? 'var(--mochi-primary-soft)' : 'transparent',
+                  border: quickSettingsOpen ? '1px solid var(--color-primary)' : '1px solid transparent',
+                  color: quickSettingsOpen ? 'var(--color-primary)' : 'var(--color-text)',
+                  transition: 'color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
                 }}
                 onClick={onToggleQuickSettings}
-                title={battery ? `${battery.level}% ${battery.charging ? '(charging)' : ''}` : 'Battery'}
+                title={
+                  hasBattery
+                    ? `${battery!.level}%${battery!.charging ? ' (charging)' : ''}`
+                    : 'No battery detected'
+                }
               >
-                <IconButton size="small" sx={{ color: 'inherit' }}>
-                  <BatteryGlyph size={20} />
-                </IconButton>
-                {battery && (
-                  <Box
-                    component="span"
-                    sx={{ fontSize: '0.78rem', fontWeight: 600, mr: 0.5 }}
+                <span style={{ display: 'flex', alignItems: 'center' }}>
+                  <BatteryGlyph size={18} />
+                </span>
+                {hasBattery && showBatteryPercent && (
+                  <span
+                    style={{ fontSize: '0.78rem', fontWeight: 600, marginLeft: '2px' }}
                   >
-                    {battery.level}%
-                  </Box>
+                    {battery!.level}%
+                  </span>
                 )}
-              </Box>
+              </motion.div>
 
-              <Box
-                sx={{
-                  ml: 1,
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 1,
-                  fontSize: '0.875rem',
-                  fontWeight: 500,
+              <div
+                style={{
+                  marginLeft: '6px',
+                  padding: '4px 10px',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
                   cursor: 'default',
+                  background: 'var(--mochi-hover)',
+                  border: '1px solid var(--color-border-light)',
+                  letterSpacing: '0.02em',
                 }}
               >
                 {currentTime}
-              </Box>
-            </Box>
+              </div>
+            </div>
           </Repanel>
-        </Box>
-      </Box>
+        </div>
+      </div>
     </>
   );
 };

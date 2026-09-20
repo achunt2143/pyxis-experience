@@ -12,8 +12,10 @@ import {
   Subheader,
   Toggle,
   Badge,
+  Dialog,
   useTheme,
 } from 'remochi';
+import { Moon, Power, RotateCcw } from 'lucide-react';
 import {
   useEcho,
   getSetting,
@@ -21,6 +23,21 @@ import {
   SETTING_KEYS,
   WALLPAPERS,
 } from '@pyxis/app-sdk';
+
+/**
+ * remochi's `Toggle`, typed the way it actually behaves.
+ *
+ * The package's `index.d.ts` declares a `checked` prop, but the component it
+ * exports is `MochiToggle`, which reads **`value`** and calls
+ * `onChange({ value })`. Passing `checked` type-checks cleanly and is then
+ * ignored, so this switch rendered a permanent "Off" even with dark mode
+ * active. Mirrors the same bridge in the shell's QuickSettingsMenu.tsx.
+ */
+const Switch = Toggle as unknown as React.FC<{
+  value?: boolean;
+  onChange?: (next: { value: boolean }) => void;
+  disabled?: boolean;
+}>;
 
 export interface SettingsAppProps {
   windowId: string;
@@ -37,12 +54,13 @@ const SECTIONS = [
 type SectionId = (typeof SECTIONS)[number]['id'];
 
 const ABOUT_INFO: [string, string][] = [
-  ['Operating System', 'GeckoOS 0.1.0'],
-  ['Desktop Shell', 'Bloom (Pyxis) 0.1.0'],
-  ['UI Kit', 'remochi 0.3.0'],
+  ['Operating System', 'Pyxis OS 0.1.0 (release/alpha2)'],
+  ['Desktop Shell', 'Bloom 0.1.0'],
+  ['UI Framework', 'Remochi 0.3.0'],
   ['Kernel', 'Linux 6.6.0-gecko'],
   ['Architecture', 'x86_64'],
   ['Compositor', 'Evo (Smithay / Wayland)'],
+  ['IPC Bus', 'Echo (geckoOS)'],
 ];
 
 export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
@@ -88,7 +106,32 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
     void setSetting(SETTING_KEYS.theme, dark ? 'dark' : 'light');
   };
 
+  const [confirmPower, setConfirmPower] = useState<'sleep' | 'reboot' | 'shutdown' | null>(null);
+  const [powerStatus, setPowerStatus] = useState<string | null>(null);
+
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+
+  const handlePowerAction = async () => {
+    if (!confirmPower) return;
+    const action = confirmPower;
+    setConfirmPower(null);
+    try {
+      if (action === 'sleep') {
+        setPowerStatus('Entering sleep mode...');
+        await echo.sleep();
+      } else if (action === 'reboot') {
+        setPowerStatus('Rebooting system...');
+        await echo.reboot();
+      } else if (action === 'shutdown') {
+        setPowerStatus('Shutting down system...');
+        await echo.shutdown();
+      }
+    } catch (err) {
+      console.error('Power action failed:', err);
+      setPowerStatus('Power command failed.');
+      setTimeout(() => setPowerStatus(null), 3000);
+    }
+  };
 
   return (
     <div
@@ -137,7 +180,7 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
               title="Dark mode"
               subtitle="Applies to every Pyxis app and the desktop shell"
               rightContent={
-                <Toggle checked={theme === 'dark'} onChange={() => applyTheme(theme !== 'dark')} />
+                <Switch value={theme === 'dark'} onChange={({ value }) => applyTheme(value)} />
               }
             />
             <Divider />
@@ -237,6 +280,36 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
             <div style={{ marginTop: 16 }}>
               <Button disabled content="Check for updates" />
             </div>
+            <Divider />
+            <Subheader content="Power & Session" />
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginBottom: 12 }}>
+              Manage system power state and user session.
+            </p>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Button onClick={() => setConfirmPower('sleep')}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Moon size={15} /> Sleep
+                </span>
+              </Button>
+              <Button onClick={() => setConfirmPower('reboot')}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <RotateCcw size={15} /> Restart
+                </span>
+              </Button>
+              <Button
+                variant="warning"
+                onClick={() => setConfirmPower('shutdown')}
+              >
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <Power size={15} /> Shut Down
+                </span>
+              </Button>
+            </div>
+            {powerStatus && (
+              <div style={{ marginTop: 12 }}>
+                <Badge content={powerStatus} background="var(--color-primary)" color="#fff" />
+              </div>
+            )}
           </>
         )}
 
@@ -249,10 +322,10 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
               ))}
             </List>
             <Divider />
-            <p style={{ color: 'var(--color-text-secondary)', fontSize: 12, marginTop: 12 }}>
-              GeckoOS is a custom Linux-based operating system focused on Wayland
-              compositing and webOS-inspired UI patterns. Every Pyxis app runs as
-              its own process, composited by Evo and talking to the system over
+            <p style={{ color: 'var(--color-text-secondary)', fontSize: 13, marginTop: 12, lineHeight: 1.6 }}>
+              Pyxis is an open-source Linux distribution inspired by Palm webOS and FirefoxOS,
+              built around modern Wayland compositing (Evo) and the Remochi design system.
+              Every app runs as its own process, composited by Evo and talking to the system over
               the Echo IPC bus.
             </p>
           </>
@@ -261,6 +334,37 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
           </Repanel>
         </RepanelStack>
       </div>
+
+      <Dialog
+        isOpen={confirmPower !== null}
+        title={
+          confirmPower === 'shutdown'
+            ? 'Shut Down System?'
+            : confirmPower === 'reboot'
+              ? 'Restart System?'
+              : 'Suspend System?'
+        }
+        type="confirm"
+        confirmText={
+          confirmPower === 'shutdown'
+            ? 'Shut Down'
+            : confirmPower === 'reboot'
+              ? 'Restart'
+              : 'Sleep'
+        }
+        cancelText="Cancel"
+        onConfirm={handlePowerAction}
+        onCancel={() => setConfirmPower(null)}
+        onClose={() => setConfirmPower(null)}
+      >
+        <p style={{ margin: 0, color: 'var(--color-text)' }}>
+          {confirmPower === 'shutdown'
+            ? 'Are you sure you want to shut down Pyxis OS? Any unsaved work will be lost.'
+            : confirmPower === 'reboot'
+              ? 'Are you sure you want to restart Pyxis OS? Applications will close.'
+              : 'Put Pyxis OS into low-power sleep mode?'}
+        </p>
+      </Dialog>
     </div>
   );
 };

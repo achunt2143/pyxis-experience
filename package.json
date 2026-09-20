@@ -10,16 +10,13 @@
   "scripts": {
     "dev": "vite",
     "dev:apps": "npm run dev --workspaces --if-present",
-    "dev:all": "concurrently -n bloom,terminal,browser,files,notes,contacts,tasks,settings -c auto \"npm:dev\" \"npm:dev -w packages/apps/terminal\" \"npm:dev -w packages/apps/browser\" \"npm:dev -w packages/apps/files\" \"npm:dev -w packages/apps/notes\" \"npm:dev -w packages/apps/contacts\" \"npm:dev -w packages/apps/tasks\" \"npm:dev -w packages/apps/settings\"",
+    "dev:all": "concurrently -n bloom,terminal,browser,files,notes,contacts,tasks,settings,installer -c auto \"npm:dev\" \"npm:dev -w packages/apps/terminal\" \"npm:dev -w packages/apps/browser\" \"npm:dev -w packages/apps/files\" \"npm:dev -w packages/apps/notes\" \"npm:dev -w packages/apps/contacts\" \"npm:dev -w packages/apps/tasks\" \"npm:dev -w packages/apps/settings\" \"npm:dev -w packages/apps/installer\"",
     "build": "tsc -b && vite build",
     "build:all": "npm run build --workspaces --if-present && npm run build",
     "lint": "eslint .",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@emotion/react": "^11.14.0",
-    "@emotion/styled": "^11.14.0",
-    "@mui/material": "^5.14.0",
     "@pyxis/app-sdk": "*",
     "framer-motion": "^12.25.0",
     "lucide-react": "^0.562.0",

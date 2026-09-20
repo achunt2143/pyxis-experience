@@ -290,10 +290,9 @@ the panel rename below and a `ViewSelectButton` fix — see that repo's
   phantom entries were found in this session, and lint/build are clean with
   zero errors. That earlier "dead code" and "12 lint errors" note appears to
   predate a cleanup pass and can be treated as stale.
-- `stage_binaries()` in `scripts/create-rootfs.sh` lists a `pyxis` binary
-  that has no corresponding Cargo target anywhere in the workspace (copy is
-  silently skipped since the file doesn't exist) — pre-existing, unrelated to
-  this pass, left as-is but worth a follow-up look.
+- ~~`stage_binaries()` lists a `pyxis` binary with no Cargo target~~ —
+  **stale, corrected 2026-08-16.** `vroom/Cargo.toml` defines
+  `[[bin]] name = "pyxis"`; the target exists and builds.
 - Real cross-origin settings sync for local dev (§7) — if it turns out to
   matter for day-to-day testing, the fix would be something like each app
   polling `getSetting` on window focus rather than trying to resurrect

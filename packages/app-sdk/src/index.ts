@@ -9,5 +9,6 @@ export * from './useInstaller';
 export * from './settingsBus';
 export * from './appStorage';
 export * from './usePyxisTheme';
+export * from './useBooleanSetting';
 export * from './AppShell';
 export * from './mountApp';

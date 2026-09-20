@@ -273,9 +273,9 @@ const MOCK_FS_TREE: Record<string, { name: string; isDirectory: boolean; size?: 
 
 // Seed text content so FilesApp's text preview has something to show in dev
 // (the real daemon reads the actual file). Keyed by the same '~'-rooted path
-// readDirectory hands back. Non-text files (images/audio above) intentionally
-// have no entry — the real readFile is UTF-8-only, so FilesApp shows metadata
-// for those rather than attempting a binary read.
+// readDirectory hands back. Image/audio fixtures have no entry, so those fall
+// through to the metadata card in dev; on a real device readFile now serves
+// them as base64 and FilesApp renders images inline.
 const MOCK_FILE_CONTENT: Record<string, string> = {
   '~/README.md':
     '# GeckoOS\n\nWelcome to Pyxis. This is a seeded mock file shown in dev mode.\n',
@@ -814,11 +814,23 @@ function mockResponse(
         return { entries, path, count: entries.length };
       }
       case 'readFile': {
+        const encoding = String(args.encoding ?? 'utf-8').toLowerCase();
         const content = fileContent(path);
         if (content === null) {
           // Real daemon returns an error for missing files; the mock keeps
           // the promise resolved but contentless so callers fall back.
           return { error: `File does not exist: ${path}` };
+        }
+        // Mirror filesystem.rs: the encoding parameter is honoured, not just
+        // echoed back, and an unknown one is refused rather than silently
+        // treated as utf-8. The mock has no binary fixtures, so base64 here
+        // just encodes the seeded text — enough to exercise the caller's
+        // data-URI path in dev.
+        if (encoding === 'base64') {
+          return { content: btoa(unescape(encodeURIComponent(content))), size: content.length, encoding, path };
+        }
+        if (encoding !== 'utf-8' && encoding !== 'utf8') {
+          return { error: `Unsupported encoding "${encoding}"; expected "utf-8" or "base64"` };
         }
         return { content, size: content.length, encoding: 'utf-8', path };
       }
@@ -946,8 +958,24 @@ function mockResponse(
   // old case-sensitive endsWith('Network') never matched, so these calls
   // fell through to the generic `{ success: true }` and the UI rendered
   // undefined fields (e.g. a spurious "offline" badge).
+  // Shape must track `PowerService::get_battery_status` in
+  // echo/src/services/power.rs — `present` included. A mock that omits a
+  // field the real service returns is how the JS↔bridge seam drifts without
+  // anything failing at the desk.
   if (iface.toLowerCase().endsWith('power') || method.toLowerCase().includes('battery')) {
-    return { level: 87, charging: false };
+    if (method === 'shutdown') {
+      console.log('[Mock Power] shutdown action received');
+      return { success: true, action: 'shutdown' };
+    }
+    if (method === 'reboot') {
+      console.log('[Mock Power] reboot action received');
+      return { success: true, action: 'reboot' };
+    }
+    if (method === 'sleep') {
+      console.log('[Mock Power] sleep action received');
+      return { success: true, supported: true, action: 'sleep' };
+    }
+    return { present: true, level: 87, charging: false };
   }
   // Network
   if (iface.toLowerCase().endsWith('network') || method.toLowerCase().includes('network')) {
@@ -955,7 +983,17 @@ function mockResponse(
   }
   // Notifications
   if (iface.toLowerCase().endsWith('notification') || method.toLowerCase().includes('notification')) {
-    return [];
+    if (method === 'close' || method === 'dismiss') {
+      return { success: true };
+    }
+    return [
+      {
+        id: 'notif-1',
+        title: 'System Ready',
+        body: 'Pyxis Bloom desktop is running.',
+        timestamp: Date.now() - 300000,
+      },
+    ];
   }
   return { success: true };
 }

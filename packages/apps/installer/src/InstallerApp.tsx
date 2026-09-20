@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Badge,
   Button,
+  Collapsable,
   Divider,
   Item,
   List,
@@ -422,26 +423,25 @@ export const InstallerApp: React.FC<InstallerAppProps> = ({ onClose }) => {
       </div>
 
       {result.log && (
-        <details>
-          <summary style={{ cursor: 'pointer', fontSize: 13, opacity: 0.7 }}>
-            Installation log
-          </summary>
-          <pre
-            style={{
-              fontSize: 11,
-              lineHeight: 1.45,
-              whiteSpace: 'pre-wrap',
-              background: 'rgba(0,0,0,0.05)',
-              padding: 10,
-              borderRadius: 6,
-              marginTop: 8,
-              maxHeight: 160,
-              overflow: 'auto',
-            }}
-          >
-            {result.log}
-          </pre>
-        </details>
+        <div style={{ marginTop: 12 }}>
+          <Collapsable title="Installation log" defaultExpanded={false}>
+            <pre
+              style={{
+                fontSize: 11,
+                lineHeight: 1.45,
+                whiteSpace: 'pre-wrap',
+                background: 'rgba(0,0,0,0.05)',
+                padding: 10,
+                borderRadius: 6,
+                marginTop: 8,
+                maxHeight: 160,
+                overflow: 'auto',
+              }}
+            >
+              {result.log}
+            </pre>
+          </Collapsable>
+        </div>
       )}
     </div>
   ) : (

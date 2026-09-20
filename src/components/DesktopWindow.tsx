@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Button, Tooltip, Typography } from '@mui/material';
-import { motion, AnimatePresence, type PanInfo } from 'framer-motion';
+import { Button } from 'remochi';
+import { motion, type PanInfo } from 'framer-motion';
 import { AlertTriangle, RotateCcw, X } from 'lucide-react';
 import { type DesktopWindowType, type AppLifecycleState } from '../types';
 import { useAppHost } from '@pyxis/app-sdk';
@@ -47,8 +47,8 @@ const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
     }
   };
   return (
-    <Box
-      sx={{
+    <div
+      style={{
         position: 'absolute',
         inset: 0,
         zIndex: 5,
@@ -56,20 +56,20 @@ const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 1.5,
+        gap: '12px',
         textAlign: 'center',
         background:
           'linear-gradient(180deg, rgba(40,0,0,0.65) 0%, rgba(20,0,0,0.85) 100%)',
         backdropFilter: 'blur(6px)',
-        borderRadius: 2,
+        borderRadius: '8px',
         color: '#fff',
-        padding: 3,
+        padding: '24px',
       }}
       data-crash-overlay="true"
       data-app-id={appId}
     >
-      <Box
-        sx={{
+      <div
+        style={{
           width: 56,
           height: 56,
           borderRadius: '50%',
@@ -82,26 +82,26 @@ const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
         }}
       >
         <AlertTriangle size={26} color="#FF5252" />
-      </Box>
-      <Typography variant="h6" sx={{ fontWeight: 600 }}>
+      </div>
+      <div style={{ fontWeight: 600, fontSize: '1.25rem' }}>
         {appId} stopped unexpectedly
-      </Typography>
-      <Typography variant="body2" sx={{ opacity: 0.85 }}>
+      </div>
+      <div style={{ opacity: 0.85, fontSize: '0.875rem' }}>
         {pid > 0
           ? `Process ${pid} exited with a non-zero status.`
           : 'The session ended without a clean shutdown.'}
-      </Typography>
-      <Button
-        variant="contained"
-        color="error"
-        startIcon={<RotateCcw size={16} />}
-        disabled={busy}
-        onClick={onRelaunch}
-        sx={{ mt: 1 }}
-      >
-        {busy ? 'Relaunching…' : 'Relaunch app'}
-      </Button>
-    </Box>
+      </div>
+      <div style={{ marginTop: '8px' }}>
+        <Button
+          variant="warning"
+          disabled={busy}
+          onClick={onRelaunch}
+        >
+          <RotateCcw size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
+          {busy ? 'Relaunching…' : 'Relaunch app'}
+        </Button>
+      </div>
+    </div>
   );
 };
 
@@ -149,46 +149,46 @@ const WindowContent: React.FC<{
 
   if (inner) {
     return (
-      <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+      <div style={{ position: 'relative', height: '100%', width: '100%' }}>
         {inner}
         {crashed ? (
           <CrashOverlay appId={win.appId} pid={session?.pid ?? 0} />
         ) : null}
-      </Box>
+      </div>
     );
   }
 
   return (
-    <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
-      <Box
-        sx={{
+    <div style={{ position: 'relative', height: '100%', width: '100%' }}>
+      <div
+        style={{
           height: '100%',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: 1,
+          gap: '8px',
           textAlign: 'center',
-          color: 'text.secondary',
+          color: 'var(--color-text-secondary)',
           background:
             'repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.05) 12px 24px)',
-          borderRadius: 2,
+          borderRadius: '8px',
         }}
       >
-        <Typography variant="h6" sx={{ fontWeight: 600 }} color="text.primary">
+        <div style={{ fontWeight: 600, fontSize: '1.25rem', color: 'var(--color-text)' }}>
           {win.title}
-        </Typography>
-        <Typography variant="body2">
+        </div>
+        <div style={{ fontSize: '0.875rem' }}>
           No app component is registered for <code>{win.appId}</code>.
-        </Typography>
-        <Typography variant="caption">
+        </div>
+        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
           Register one in <code>src/hooks/useWindows.ts</code>.
-        </Typography>
-      </Box>
+        </div>
+      </div>
       {crashed ? (
         <CrashOverlay appId={win.appId} pid={session?.pid ?? 0} />
       ) : null}
-    </Box>
+    </div>
   );
 };
 
@@ -201,85 +201,62 @@ const SurfaceIndicator: React.FC<{ appId: string }> = ({ appId }) => {
   const session = sessionForApp(appId);
   const surfaces = surfacesForApp(appId);
   const color = STATE_COLOR[state];
-  const tooltip = (
-    <Box>
-      <Typography variant="caption" sx={{ fontWeight: 600 }}>
-        {appId}
-      </Typography>
-      <br />
-      <Typography variant="caption">state: {state}</Typography>
-      {session && session.pid > 0 ? (
-        <>
-          <br />
-          <Typography variant="caption">pid: {session.pid}</Typography>
-        </>
-      ) : null}
-      <br />
-      <Typography variant="caption">
-        surfaces: {surfaces.length > 0 ? surfaces.join(', ') : 'none'}
-      </Typography>
-    </Box>
-  );
+  const titleText = `${appId}\nstate: ${state}${session && session.pid > 0 ? `\npid: ${session.pid}` : ''}\nsurfaces: ${surfaces.length > 0 ? surfaces.join(', ') : 'none'}`;
+
   return (
-    <Tooltip title={tooltip} arrow placement="bottom">
-      <Box
-        data-no-drag
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.5,
-          px: 1,
-          py: 0.25,
-          borderRadius: 999,
-          background: `${color}22`,
-          border: `1px solid ${color}66`,
-          cursor: 'default',
+    <div
+      data-no-drag
+      title={titleText}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
+        padding: '2px 8px',
+        borderRadius: 999,
+        background: `${color}22`,
+        border: `1px solid ${color}66`,
+        cursor: 'default',
+      }}
+    >
+      <motion.div
+        animate={
+          state === 'starting'
+            ? { opacity: [0.4, 1, 0.4] }
+            : { opacity: 1 }
+        }
+        transition={
+          state === 'starting'
+            ? { duration: 1.2, repeat: Infinity }
+            : undefined
+        }
+        style={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          backgroundColor: color,
         }}
-      >
-        <Box
-          component={motion.div}
-          animate={
-            state === 'starting'
-              ? { opacity: [0.4, 1, 0.4] }
-              : { opacity: 1 }
-          }
-          transition={
-            state === 'starting'
-              ? { duration: 1.2, repeat: Infinity }
-              : undefined
-          }
-          sx={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            backgroundColor: color,
-          }}
-        />
-        {surfaces.length > 0 ? (
-          <Typography
-            variant="caption"
-            sx={{ fontSize: '0.7rem', color: 'text.primary', lineHeight: 1 }}
-          >
-            {surfaces.length}× surface
-          </Typography>
-        ) : null}
-        {state === 'crashed' ? (
-          <AlertTriangle size={12} color={color} />
-        ) : null}
-      </Box>
-    </Tooltip>
+      />
+      {surfaces.length > 0 ? (
+        <span
+          style={{ fontSize: '0.7rem', color: 'var(--color-text)', lineHeight: 1 }}
+        >
+          {surfaces.length}× surface
+        </span>
+      ) : null}
+      {state === 'crashed' ? (
+        <AlertTriangle size={12} color={color} />
+      ) : null}
+    </div>
   );
 };
 
 // UI boundaries
 const TOP_BAR_HEIGHT = 48;
-const LEFT_LAUNCHER_WIDTH = 72; // Normal: 64px + 8px margin
-const LEFT_LAUNCHER_WIDTH_COMPACT = 48; // Compact: 40px + 8px margin  
 const BOTTOM_DOCK_HEIGHT = 80; // Normal
 const BOTTOM_DOCK_HEIGHT_COMPACT = 56; // Compact: 48px + 8px margin
 const TITLE_BAR_HEIGHT = 40;
 
-export const DesktopWindow: React.FC<DesktopWindowProps> = ({
+export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps>(({
   window,
   isActive,
   onClose,
@@ -288,7 +265,7 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
   onFocus,
   onPositionChange,
   children,
-}) => {
+}, ref) => {
   // Belt-and-suspenders: Desktop.tsx is the real gate (it doesn't mount this
   // component at all in compositor mode), but guard here too so a future
   // caller mounting DesktopWindow directly in production can't reintroduce
@@ -298,11 +275,10 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
 
   // Calculate maximized dimensions
   const isMaximized = window.state === 'maximized';
-  const leftOffset = isMaximized ? LEFT_LAUNCHER_WIDTH_COMPACT : LEFT_LAUNCHER_WIDTH;
   const bottomOffset = isMaximized ? BOTTOM_DOCK_HEIGHT_COMPACT : BOTTOM_DOCK_HEIGHT;
 
   const maxWidth = isMaximized
-    ? window.innerWidth - leftOffset
+    ? window.innerWidth
     : window.size.width;
 
   const maxHeight = isMaximized
@@ -310,7 +286,7 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
     : window.size.height;
 
   const maxX = isMaximized
-    ? leftOffset
+    ? 0
     : window.position.x;
 
   const maxY = window.state === 'maximized'
@@ -323,82 +299,108 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
 
     // Constrain to boundaries
     const minY = TOP_BAR_HEIGHT;
-    const maxXConstraint = window.innerWidth - window.size.width;
-    const maxYConstraint = window.innerHeight - BOTTOM_DOCK_HEIGHT - TITLE_BAR_HEIGHT;
+    const maxXConstraint = Math.max(0, window.innerWidth - window.size.width);
+    const maxYConstraint = Math.max(minY, window.innerHeight - bottomOffset - TITLE_BAR_HEIGHT);
 
-    newX = Math.max(LEFT_LAUNCHER_WIDTH, Math.min(newX, maxXConstraint));
+    newX = Math.max(0, Math.min(newX, maxXConstraint));
     newY = Math.max(minY, Math.min(newY, maxYConstraint));
 
     onPositionChange?.(window.id, newX, newY);
   };
 
+  const isMinimizing = window.state === 'minimized';
+
   return (
-    <AnimatePresence>
-      {window.state !== 'minimized' && (
-        <Box
-          component={motion.div}
-          initial={{ scale: 0.8, opacity: 0 }}
-          animate={{
-            scale: 1,
-            opacity: 1,
-            x: maxX,
-            y: maxY,
-            width: maxWidth,
-            height: maxHeight,
-          }}
-          exit={{ scale: 0.8, opacity: 0 }}
-          transition={{
-            type: 'spring',
-            stiffness: 300,
-            damping: 30,
-            opacity: { duration: 0.2 }
-          }}
-          drag={window.state !== 'maximized'}
-          dragMomentum={false}
-          dragElastic={0}
-          dragConstraints={{
-            left: LEFT_LAUNCHER_WIDTH,
-            top: TOP_BAR_HEIGHT,
-            right: window.innerWidth - window.size.width,
-            bottom: window.innerHeight - BOTTOM_DOCK_HEIGHT - TITLE_BAR_HEIGHT,
-          }}
-          onDragEnd={handleDragEnd}
-          onClick={() => onFocus?.(window.id)}
-          sx={{
-            position: 'fixed',
-            zIndex: window.zIndex,
-            display: 'flex',
-            flexDirection: 'column',
-            borderRadius: '12px',
-            overflow: 'hidden',
-            border: isActive
-              ? '1px solid var(--color-primary)'
-              : '1px solid var(--color-border)',
-            boxShadow: isActive
-              ? '0px 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 2px var(--mochi-primary-soft)'
-              : '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14)',
-            transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
-            cursor: window.state === 'maximized' ? 'default' : 'move',
-          }}
-        >
+    <motion.div
+      ref={ref}
+      key={window.id}
+      layout
+      initial={{
+        scale: 0.86,
+        opacity: 0,
+        rotateX: 20,
+        x: maxX,
+        y: maxY + 36,
+      }}
+      animate={{
+        scale: 1,
+        opacity: 1,
+        rotateX: 0,
+        x: maxX,
+        y: maxY,
+        width: maxWidth,
+        height: maxHeight,
+      }}
+      exit={{
+        scale: isMinimizing ? 0.65 : 0.82,
+        opacity: 0,
+        rotateX: isMinimizing ? 28 : 22,
+        x: maxX,
+        y: maxY + (isMinimizing ? 130 : 48),
+        transition: {
+          duration: isMinimizing ? 0.28 : 0.22,
+          ease: [0.32, 0, 0.24, 1],
+        },
+      }}
+      transition={{
+        type: 'spring',
+        stiffness: 280,
+        damping: 24,
+        mass: 0.85,
+        opacity: { duration: 0.18 },
+      }}
+      drag={window.state !== 'maximized'}
+      dragMomentum={false}
+      dragElastic={0}
+      dragConstraints={{
+        left: -window.position.x,
+        top: TOP_BAR_HEIGHT - window.position.y,
+        right: Math.max(0, window.innerWidth - window.size.width - window.position.x),
+        bottom: Math.max(0, window.innerHeight - bottomOffset - TITLE_BAR_HEIGHT - window.position.y),
+      }}
+      onDragEnd={handleDragEnd}
+      onClick={() => onFocus?.(window.id)}
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        transformPerspective: 1200,
+        transformOrigin: '50% 100%',
+        transformStyle: 'preserve-3d',
+        backfaceVisibility: 'hidden',
+        zIndex: window.zIndex,
+        display: 'flex',
+        flexDirection: 'column',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        border: isActive
+          ? '1px solid var(--color-primary)'
+          : '1px solid var(--color-border)',
+        boxShadow: isActive
+          ? '0px 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 2px var(--mochi-primary-soft)'
+          : '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14)',
+        transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
+        cursor: window.state === 'maximized' ? 'default' : 'move',
+      }}
+    >
           {/* Mochi Title Bar */}
-          <Box
-            sx={{
+          <div
+            style={{
               height: TITLE_BAR_HEIGHT,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              px: 2,
+              paddingLeft: '16px',
+              paddingRight: '16px',
               background: 'var(--color-surface)',
               borderBottom: '1px solid var(--color-border-light)',
               cursor: window.state === 'maximized' ? 'default' : 'move',
             }}
           >
             {/* Window Title + lifecycle indicator */}
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography
-                variant="body2"
-                sx={{
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span
+                style={{
                   fontWeight: 700,
                   fontSize: '0.875rem',
                   userSelect: 'none',
@@ -406,29 +408,28 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                 }}
               >
                 {window.title}
-              </Typography>
+              </span>
               <SurfaceIndicator appId={window.appId} />
-            </Box>
+            </div>
 
             {/* Custom Window Controls */}
-            <Box
+            <div
               data-no-drag
-              sx={{
+              style={{
                 display: 'flex',
-                gap: 1,
+                gap: '8px',
                 cursor: 'default',
               }}
             >
               {/* Warm-yellow Mochi pill - Minimize */}
-              <Box
-                component={motion.div}
+              <motion.div
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onMinimize?.(window.id);
                 }}
-                sx={{
+                style={{
                   width: 28,
                   height: 28,
                   borderRadius: '9px',
@@ -438,14 +439,11 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                   justifyContent: 'center',
                   cursor: 'pointer',
                   transition: 'box-shadow 0.2s ease',
-                  '&:hover': {
-                    boxShadow: '0 4px 12px rgba(255, 179, 0, 0.4)',
-                  },
                 }}
                 title="Minimize"
               >
-                <Box
-                  sx={{
+                <div
+                  style={{
                     width: 0,
                     height: 0,
                     borderLeft: '6px solid transparent',
@@ -453,18 +451,17 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                     borderTop: '8px solid rgba(0, 0, 0, 0.6)',
                   }}
                 />
-              </Box>
+              </motion.div>
 
               {/* Blue Square - Maximize */}
-              <Box
-                component={motion.div}
+              <motion.div
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onMaximize?.(window.id);
                 }}
-                sx={{
+                style={{
                   width: 28,
                   height: 28,
                   borderRadius: '9px',
@@ -475,32 +472,28 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                   justifyContent: 'center',
                   cursor: 'pointer',
                   transition: 'box-shadow 0.2s ease',
-                  '&:hover': {
-                    boxShadow: '0 4px 12px rgba(74, 139, 194, 0.4)',
-                  },
                 }}
                 title="Maximize"
               >
-                <Box
-                  sx={{
+                <div
+                  style={{
                     width: 12,
                     height: 12,
                     border: '2px solid rgba(255, 255, 255, 0.8)',
                     borderRadius: '2px',
                   }}
                 />
-              </Box>
+              </motion.div>
 
               {/* Red Circle - Close */}
-              <Box
-                component={motion.div}
+              <motion.div
                 whileHover={{ scale: 1.1 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onClose?.(window.id);
                 }}
-                sx={{
+                style={{
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
@@ -511,25 +504,22 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                   justifyContent: 'center',
                   cursor: 'pointer',
                   transition: 'box-shadow 0.2s ease',
-                  '&:hover': {
-                    boxShadow: '0 4px 12px rgba(198, 40, 40, 0.4)',
-                  },
                 }}
                 title="Close"
               >
                 <X size={14} color="rgba(255, 255, 255, 0.9)" strokeWidth={3} />
-              </Box>
-            </Box>
-          </Box>
+              </motion.div>
+            </div>
+          </div>
 
           {/* Content Area — no padding for embedded app documents, which
               own their whole viewport (they are separate processes). */}
-          <Box
-            sx={{
+          <div
+            style={{
               flex: 1,
               overflow: window.entryHtml ? 'hidden' : 'auto',
               backgroundColor: 'var(--color-background)',
-              p: window.entryHtml ? 0 : 2,
+              padding: window.entryHtml ? 0 : '16px',
               position: 'relative',
             }}
           >
@@ -539,16 +529,16 @@ export const DesktopWindow: React.FC<DesktopWindowProps> = ({
                 transparent veil catches the first click and raises the
                 window, then disappears. */}
             {!isActive && window.entryHtml ? (
-              <Box
+              <div
                 onMouseDown={() => onFocus?.(window.id)}
-                sx={{ position: 'absolute', inset: 0, zIndex: 3 }}
+                style={{ position: 'absolute', inset: 0, zIndex: 3 }}
               />
             ) : null}
-          </Box>
-        </Box>
-      )}
-    </AnimatePresence>
+          </div>
+        </motion.div>
   );
-};
+});
+
+DesktopWindow.displayName = 'DesktopWindow';
 
 export default DesktopWindow;
