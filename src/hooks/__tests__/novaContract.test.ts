@@ -1,7 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { echoClient, type NovaAppInfo } from '@pyxis/app-sdk';
+import {
+  iconUrlFrom,
+  __resetAppsStore,
+  __subscribeApps as novaStoreSubscribe,
+} from '../useApps';
 
 /**
  * Nova registry contract tests.
@@ -212,5 +217,119 @@ describe('the registry is dynamic', () => {
       package: 'weather',
     });
     expect((await novaList()).map((a) => a.id)).not.toContain('weather');
+  });
+});
+
+describe('icon URLs from Nova manifests', () => {
+  // Every case here is a shape seen in a real nova.List response on device,
+  // plus the malformed one the fallback exists for.
+  const base = {
+    name: 'X', version: '1', type: 'web', entry: 'index.html',
+    singleInstance: true, display: 'windowed', background: false,
+    permissions: [], installed: true, source: 'appinfo.json' as const,
+    tier: 'opkg' as const, removable: false,
+  };
+  const withIcons = (id: string, icons: Record<string, string>): NovaAppInfo =>
+    ({ ...base, id, icons });
+
+  beforeEach(() => {
+    // iconUrlFrom is a no-op unless the shell is on a pyxis:// origin,
+    // which jsdom is not. Pretend, so the mapping itself is under test.
+    Object.defineProperty(window, 'location', {
+      value: { protocol: 'pyxis:', href: 'pyxis://bloom/index.html' },
+      writable: true,
+      configurable: true,
+    });
+  });
+
+  it('passes an app-root-relative path through', () => {
+    expect(iconUrlFrom(withIcons('weather', { '128': 'icon.png' })))
+      .toBe('pyxis://weather/icon.png');
+  });
+
+  it('recovers the relative form from an absolute filesystem path', () => {
+    // The shape Nova sent before the alpha-4 fix. Naively stripping the
+    // leading slash yielded pyxis://<id>/usr/pyxis/applications/<id>/icon.png.
+    const info = withIcons('com.pyxis.hello', {
+      '64': '/usr/pyxis/applications/com.pyxis.hello/icon.png',
+    });
+    expect(iconUrlFrom(info)).toBe('pyxis://com.pyxis.hello/icon.png');
+  });
+
+  it('falls back to the basename for an absolute path outside the app dir', () => {
+    expect(iconUrlFrom(withIcons('weather', { '64': '/opt/elsewhere/w.png' })))
+      .toBe('pyxis://weather/w.png');
+  });
+
+  it('prefers the largest declared size', () => {
+    const info = withIcons('weather', { '32': 'a.png', '256': 'b.png', '64': 'c.png' });
+    expect(iconUrlFrom(info)).toBe('pyxis://weather/b.png');
+  });
+
+  it('is undefined when the app declares no icons', () => {
+    // Every built-in is in this case — their manifest.webapp has no `icons`
+    // key at all, so they must keep rendering via their Lucide glyph.
+    expect(iconUrlFrom(withIcons('files', {}))).toBeUndefined();
+  });
+});
+
+describe('the registry store is shared', () => {
+  // Found on device: echo.log showed five nova.List calls for one shell
+  // start, because each of the six useApps() consumers had its own state,
+  // its own fetch and its own signal subscription. One logical thing should
+  // cost one round trip.
+  beforeEach(() => {
+    __resetAppsStore();
+  });
+
+  it('collapses concurrent consumers into a single List call', async () => {
+    const calls: string[] = [];
+    const real = echoClient.callMethod.bind(echoClient);
+    const spy = vi
+      .spyOn(echoClient, 'callMethod')
+      .mockImplementation(async (svc, iface, method, args) => {
+        if (method === 'List') calls.push(method);
+        return real(svc, iface, method, args);
+      });
+
+    const unsubs = Array.from({ length: 6 }, () => novaStoreSubscribe(() => {}));
+    await vi.waitFor(() => expect(calls.length).toBeGreaterThan(0));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls).toHaveLength(1);
+
+    unsubs.forEach((u) => u());
+    spy.mockRestore();
+  });
+
+  it('registers each Nova signal exactly once regardless of consumer count', async () => {
+    // This is the assertion that actually discriminates. The in-flight
+    // guard alone would collapse a mount burst even with per-consumer
+    // subscriptions, so counting List calls does not prove the store is
+    // shared — counting subscriptions does. Six consumers subscribing
+    // individually would register eighteen handlers, and every later
+    // RegistryChanged would fan out to all of them.
+    const subscribed: string[] = [];
+    const real = echoClient.onSignal.bind(echoClient);
+    const spy = vi
+      .spyOn(echoClient, 'onSignal')
+      .mockImplementation((iface, signal, cb) => {
+        if (iface === 'org.geckoOS.nova') subscribed.push(signal);
+        return real(iface, signal, cb);
+      });
+
+    const unsubs = Array.from({ length: 6 }, () => novaStoreSubscribe(() => {}));
+    expect(subscribed.sort()).toEqual([
+      'AppInstalled',
+      'AppUninstalled',
+      'RegistryChanged',
+    ]);
+
+    // And they are released when the last consumer goes away, so a shell
+    // that unmounts and remounts does not accumulate handlers.
+    unsubs.forEach((u) => u());
+    const again = Array.from({ length: 2 }, () => novaStoreSubscribe(() => {}));
+    expect(subscribed).toHaveLength(6);
+    again.forEach((u) => u());
+    spy.mockRestore();
   });
 });
