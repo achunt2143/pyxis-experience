@@ -24,10 +24,15 @@ export interface DesktopWindowType {
   innerWidth: number;
   innerHeight: number;
   /**
-   * Standalone document for this app (e.g. `http://localhost:5183/index.html`).
+   * Standalone document for this app — `pyxis://<id>/index.html` on device,
+   * the package's dev server off it (see registry.ts's `entryUrlFor`).
    * The window body embeds the app as a separate document/process/package.
+   *
+   * Undefined when there is nothing to embed: a third-party app off-device
+   * has no dev server, so the window renders a placeholder rather than an
+   * iframe pointed at a URL that cannot resolve.
    */
-  entryHtml?: string;
+  entryUrl?: string;
 }
 
 export interface AppInfo {

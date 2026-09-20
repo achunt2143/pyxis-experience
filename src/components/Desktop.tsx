@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { Dialog } from 'remochi';
 import { useWindows } from '../hooks/useWindows';
+import { useApps } from '../hooks/useApps';
 import { IN_COMPOSITOR } from '../utils/environment';
 import { TopSystemBar } from './TopSystemBar';
 import { QuickSettingsMenu } from './QuickSettingsMenu';
@@ -36,12 +37,14 @@ export const Desktop: React.FC = () => {
     maximizeWindow,
     focusWindow,
     updateWindowPosition,
-    mockApps,
     activeWindowId,
   } = useWindows();
 
   const echo = useEcho();
   const { relaunch } = useAppHost();
+  // Nova's registry. Every launch path below resolves its app id here, so
+  // an .ipk app launches by exactly the same route a built-in does.
+  const { byId: appsById } = useApps();
 
   const [wallpaper, setWallpaper] = useState<string>(DEFAULT_WALLPAPER);
   const [launchError, setLaunchError] = useState<string | null>(null);
@@ -143,10 +146,7 @@ export const Desktop: React.FC = () => {
         isOpen={quickSettingsOpen}
         onOpenChange={setQuickSettingsOpen}
         onLaunchApp={(appId) => {
-          const app = mockApps.find((a) => a.id === appId);
-          if (app) {
-            launchApp(appId, app.name);
-          }
+          launchApp(appId, appsById(appId)?.name ?? appId);
         }}
       />
 
@@ -155,10 +155,7 @@ export const Desktop: React.FC = () => {
         isOpen={appDrawerOpen}
         onClose={() => setAppDrawerOpen(false)}
         onAppSelect={(appId: string) => {
-          const app = mockApps.find((a) => a.id === appId);
-          if (app) {
-            launchApp(appId, app.name);
-          }
+          launchApp(appId, appsById(appId)?.name ?? appId);
         }}
         isCompact={hasMaximizedWindow}
       />
@@ -199,10 +196,7 @@ export const Desktop: React.FC = () => {
         <LeftLauncher
           activeApp={activeWindowId ? windows.find(w => w.id === activeWindowId)?.appId : undefined}
           onAppSelect={(appId: string) => {
-            const app = mockApps.find((a) => a.id === appId);
-            if (app) {
-              launchApp(appId, app.name);
-            }
+            launchApp(appId, appsById(appId)?.name ?? appId);
           }}
           isCompact={hasMaximizedWindow}
           appDrawerOpen={appDrawerOpen}

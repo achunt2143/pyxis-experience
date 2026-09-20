@@ -4,12 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import type { DesktopWindowType } from '../types';
 import { Globe, X, AlertTriangle } from 'lucide-react';
 import { useAppHost, usePyxisTheme } from '@pyxis/app-sdk';
-import { PYXIS_APPS, getAppAccent } from '../apps/registry';
-
-// Icon mapping derived from the app registry; unknown app ids fall back to
-// a generic globe below.
-const APP_ICONS: { [key: string]: React.FC<{ size?: number }> } =
-  Object.fromEntries(PYXIS_APPS.map((a) => [a.id, a.icon]));
+import { getAppAccent } from '../apps/registry';
+import { useApps } from '../hooks/useApps';
+import { AppIcon } from './AppIcon';
 
 interface BottomDockProps {
   windows: DesktopWindowType[];
@@ -38,6 +35,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [hoveredWindow, setHoveredWindow] = useState<string | null>(null);
   const { stateForApp, sessionForApp, sessions } = useAppHost();
+  const { byId: appsById } = useApps();
   const iconSize = isCompact ? 28 : 56;
   const padding = isCompact ? 1 : 1.5;
 
@@ -147,7 +145,11 @@ export const BottomDock: React.FC<BottomDockProps> = ({
             >
               <AnimatePresence mode="popLayout">
                 {Object.entries(groupedWindows).map(([appId, appWindows]) => {
-                  const Icon = APP_ICONS[appId] || Globe;
+                  // undefined for a window whose app Nova doesn't list —
+                  // Nova's external-browser sessions, most often — which
+                  // is why the fallback here is a globe rather than the
+                  // generic package glyph.
+                  const app = appsById(appId);
                   const isHovered = hoveredGroup === appId;
                   const isExpanded = expandedGroup === appId;
                   const hasMultiple = appWindows.length > 1;
@@ -257,7 +259,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                             color: accent.iconColor,
                           }}
                         >
-                          <Icon size={isCompact ? 16 : 22} />
+                          <AppIcon app={app} size={isCompact ? 16 : 22} fallback={Globe} />
                         </div>
                         <span style={{ maxWidth: '100%', fontSize: '0.75rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {win.title}
@@ -337,7 +339,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                           color: accent.iconColor,
                         }}
                       >
-                        <Icon size={isCompact ? 20 : 28} />
+                        <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
                       </motion.button>
                     ))}
                   </AnimatePresence>
@@ -393,7 +395,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                       transition: 'background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
                     }}
                   >
-                    <Icon size={isCompact ? 20 : 28} />
+                    <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
                   </motion.button>
                 ) : (
                   appWindows.map((win, idx) => {
@@ -455,7 +457,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
                           transition: 'background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
                         }}
                       >
-                        <Icon size={isCompact ? 20 : 28} />
+                        <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
                       </motion.button>
                     );
                   })

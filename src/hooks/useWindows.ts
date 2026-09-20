@@ -1,27 +1,38 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { DesktopWindowType, WindowState } from '../types';
-import { PYXIS_APPS, appById } from '../apps/registry';
+import { DEFAULT_APP_SIZE } from '../apps/registry';
+import { useApps } from './useApps';
 
 export function useWindows() {
   const generateId = () => Math.random().toString(36).substr(2, 9);
+
+  // Nova's registry supplies the window's entry URL and preferred size, so
+  // an .ipk app opens a real window without an entry in PYXIS_APPS. Held in
+  // a ref because buildWindow runs inside setWindows' updater, where a
+  // captured value would be a render behind.
+  const { byId: appsById } = useApps();
+  const appsByIdRef = useRef(appsById);
+  useEffect(() => {
+    appsByIdRef.current = appsById;
+  }, [appsById]);
 
   const buildWindow = (
     appId: string,
     title: string,
     overrides: Partial<DesktopWindowType> = {}
   ): DesktopWindowType => {
-    const app = appById(appId);
+    const app = appsByIdRef.current(appId);
     return {
       id: overrides.id ?? generateId(),
       title,
       appId,
       state: 'normal',
       position: { x: Math.random() * 200 + 50, y: Math.random() * 200 + 50 },
-      size: app?.defaultSize ?? { width: 800, height: 600 },
+      size: app?.defaultSize ?? DEFAULT_APP_SIZE,
       zIndex: 1,
       innerWidth: window.innerWidth,
       innerHeight: window.innerHeight,
-      entryHtml: app?.entryHtml,
+      entryUrl: app?.entryUrl ?? undefined,
       ...overrides,
     };
   };
@@ -37,8 +48,7 @@ export function useWindows() {
 
   const createWindow = useCallback((appId: string, title?: string) => {
     setWindows((prev) => {
-      const app = appById(appId);
-      const resolvedTitle = title ?? app?.name ?? appId;
+      const resolvedTitle = title ?? appsByIdRef.current(appId)?.name ?? appId;
       const newWindow = buildWindow(appId, resolvedTitle, {
         zIndex: Math.max(...prev.map((w) => w.zIndex), 0) + 1,
       });
@@ -137,8 +147,6 @@ export function useWindows() {
     focusWindow,
     updateWindowPosition,
     updateWindowSize,
-    mockApps: PYXIS_APPS,
-    apps: PYXIS_APPS,
     activeWindowId,
   };
 }

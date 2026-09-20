@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { X, Package } from 'lucide-react';
+import { X, Package, AlertTriangle } from 'lucide-react';
 import {
   FloatingPanel,
   Input,
@@ -9,7 +9,9 @@ import {
   Divider,
 } from 'remochi';
 import { usePyxisTheme, useAppHost } from '@pyxis/app-sdk';
-import { PYXIS_APPS, getAppAccent, type PyxisAppDef } from '../apps/registry';
+import { getAppAccent } from '../apps/registry';
+import { useApps, type DesktopApp } from '../hooks/useApps';
+import { AppIcon } from './AppIcon';
 
 export interface AppDrawerProps {
   isOpen: boolean;
@@ -36,11 +38,14 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
   const theme = usePyxisTheme('light');
   const panelStyle = theme === 'dark' ? 'shadow' : 'default';
   const { stateForApp } = useAppHost();
+  // Nova's registry, not PYXIS_APPS — an .ipk app installed a moment ago
+  // has no entry in the built-in overlay but must still show up here.
+  const { apps, loading, error } = useApps();
 
   // Filter apps based on category and search query
   const filteredApps = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return PYXIS_APPS.filter((app) => {
+    return apps.filter((app) => {
       const matchesSearch =
         query === '' ||
         app.name.toLowerCase().includes(query) ||
@@ -51,7 +56,7 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
         (query !== '' && matchesSearch); // search spans categories if query is entered
       return matchesSearch && matchesCategory;
     });
-  }, [search, category]);
+  }, [apps, search, category]);
 
   const safeSelectedIndex =
     filteredApps.length === 0
@@ -102,7 +107,7 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose, onAppSelect, filteredApps, safeSelectedIndex]);
 
-  const handleLaunch = (app: PyxisAppDef) => {
+  const handleLaunch = (app: DesktopApp) => {
     onAppSelect?.(app.id);
     onClose();
   };
@@ -237,11 +242,26 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
                         color: 'var(--color-text-secondary)',
                       }}
                     >
-                      <Package size={32} style={{ opacity: 0.5 }} />
+                      {/* Three different empty states, because they mean
+                          three different things. "No applications found"
+                          on an unreachable Nova would be the exact kind of
+                          confident falsehood alpha 3 was about. */}
+                      {error ? (
+                        <AlertTriangle size={32} style={{ opacity: 0.6 }} />
+                      ) : (
+                        <Package size={32} style={{ opacity: 0.5 }} />
+                      )}
                       <div style={{ fontSize: '0.86rem', fontWeight: 500 }}>
-                        No applications found
+                        {error
+                          ? "Couldn't reach the app registry"
+                          : loading
+                            ? 'Loading applications…'
+                            : 'No applications found'}
                       </div>
-                      {search && (
+                      {error && (
+                        <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>{error}</div>
+                      )}
+                      {!error && !loading && search && (
                         <div style={{ marginTop: 8 }}>
                           <Button variant="blue" onClick={() => setSearch('')}>
                             Clear search filter
@@ -258,7 +278,7 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
                       }}
                     >
                       {filteredApps.map((app, index) => {
-                        const Icon = app.icon;
+
                         const isSelected = index === safeSelectedIndex;
                         const accent = getAppAccent(app.id);
                         const lifecycleState = stateForApp(app.id);
@@ -309,7 +329,7 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
                                 flexShrink: 0,
                               }}
                             >
-                              <Icon size={26} strokeWidth={2} />
+                              <AppIcon app={app} size={26} />
 
                               {/* Running Indicator Dot at the sharp top-right corner */}
                               {isRunning && (

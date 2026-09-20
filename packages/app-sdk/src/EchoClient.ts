@@ -28,6 +28,7 @@
  */
 
 import { safeGetItem, safeSetItem } from './safeStorage';
+import type { NovaAppInfo } from './types';
 
 export interface EchoHeader {
   id: string;
@@ -161,6 +162,7 @@ const MOCK_APPS = [
   { id: 'notes', name: 'Notes', icon: '📝', running: false },
   { id: 'contacts', name: 'Contacts', icon: '👤', running: false },
   { id: 'tasks', name: 'Tasks', icon: '✅', running: false },
+  { id: 'installer', name: 'App Installer', icon: '📦', running: false },
 ];
 
 // Installable `.ipk` packages the installer mock "discovers". Shaped
@@ -303,6 +305,7 @@ const MOCK_ENTRIES: Record<string, string> = {
   notes: 'NotesApp',
   contacts: 'ContactsApp',
   tasks: 'TasksApp',
+  installer: 'InstallerApp',
 };
 
 function mockManifests() {
@@ -317,6 +320,85 @@ function mockManifests() {
   }));
 }
 
+/**
+ * Nova's registry as the mock projects it — `{ apps: NovaAppInfo[] }`, the
+ * exact shape of `nova.List` (nova.rs::RegistryEntry::info_json).
+ *
+ * This deliberately does NOT reuse mockManifests(): AppHost's ListApps and
+ * Nova's List are different projections of different things, and the mock
+ * used to conflate them by having nova.List delegate to appHost.ListApps.
+ * That returned `exec`/`icon`/`count` and omitted `tier`/`removable`/
+ * `singleInstance`/`icons`, so anything built against the mock's nova.List
+ * worked in dev and broke on device. `useApps.contract.test.ts` pins this.
+ *
+ * Note `entry` here is a webroot-relative path ("index.html"), not the
+ * built-in-component hint AppHost's manifests carry in a field of the same
+ * name.
+ *
+ * Built-ins are the `system` tier; anything the installer mock has installed
+ * is the `opkg` tier, so installing in dev makes a genuinely new app appear
+ * in the launcher — the alpha 4 acceptance flow, exercisable in a browser.
+ * opkg-over-system precedence on a shared id mirrors nova.rs::reload's scan
+ * order + tier_may_claim_id.
+ */
+const MOCK_PIM_APPS = new Set(['notes', 'contacts', 'tasks']);
+
+function mockNovaRegistry(): NovaAppInfo[] {
+  const byId = new Map<string, NovaAppInfo>();
+
+  for (const a of MOCK_APPS) {
+    byId.set(a.id, {
+      id: a.id,
+      name: a.name,
+      version: '0.1.0',
+      type: 'web',
+      entry: 'index.html',
+      icons: { '128': 'icon.png' },
+      category: MOCK_PIM_APPS.has(a.id) ? 'pim' : 'system',
+      singleInstance: true,
+      display: 'windowed',
+      background: false,
+      permissions: [],
+      installed: true,
+      source: 'manifest.webapp',
+      tier: 'system',
+      removable: false,
+    });
+  }
+
+  for (const [pkg, version] of mockInstalled) {
+    const meta = MOCK_PACKAGES.find((m) => m.package === pkg);
+    if (!meta) continue;
+    byId.set(pkg, {
+      id: pkg,
+      name: meta.title,
+      version,
+      type: meta.appType,
+      entry: meta.appType === 'native' ? '' : 'index.html',
+      icons: { '128': 'icon.png' },
+      category: meta.appType === 'native' ? 'utility' : 'pim',
+      singleInstance: true,
+      display: 'windowed',
+      background: false,
+      // Nova maps appinfo's raw vocabulary onto bridge capabilities
+      // deny-by-default, so `permissions` (granted) and
+      // `requiredPermissions` (declared) are not the same list. The mock
+      // keeps them distinct so a UI reading the wrong one is visibly wrong
+      // in dev too.
+      permissions: [],
+      installed: true,
+      source: 'appinfo.json',
+      tier: 'opkg',
+      // opkg owns the files, so nova.Uninstall refuses these — removal has
+      // to go back through the Installer (`opkg remove`).
+      removable: false,
+      requiredPermissions: meta.requiredPermissions,
+    });
+  }
+
+  return [...byId.values()].sort((a, b) => a.id.localeCompare(b.id));
+}
+
 function sessionsForApp(appId: string): MockSession[] {
   return Array.from(mockSessions.values()).filter((s) => s.appId === appId);
 }
@@ -325,7 +407,11 @@ function mockResponse(
   iface: string,
   method: string,
   args: Record<string, unknown>,
-  fanOut?: (signal: string, data: unknown) => void
+  // `ifaceOverride` lets a mock emit on an interface other than the one
+  // being called — the installer emits Nova's RegistryChanged, because on
+  // device installer.rs ends every install/remove by asking Nova to reload
+  // and it is Nova, not the installer, that announces the new registry.
+  fanOut?: (signal: string, data: unknown, ifaceOverride?: string) => void
 ): unknown {
   // ---- AppHost (new lifecycle interface) ----
   if (iface.endsWith('appHost') || iface.endsWith('AppHost')) {
@@ -608,14 +694,28 @@ function mockResponse(
           }
           await new Promise((r) => setTimeout(r, 250));
           mockInstalled.set(pkg.package, pkg.version);
-          fanOut?.('InstallCompleted', result);
+          // Order matters and mirrors the device: the registry is refreshed
+          // (RegistryChanged) before the install is reported complete, so a
+          // wizard that navigates to the new app on InstallCompleted finds
+          // it already listed.
+          fanOut?.(
+            'RegistryChanged',
+            { count: mockNovaRegistry().length },
+            'org.geckoOS.nova'
+          );
+          fanOut?.('InstallCompleted', { ...result, registeredApps: mockNovaRegistry().length });
           return result;
         })();
       }
       case 'Remove': {
         const name = String(args.package ?? '');
         mockInstalled.delete(name);
-        const result = { package: name, registeredApps: MOCK_APPS.length };
+        const result = { package: name, registeredApps: mockNovaRegistry().length };
+        fanOut?.(
+          'RegistryChanged',
+          { count: result.registeredApps },
+          'org.geckoOS.nova'
+        );
         fanOut?.('RemoveCompleted', result);
         return result;
       }
@@ -687,12 +787,20 @@ function mockResponse(
         return { sessionId: uuid(), appId: 'browser-window', url };
       }
       case 'List':
-        return mockResponse('org.geckoOS.appHost', 'ListApps', {}, fanOut);
+        // NOT appHost.ListApps — see mockNovaRegistry's comment. `List`
+        // carries no `running`/`sessionId`; liveness comes from AppHost.
+        return { apps: mockNovaRegistry() };
       case 'GetInfo': {
         const appId = String(args.appId ?? '');
-        const m = mockManifests().find((x) => x.id === appId);
-        if (!m) return { error: `app '${appId}' is not installed` };
-        return { ...m, running: sessionsForApp(appId).length > 0 };
+        const info = mockNovaRegistry().find((x) => x.id === appId);
+        if (!info) return { error: `app '${appId}' is not installed` };
+        // GetInfo alone adds liveness, and sessionId only while running.
+        const session = sessionsForApp(appId).find(
+          (x) => x.state === 'running' || x.state === 'starting'
+        );
+        return session
+          ? { ...info, running: true, sessionId: session.sessionId }
+          : { ...info, running: false };
       }
       default:
         return { success: false, error: `unknown nova method ${method}` };
@@ -1045,8 +1153,8 @@ export class EchoClient {
    * subscriber map. Used by the mock backend to replay AppStarting/etc.
    */
   private mockFanOut(iface: string) {
-    return (signal: string, data: unknown) => {
-      const key = `${iface}::${signal}`;
+    return (signal: string, data: unknown, ifaceOverride?: string) => {
+      const key = `${ifaceOverride ?? iface}::${signal}`;
       const subs = this.signalSubs.get(key);
       subs?.forEach((cb) => {
         try {

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Input, PopupPanel, Item } from 'remochi';
 import { Search } from 'lucide-react';
-import { PYXIS_APPS, type PyxisAppDef } from '../apps/registry';
+import { useApps, type DesktopApp } from '../hooks/useApps';
+import { AppIcon } from './AppIcon';
 
 interface DesktopSearchProps {
   onLaunch: (appId: string, name: string) => void;
@@ -9,7 +10,9 @@ interface DesktopSearchProps {
 
 /**
  * The top bar's search box, wired up as a lightweight app launcher: typing
- * filters PYXIS_APPS, arrow keys move the highlight, Enter launches. Results
+ * filters Nova's installed-app list, arrow keys move the highlight, Enter
+ * launches. Searching an id as well as a name matters for third-party apps,
+ * whose package name is often what a user remembers installing. Results
  * render in remochi's own contextual popup (PopupPanel) anchored to the
  * search field, so it reads as a native part of the shell's design system
  * rather than a bolted-on overlay.
@@ -21,11 +24,16 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch }) => {
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const results = useMemo<PyxisAppDef[]>(() => {
+  const { apps } = useApps();
+
+  const results = useMemo<DesktopApp[]>(() => {
     const q = query.trim().toLowerCase();
     if (!q) return [];
-    return PYXIS_APPS.filter((app) => app.name.toLowerCase().includes(q));
-  }, [query]);
+    return apps.filter(
+      (app) =>
+        app.name.toLowerCase().includes(q) || app.id.toLowerCase().includes(q)
+    );
+  }, [apps, query]);
 
   const showDropdown = open && query.trim().length > 0;
 
@@ -84,7 +92,7 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch }) => {
   // treats a new anchorRect identity as "reposition now".
   const effectiveAnchorRect = showDropdown ? anchorRect : null;
 
-  const launch = (app: PyxisAppDef) => {
+  const launch = (app: DesktopApp) => {
     onLaunch(app.id, app.name);
     updateQuery('');
     setOpen(false);
@@ -153,7 +161,6 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch }) => {
             </div>
           ) : (
             results.map((app, idx) => {
-              const Icon = app.icon;
               const isActive = idx === activeIndex;
               return (
                 <div
@@ -163,7 +170,7 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch }) => {
                 >
                   <Item
                     title={app.name}
-                    icon={<Icon size={18} />}
+                    icon={<AppIcon app={app} size={18} />}
                     selected={isActive}
                     hoverable
                     variant="compact"

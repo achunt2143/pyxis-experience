@@ -1,0 +1,12 @@
+{
+  // Tests typecheck separately from the app: they read the Rust source off
+  // disk to derive the Nova contract, so they need node types the app bundle
+  // must never have. The app-sdk .d.ts glob pulls in its ambient module
+  // declarations (remochi/css), which the app program gets for free.
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+    "types": ["vite/client", "node", "vitest/globals"]
+  },
+  "include": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/**/*", "packages/app-sdk/src/**/*.d.ts"]
+}

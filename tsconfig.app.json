@@ -24,5 +24,9 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Tests read the Rust source off disk to derive the Nova contract, so
+  // they need node types the app bundle must never have. They typecheck
+  // under tsconfig.test.json instead.
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx", "src/**/__tests__/**/*"]
 }

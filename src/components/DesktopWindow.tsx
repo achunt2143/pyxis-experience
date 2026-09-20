@@ -129,10 +129,10 @@ const WindowContent: React.FC<{
   const crashed = session?.state === 'crashed';
 
   let inner: React.ReactNode;
-  if (win.entryHtml) {
+  if (win.entryUrl) {
     inner = (
       <iframe
-        src={`${win.entryHtml}?windowId=${encodeURIComponent(win.id)}`}
+        src={`${win.entryUrl}?windowId=${encodeURIComponent(win.id)}`}
         title={win.title}
         style={{
           width: '100%',
@@ -517,9 +517,9 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
           <div
             style={{
               flex: 1,
-              overflow: window.entryHtml ? 'hidden' : 'auto',
+              overflow: window.entryUrl ? 'hidden' : 'auto',
               backgroundColor: 'var(--color-background)',
-              padding: window.entryHtml ? 0 : '16px',
+              padding: window.entryUrl ? 0 : '16px',
               position: 'relative',
             }}
           >
@@ -528,7 +528,7 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
                 embedded app would never receive the focusing click — this
                 transparent veil catches the first click and raises the
                 window, then disappears. */}
-            {!isActive && window.entryHtml ? (
+            {!isActive && window.entryUrl ? (
               <div
                 onMouseDown={() => onFocus?.(window.id)}
                 style={{ position: 'absolute', inset: 0, zIndex: 3 }}

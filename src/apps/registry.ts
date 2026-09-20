@@ -11,14 +11,22 @@ import {
 } from 'lucide-react';
 
 /**
- * Central registry of Pyxis built-in apps.
+ * Presentation overlay for Pyxis's built-in apps.
  *
- * Every app is now its own independent package under packages/apps/<id>/
- * (see INTEGRATION_NOTES.md) — a standalone document/process from Bloom,
- * embedded here by URL. `entryHtml` currently points at each package's own
- * local dev server (see each package's vite.config.ts for its fixed port);
- * this becomes a real `pyxis://<id>/` URL once the Nova/kiosk launcher
- * lands — that wiring is deliberately out of scope for this pass.
+ * **This is no longer the app list.** Nova's registry is the source of truth
+ * for which apps exist (`nova.List`, via `useApps()`); an app installed from
+ * an `.ipk` has no entry here and must still appear in the launcher. What
+ * this file supplies is the things Nova has no opinion about: which Lucide
+ * glyph a built-in draws with, its accent colour, whether it is pinned, and
+ * the window size it prefers on first open.
+ *
+ * So: every id here SHOULD be in Nova's list, but not every app in Nova's
+ * list is here — and `useApps()` renders the ones that aren't with an icon
+ * from the app's own manifest, falling back to a generic glyph. Adding an
+ * app here does not make it exist; it only makes it prettier.
+ *
+ * Each app is an independent package under packages/apps/<id>/ (see
+ * INTEGRATION_NOTES.md), loaded by URL — see `entryUrlFor`.
  */
 export interface AppAccent {
   bg: string;
@@ -92,13 +100,60 @@ export function getAppAccent(id: string): AppAccent {
 export interface PyxisAppDef {
   id: string;
   name: string;
-  icon: LucideIcon;
-  /** Standalone document this app is embedded from. */
-  entryHtml: string;
+  /** Built-in glyph. Third-party apps have none and use `iconUrl` instead. */
+  icon?: LucideIcon;
+  /**
+   * Absolute URL of an image to draw instead of `icon` — how a third-party
+   * app supplies its own artwork (`pyxis://<id>/icon.png`, derived from the
+   * `icons` map in its manifest). Built-ins leave this unset and keep their
+   * Lucide glyph, which stays crisp at every launcher size.
+   */
+  iconUrl?: string;
+  /**
+   * Vite dev-server port for this package (see its vite.config.ts). Used
+   * only off-device; on device the app is served from its pyxis:// origin
+   * and this is ignored. See `entryUrlFor`.
+   */
+  devPort?: number;
   /** Show in the LeftLauncher pinned strip. */
   pinned?: boolean;
   defaultSize: { width: number; height: number };
   category: 'system' | 'pim' | 'utility';
+}
+
+/** Default window size for an app with no entry in PYXIS_APPS. */
+export const DEFAULT_APP_SIZE = { width: 820, height: 560 } as const;
+
+/**
+ * True when the shell is running as a real pyxis:// app rather than off a
+ * dev server. Bloom itself is staged at `pyxis://bloom/index.html`
+ * (create-rootfs.sh's stage_bloom_app), so its own protocol is the honest
+ * discriminator — more so than import.meta.env.DEV, which is a build-time
+ * flag and would be wrong for a dev build run on device.
+ */
+export function isPyxisOrigin(): boolean {
+  return typeof window !== 'undefined' && window.location.protocol === 'pyxis:';
+}
+
+/**
+ * Where to load an app's document from.
+ *
+ * On device this is the app's own pyxis:// origin — a real, isolated,
+ * secure-context origin per app, which is the whole point of the scheme.
+ * Off device there is no pyxis:// handler, so built-ins fall back to their
+ * package's dev server. A third-party app has no dev server at all, so it
+ * returns null off-device and the caller renders a "not available in dev"
+ * placeholder rather than an iframe pointed at nothing.
+ *
+ * `entry` comes from Nova (`NovaAppInfo.entry`, webroot-relative) and
+ * defaults to index.html, matching nova.rs's `default_entry`.
+ */
+export function entryUrlFor(appId: string, entry = 'index.html'): string | null {
+  if (isPyxisOrigin()) {
+    return `pyxis://${appId}/${entry.replace(/^\/+/, '')}`;
+  }
+  const dev = appById(appId)?.devPort;
+  return dev ? `http://localhost:${dev}/${entry.replace(/^\/+/, '')}` : null;
 }
 
 export const PYXIS_APPS: PyxisAppDef[] = [
@@ -106,7 +161,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'terminal',
     name: 'Terminal',
     icon: Terminal,
-    entryHtml: 'http://localhost:5180/index.html',
+    devPort: 5180,
     pinned: true,
     defaultSize: { width: 760, height: 460 },
     category: 'system',
@@ -115,7 +170,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'browser',
     name: 'Browser',
     icon: Globe,
-    entryHtml: 'http://localhost:5181/index.html',
+    devPort: 5181,
     pinned: true,
     defaultSize: { width: 960, height: 640 },
     category: 'system',
@@ -124,7 +179,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'files',
     name: 'File Manager',
     icon: Folder,
-    entryHtml: 'http://localhost:5182/index.html',
+    devPort: 5182,
     pinned: true,
     defaultSize: { width: 720, height: 500 },
     category: 'system',
@@ -133,7 +188,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'notes',
     name: 'Notes',
     icon: StickyNote,
-    entryHtml: 'http://localhost:5183/index.html',
+    devPort: 5183,
     pinned: true,
     defaultSize: { width: 860, height: 560 },
     category: 'pim',
@@ -142,7 +197,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'contacts',
     name: 'Contacts',
     icon: Users,
-    entryHtml: 'http://localhost:5184/index.html',
+    devPort: 5184,
     defaultSize: { width: 860, height: 560 },
     category: 'pim',
   },
@@ -150,7 +205,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'tasks',
     name: 'Tasks',
     icon: CheckSquare,
-    entryHtml: 'http://localhost:5185/index.html',
+    devPort: 5185,
     defaultSize: { width: 640, height: 560 },
     category: 'pim',
   },
@@ -158,7 +213,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'settings',
     name: 'Settings',
     icon: Settings,
-    entryHtml: 'http://localhost:5186/index.html',
+    devPort: 5186,
     defaultSize: { width: 820, height: 580 },
     category: 'system',
   },
@@ -166,7 +221,7 @@ export const PYXIS_APPS: PyxisAppDef[] = [
     id: 'installer',
     name: 'App Installer',
     icon: Package,
-    entryHtml: 'http://localhost:5187/index.html',
+    devPort: 5187,
     defaultSize: { width: 680, height: 520 },
     category: 'system',
   },

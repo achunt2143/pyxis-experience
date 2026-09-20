@@ -6,6 +6,7 @@ import type {
   AppManifest,
   AppSession,
   AppSurfaceBinding,
+  NovaAppInfo,
 } from './types';
 
 export interface BatteryStatus {
@@ -59,7 +60,22 @@ export interface NotificationEntry {
 // AppHost. AppHost is still queried directly for lifecycle/surface state
 // (see the AppHost section below) — Nova delegates to it, doesn't replace it.
 const NOVA_SERVICE = 'nova';
-const NOVA_IFACE = 'org.geckoOS.nova';
+export const NOVA_IFACE = 'org.geckoOS.nova';
+
+/**
+ * Registry-mutating signals Nova emits (echo/src/services/nova.rs). A
+ * consumer of `nova.List` must re-fetch on each of these or its app list
+ * goes stale the moment anything is installed or removed.
+ *
+ * `registryChanged` is the broad one — Nova emits it from `reload()`, which
+ * is what the Installer triggers after every `opkg install`/`remove`, so it
+ * covers ipk apps that never go through `nova.Install` at all.
+ */
+export const NOVA_SIGNALS = {
+  installed: 'AppInstalled',
+  uninstalled: 'AppUninstalled',
+  registryChanged: 'RegistryChanged',
+} as const;
 const POWER_IFACE = 'org.geckoOS.power';
 const NETWORK_IFACE = 'org.geckoOS.network';
 const NOTIF_SERVICE = 'notification';
@@ -243,6 +259,34 @@ export function useEcho() {
           { notificationId: id }
         )) as { success?: boolean } | undefined;
         return res?.success ?? true;
+      },
+
+      // ---------- Nova (app registry) ----------
+
+      // The installed-app list, from Nova — the registry authority for
+      // *which apps exist* (system + opkg + user tiers). AppHost's ListApps
+      // is a different thing: the set of apps it can supervise, keyed to
+      // native manifests Nova itself generates. The shell asks Nova what is
+      // installed and AppHost what is running.
+      //
+      // Returns [] rather than throwing on a failed call, so a launcher
+      // renders empty instead of blank-screening; callers that need to tell
+      // "no apps" from "couldn't ask" should use `useApps().error`.
+      async listApps(): Promise<NovaAppInfo[]> {
+        const res = (await echoClient.callMethod(NOVA_SERVICE, NOVA_IFACE, 'List', {})) as
+          | { apps?: NovaAppInfo[] }
+          | undefined;
+        return res?.apps ?? [];
+      },
+
+      // Single-app projection, plus `running`/`sessionId` which `List` does
+      // not carry. Null when the app is not installed.
+      async getAppInfo(appId: string): Promise<NovaAppInfo | null> {
+        const res = (await echoClient.callMethod(NOVA_SERVICE, NOVA_IFACE, 'GetInfo', {
+          appId,
+        })) as (NovaAppInfo & { error?: string }) | undefined;
+        if (!res || res.error || !res.id) return null;
+        return res;
       },
 
       // ---------- AppHost (lifecycle) ----------

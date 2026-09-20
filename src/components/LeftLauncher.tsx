@@ -3,17 +3,11 @@ import { Repanel, Item, Divider } from 'remochi';
 import { Grid3x3, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAppHost, usePyxisTheme } from '@pyxis/app-sdk';
-import { PYXIS_APPS, getAppAccent } from '../apps/registry';
+import { getAppAccent } from '../apps/registry';
+import { useApps } from '../hooks/useApps';
+import { AppIcon } from './AppIcon';
 import type { AppLifecycleState } from '../types';
 import '../styles/pinned-item-overrides.css';
-
-// Pinned strip mirrors the registry (src/apps/registry.ts) — one source of
-// truth for which apps exist and how they open.
-const PINNED_APPS = PYXIS_APPS.filter((a) => a.pinned).map((a) => ({
-  id: a.id,
-  label: a.name,
-  Icon: a.icon,
-}));
 
 // Visual styling per AppHost lifecycle state. Centralised here so the dock
 // and other consumers can reuse the same vocabulary.
@@ -47,6 +41,10 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
 }) => {
   const [hoveredApp, setHoveredApp] = useState<string | null>(null);
   const { stateForApp, sessionForApp, manifests } = useAppHost();
+  // Pinned strip comes from Nova's registry (via useApps), filtered by the
+  // built-in overlay's `pinned` flag — so an app that is uninstalled while
+  // pinned disappears from the strip instead of leaving a dead icon.
+  const { pinned: pinnedApps } = useApps();
 
   // remochi Panel style follows the shell theme: dark mode uses the
   // "shadow" variant, light mode uses "default".
@@ -113,7 +111,9 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
             </div>
 
         {/* Pinned Apps */}
-        {PINNED_APPS.map(({ id, label, Icon }) => {
+        {pinnedApps.map((app) => {
+          const { id } = app;
+          const label = app.name;
           const isActive = activeApp === id;
           const lifecycleState = stateForApp(id);
           const session = sessionForApp(id);
@@ -143,7 +143,7 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
             >
               <Item
                 className="pinned-item"
-                icon={<Icon size={iconSize} />}
+                icon={<AppIcon app={app} size={iconSize} />}
                 selected={isActive}
                 variant={itemVariant}
                 onClick={() => onAppSelect?.(id)}
