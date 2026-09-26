@@ -5,7 +5,6 @@ import {
   Dialog,
   Divider,
   FloatingPanel,
-  Item,
   Slider,
   Toggle,
 } from 'remochi';
@@ -18,12 +17,10 @@ import {
   RotateCcw,
   Settings,
   SunMedium,
-  Trash2,
   Volume2,
   VolumeX,
   Wifi,
   WifiOff,
-  X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -35,7 +32,7 @@ import {
   SETTING_KEYS,
   usePyxisTheme,
   useEcho,
-  type NotificationEntry,
+  useOutputVolume,
 } from '@pyxis/app-sdk';
 
 /**
@@ -68,20 +65,15 @@ export const QuickSettingsMenu: React.FC<QuickSettingsMenuProps> = ({
   const network = useNetworkStatus();
   const showBatteryPercent = useBooleanSetting(SETTING_KEYS.showBatteryPercent, true);
 
-  const [volume, setVolume] = useState(75);
+  // The real output volume, from echo's audio service (PipeWire). The
+  // slider used to write a `pyxis.volume` setting that nothing read.
+  const { volume, muted, changeVolume, toggleMute } = useOutputVolume(isOpen);
   const [brightness, setBrightness] = useState(80);
   const [dnd, setDnd] = useState(false);
-  const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
   const [confirmAction, setConfirmAction] = useState<'shutdown' | 'reboot' | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      void echo.getNotifications().then((list) => {
-        setNotifications(list || []);
-      });
-      void getSetting<number>(SETTING_KEYS.volume).then((v) => {
-        if (typeof v === 'number') setVolume(v);
-      });
       void getSetting<number>(SETTING_KEYS.brightness).then((b) => {
         if (typeof b === 'number') setBrightness(b);
       });
@@ -103,11 +95,6 @@ export const QuickSettingsMenu: React.FC<QuickSettingsMenuProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onOpenChange]);
 
-  const handleVolumeChange = (v: number) => {
-    setVolume(v);
-    void setSetting(SETTING_KEYS.volume, v);
-  };
-
   const handleBrightnessChange = (b: number) => {
     setBrightness(b);
     void setSetting(SETTING_KEYS.brightness, b);
@@ -117,18 +104,6 @@ export const QuickSettingsMenu: React.FC<QuickSettingsMenuProps> = ({
     const next = !dnd;
     setDnd(next);
     void setSetting(SETTING_KEYS.dnd, next);
-  };
-
-  const handleDismissNotification = async (id: string) => {
-    await echo.dismissNotification(id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
-  };
-
-  const handleClearAllNotifications = async () => {
-    for (const notif of notifications) {
-      await echo.dismissNotification(notif.id);
-    }
-    setNotifications([]);
   };
 
   const handleConfirmPower = async () => {
@@ -278,8 +253,9 @@ export const QuickSettingsMenu: React.FC<QuickSettingsMenuProps> = ({
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <button
                       type="button"
-                      onClick={() => handleVolumeChange(volume > 0 ? 0 : 75)}
-                      title={volume === 0 ? 'Unmute' : 'Mute'}
+                      onClick={toggleMute}
+                      disabled={volume === null}
+                      title={volume === null ? 'No audio output' : muted ? 'Unmute' : 'Mute'}
                       style={{
                         background: 'none',
                         border: 'none',
@@ -290,20 +266,26 @@ export const QuickSettingsMenu: React.FC<QuickSettingsMenuProps> = ({
                         alignItems: 'center',
                       }}
                     >
-                      {volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
+                      {muted || volume === 0 ? <VolumeX size={15} /> : <Volume2 size={15} />}
                     </button>
-                    <div style={{ flex: 1 }}>
+                    <div
+                      style={{
+                        flex: 1,
+                        opacity: volume === null ? 0.4 : 1,
+                        pointerEvents: volume === null ? 'none' : undefined,
+                      }}
+                    >
                       <Slider
-                        value={volume}
+                        value={volume ?? 0}
                         min={0}
                         max={100}
                         width="100%"
                         color="var(--color-primary, #4a8bc2)"
-                        onChange={handleVolumeChange}
+                        onChange={changeVolume}
                       />
                     </div>
                     <span style={{ fontSize: 11, fontWeight: 600, minWidth: 32, textAlign: 'right', color: 'var(--color-text-secondary)' }}>
-                      {volume}%
+                      {volume === null ? '—' : muted ? 'Muted' : `${volume}%`}
                     </span>
                   </div>
 
@@ -384,88 +366,6 @@ export const QuickSettingsMenu: React.FC<QuickSettingsMenuProps> = ({
                       onChange={({ value }) => void setSetting(SETTING_KEYS.showBatteryPercent, value)}
                     />
                   </div>
-                </div>
-
-                <Divider thickness={1} />
-
-                {/* Notifications Section */}
-                <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      marginBottom: 8,
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: '0.825rem', fontWeight: 600 }}>
-                      <span>Notifications</span>
-                      <Badge content={notifications.length} />
-                    </div>
-                    {notifications.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleClearAllNotifications}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: 'var(--color-text-secondary)',
-                          cursor: 'pointer',
-                          fontSize: '0.75rem',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: 4,
-                          padding: '2px 4px',
-                        }}
-                      >
-                        <Trash2 size={12} /> Clear all
-                      </button>
-                    )}
-                  </div>
-
-                  {notifications.length === 0 ? (
-                    <div
-                      style={{
-                        padding: '10px 12px',
-                        borderRadius: 8,
-                        background: 'var(--mochi-hover, rgba(0,0,0,0.03))',
-                        textAlign: 'center',
-                        color: 'var(--color-text-secondary)',
-                        fontSize: '0.78rem',
-                      }}
-                    >
-                      No new notifications
-                    </div>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 140, overflowY: 'auto' }}>
-                      {notifications.map((notif) => (
-                        <Item
-                          key={notif.id}
-                          title={notif.title}
-                          subtitle={notif.body}
-                          variant="compact"
-                          rightContent={
-                            <button
-                              type="button"
-                              onClick={() => handleDismissNotification(notif.id)}
-                              title="Dismiss"
-                              style={{
-                                background: 'none',
-                                border: 'none',
-                                cursor: 'pointer',
-                                color: 'var(--color-text-secondary)',
-                                padding: 4,
-                                display: 'flex',
-                                alignItems: 'center',
-                              }}
-                            >
-                              <X size={13} />
-                            </button>
-                          }
-                        />
-                      ))}
-                    </div>
-                  )}
                 </div>
 
                 <Divider thickness={1} />

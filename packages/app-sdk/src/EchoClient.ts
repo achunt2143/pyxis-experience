@@ -1090,20 +1090,112 @@ function mockResponse(
     return { connected: true, ssid: 'GeckoNet', type: 'wifi' };
   }
   // Notifications
-  if (iface.toLowerCase().endsWith('notification') || method.toLowerCase().includes('notification')) {
-    if (method === 'close' || method === 'dismiss') {
-      return { success: true };
-    }
-    return [
-      {
-        id: 'notif-1',
-        title: 'System Ready',
-        body: 'Pyxis Bloom desktop is running.',
-        timestamp: Date.now() - 300000,
-      },
-    ];
+  if (iface.toLowerCase().endsWith('notification')) {
+    return mockNotifications(method, args, fanOut);
+  }
+  if (iface === 'org.geckoOS.audio') {
+    return mockAudio(method, args, fanOut);
+  }
+  if (iface === 'org.geckoOS.sound') {
+    // No sound files in the browser; succeed, as the device does for any
+    // sound it has.
+    return method === 'play'
+      ? { success: true, name: String(args.name ?? '') }
+      : { sounds: ['boot', 'error', 'notification', 'shutdown'] };
   }
   return { success: true };
+}
+
+// A stand-in for echo's audio service: one volume, two outputs, and the
+// same signals the device sends when either changes.
+const mockAudioState = { volume: 75, muted: false };
+const mockOutputs = [
+  { id: 32, name: 'alsa_output.mock-analog', description: 'Built-in Audio (mock)', isDefault: true },
+  { id: 40, name: 'alsa_output.mock-hdmi', description: 'HDMI Audio (mock)', isDefault: false },
+];
+
+function mockAudio(
+  method: string,
+  args: Record<string, unknown>,
+  fanOut?: (signal: string, data: unknown) => void
+): unknown {
+  switch (method) {
+    case 'getVolume':
+      return { ...mockAudioState };
+    case 'setVolume':
+      mockAudioState.volume = Math.round(Math.min(100, Math.max(0, Number(args.volume ?? 0))));
+      fanOut?.('VolumeChanged', { ...mockAudioState });
+      return { ...mockAudioState };
+    case 'setMute':
+      mockAudioState.muted = Boolean(args.muted);
+      fanOut?.('VolumeChanged', { ...mockAudioState });
+      return { ...mockAudioState };
+    case 'listOutputs':
+      return { outputs: mockOutputs.map((o) => ({ ...o })) };
+    case 'setDefaultOutput': {
+      const id = Number(args.id);
+      if (!mockOutputs.some((o) => o.id === id)) {
+        return { success: false, error: `no audio output with id ${id}` };
+      }
+      mockOutputs.forEach((o) => (o.isDefault = o.id === id));
+      const outputs = mockOutputs.map((o) => ({ ...o }));
+      fanOut?.('OutputChanged', { outputs });
+      return { outputs };
+    }
+    default:
+      return { success: false, error: `mock audio service has no '${method}'` };
+  }
+}
+
+// A stateful stand-in for echo's notification store, signals included, so
+// that toasts and the centre behave in the browser the way they do on a
+// device. It used to return a canned "System Ready" entry for every call, so
+// dismissing it did nothing, and anything an app raised never appeared.
+const mockNotificationStore: Array<Record<string, unknown>> = [];
+
+function mockNotifications(
+  method: string,
+  args: Record<string, unknown>,
+  fanOut?: (signal: string, data: unknown) => void
+): unknown {
+  switch (method) {
+    case 'show': {
+      const options = (args.options ?? {}) as Record<string, unknown>;
+      const urgency = options.urgency === 'critical' || options.urgency === 'low' ? options.urgency : 'normal';
+      const notification = {
+        id: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        title: String(args.title ?? 'Notification'),
+        body: String(options.body ?? ''),
+        urgency,
+        timeout: urgency === 'critical' ? 0 : Math.min(Number(options.timeout ?? 5000), 60000),
+        // No bridge in the browser to stamp the caller, as on a device.
+        appId: null,
+        icon: options.icon ?? null,
+        timestamp: Date.now(),
+      };
+      mockNotificationStore.unshift(notification);
+      mockNotificationStore.length = Math.min(mockNotificationStore.length, 50);
+      fanOut?.('NotificationShown', { notification });
+      return { success: true, notificationId: notification.id, notification };
+    }
+    case 'list':
+      return { notifications: [...mockNotificationStore] };
+    case 'close': {
+      const id = String(args.notificationId ?? args.id ?? '');
+      const index = mockNotificationStore.findIndex((n) => n.id === id);
+      if (index < 0) return { success: false, notificationId: id };
+      mockNotificationStore.splice(index, 1);
+      fanOut?.('NotificationClosed', { notificationId: id });
+      return { success: true, notificationId: id };
+    }
+    case 'closeAll': {
+      const ids = mockNotificationStore.splice(0).map((n) => String(n.id));
+      ids.forEach((id) => fanOut?.('NotificationClosed', { notificationId: id }));
+      return { success: true, closed: ids.length };
+    }
+    default:
+      return { success: false, error: `mock notification service has no '${method}'` };
+  }
 }
 
 // ---------- Client ----------

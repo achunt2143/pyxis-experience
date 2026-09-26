@@ -9,19 +9,23 @@ import {
   ListHeader,
   Repanel,
   RepanelStack,
+  Slider,
   Subheader,
   Toggle,
   Badge,
   Dialog,
   useTheme,
 } from 'remochi';
-import { Moon, Power, RotateCcw } from 'lucide-react';
+import { Moon, Power, RotateCcw, Volume2, VolumeX } from 'lucide-react';
 import {
   useEcho,
   getSetting,
   setSetting,
   SETTING_KEYS,
   WALLPAPERS,
+  playSystemSound,
+  useAudioOutputs,
+  useOutputVolume,
 } from '@pyxis/app-sdk';
 
 /**
@@ -46,6 +50,7 @@ export interface SettingsAppProps {
 
 const SECTIONS = [
   { id: 'appearance', label: 'Appearance' },
+  { id: 'sound', label: 'Sound' },
   { id: 'network', label: 'Network' },
   { id: 'system', label: 'System' },
   { id: 'about', label: 'About' },
@@ -71,6 +76,8 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
   const [wallpaper, setWallpaper] = useState<string>(WALLPAPERS[0].id);
   const { theme } = useTheme();
   const echo = useEcho();
+  const { volume, muted, changeVolume, toggleMute } = useOutputVolume(section === 'sound');
+  const { outputs, choose: chooseOutput } = useAudioOutputs(section === 'sound');
   const [network, setNetwork] = useState<{
     connected: boolean;
     ssid: string;
@@ -234,6 +241,65 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
           </>
         )}
 
+        {section === 'sound' && (
+          <>
+            <Header content="Sound" />
+            {volume === null ? (
+              <Subheader content="No audio output is available." />
+            ) : (
+              <>
+                <Subheader content="Output volume" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, maxWidth: 440 }}>
+                  <button
+                    type="button"
+                    onClick={toggleMute}
+                    title={muted ? 'Unmute' : 'Mute'}
+                    aria-label={muted ? 'Unmute' : 'Mute'}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      padding: 0,
+                      cursor: 'pointer',
+                      color: 'var(--color-text-secondary)',
+                      display: 'flex',
+                    }}
+                  >
+                    {muted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                  </button>
+                  <div style={{ flex: 1 }}>
+                    <Slider value={volume} min={0} max={100} width="100%" onChange={changeVolume} />
+                  </div>
+                  <span style={{ minWidth: 48, textAlign: 'right', fontSize: 13, color: 'var(--color-text-secondary)' }}>
+                    {muted ? 'Muted' : `${volume}%`}
+                  </span>
+                </div>
+                <Divider />
+                <Subheader content="Output device" />
+                <List>
+                  {outputs.map((output) => (
+                    <Item
+                      key={output.id}
+                      title={output.description}
+                      subtitle={output.name}
+                      selected={output.isDefault}
+                      hoverable
+                      onClick={() => void chooseOutput(output.id)}
+                      rightContent={
+                        output.isDefault ? (
+                          <Badge content="in use" background="var(--color-primary)" color="#fff" />
+                        ) : null
+                      }
+                    />
+                  ))}
+                </List>
+                <div style={{ marginTop: 16 }}>
+                  <Button onClick={() => void playSystemSound('notification')}>Play test sound</Button>
+                </div>
+              </>
+            )}
+          </>
+        )}
+
         {section === 'network' && (
           <>
             <Header content="Network" />
@@ -278,7 +344,7 @@ export const SettingsApp: React.FC<SettingsAppProps> = ({ windowId }) => {
               />
             </div>
             <div style={{ marginTop: 16 }}>
-              <Button disabled content="Check for updates" />
+              <Button disabled>Check for updates</Button>
             </div>
             <Divider />
             <Subheader content="Power & Session" />

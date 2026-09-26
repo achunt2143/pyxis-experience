@@ -6,6 +6,9 @@ import { useApps } from '../hooks/useApps';
 import { IN_COMPOSITOR } from '../utils/environment';
 import { TopSystemBar } from './TopSystemBar';
 import { QuickSettingsMenu } from './QuickSettingsMenu';
+import { NotificationCenter } from './NotificationCenter';
+import { NotificationToasts } from './NotificationToasts';
+import { useNotifications } from '../hooks/useNotifications';
 import { LeftLauncher } from './LeftLauncher';
 import AppDrawer from './AppDrawer';
 import BottomDock from './BottomDock';
@@ -17,6 +20,7 @@ import {
   onSettingChange,
   SETTING_KEYS,
   WALLPAPERS as WALLPAPER_DEFS,
+  playSystemSound,
 } from '@pyxis/app-sdk';
 
 const WALLPAPERS: Record<string, string> = Object.fromEntries(
@@ -47,7 +51,13 @@ export const Desktop: React.FC = () => {
   const { byId: appsById } = useApps();
 
   const [wallpaper, setWallpaper] = useState<string>(DEFAULT_WALLPAPER);
-  const [launchError, setLaunchError] = useState<string | null>(null);
+  const [launchError, setLaunchErrorState] = useState<string | null>(null);
+  // Every error dialog is announced with the system error sound. Clearing
+  // the dialog (null) is silent.
+  const setLaunchError = (message: string | null) => {
+    setLaunchErrorState(message);
+    if (message) void playSystemSound('error');
+  };
 
   // Launch an app for real via Nova (single-instance raise-if-running or
   // spawn) — the only thing that happens on IN_COMPOSITOR launch. Bloom
@@ -111,9 +121,13 @@ export const Desktop: React.FC = () => {
     }
   };
 
-  // Desktop Quick Settings and App Drawer popovers
+  // Desktop Quick Settings, notification centre and App Drawer popovers.
+  // Quick settings and the centre share the top-right corner, so opening
+  // one closes the other.
   const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [appDrawerOpen, setAppDrawerOpen] = useState(false);
+  const notificationCenter = useNotifications();
 
   // Wallpaper preference lives in the org.geckoOS.settings service; the
   // Settings app (a separate process) broadcasts changes on the settings bus.
@@ -149,6 +163,15 @@ export const Desktop: React.FC = () => {
           launchApp(appId, appsById(appId)?.name ?? appId);
         }}
       />
+
+      <NotificationCenter
+        isOpen={notificationsOpen}
+        onOpenChange={setNotificationsOpen}
+        notifications={notificationCenter.notifications}
+        onDismiss={(id) => void notificationCenter.dismiss(id)}
+        onClearAll={() => void notificationCenter.clearAll()}
+      />
+      {!notificationsOpen && <NotificationToasts />}
 
       {/* App Drawer — desktop application launcher popover card */}
       <AppDrawer
@@ -188,7 +211,16 @@ export const Desktop: React.FC = () => {
         {/* Top System Bar */}
         <TopSystemBar
           quickSettingsOpen={quickSettingsOpen}
-          onToggleQuickSettings={() => setQuickSettingsOpen((open) => !open)}
+          onToggleQuickSettings={() => {
+            setNotificationsOpen(false);
+            setQuickSettingsOpen((open) => !open);
+          }}
+          notificationsOpen={notificationsOpen}
+          onToggleNotifications={() => {
+            setQuickSettingsOpen(false);
+            setNotificationsOpen((open) => !open);
+          }}
+          notificationCount={notificationCenter.notifications.length}
           onLaunchApp={launchApp}
         />
 

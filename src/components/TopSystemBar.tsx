@@ -28,6 +28,10 @@ const formatClock = () =>
 interface TopSystemBarProps {
   quickSettingsOpen: boolean;
   onToggleQuickSettings: () => void;
+  notificationsOpen: boolean;
+  onToggleNotifications: () => void;
+  /** Entries in the notification centre, for the Bell's badge. */
+  notificationCount: number;
   onLaunchApp: (appId: string, name: string) => void;
 }
 
@@ -39,6 +43,9 @@ interface TopSystemBarProps {
 export const TopSystemBar: React.FC<TopSystemBarProps> = ({
   quickSettingsOpen,
   onToggleQuickSettings,
+  notificationsOpen,
+  onToggleNotifications,
+  notificationCount,
   onLaunchApp,
 }) => {
   const battery = useBatteryStatus();
@@ -131,26 +138,53 @@ export const TopSystemBar: React.FC<TopSystemBarProps> = ({
                 transform: 'scale(-1, -1)',
               }}
             >
+              {/* The Bell opens the notification centre. It used to open quick
+                  settings, just like the gear beside it. */}
               <motion.button
                 type="button"
-                onClick={onToggleQuickSettings}
+                onClick={onToggleNotifications}
                 whileHover={{ scale: 1.08 }}
                 whileTap={{ scale: 0.92 }}
                 style={{
-                  background: quickSettingsOpen ? 'var(--mochi-primary-soft)' : 'transparent',
-                  border: quickSettingsOpen ? '1px solid var(--color-primary)' : '1px solid transparent',
+                  position: 'relative',
+                  background: notificationsOpen ? 'var(--mochi-primary-soft)' : 'transparent',
+                  border: notificationsOpen ? '1px solid var(--color-primary)' : '1px solid transparent',
                   padding: '6px',
                   borderRadius: '10px',
                   cursor: 'pointer',
-                  color: quickSettingsOpen ? 'var(--color-primary)' : 'var(--color-text)',
+                  color: notificationsOpen ? 'var(--color-primary)' : 'var(--color-text)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   transition: 'color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease',
                 }}
-                aria-label="Notifications"
+                aria-label={
+                  notificationCount > 0 ? `Notifications (${notificationCount})` : 'Notifications'
+                }
               >
                 <Bell size={18} />
+                {notificationCount > 0 && (
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute',
+                      top: 1,
+                      right: 1,
+                      minWidth: 14,
+                      height: 14,
+                      padding: '0 3px',
+                      borderRadius: 7,
+                      background: 'var(--color-primary)',
+                      color: '#fff',
+                      fontSize: '0.6rem',
+                      fontWeight: 700,
+                      lineHeight: '14px',
+                      textAlign: 'center',
+                    }}
+                  >
+                    {notificationCount > 9 ? '9+' : notificationCount}
+                  </span>
+                )}
               </motion.button>
 
               <motion.button

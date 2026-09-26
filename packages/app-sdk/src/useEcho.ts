@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import echoClient from './EchoClient';
+import {
+  showNotification,
+  listNotifications,
+  dismissNotification,
+  clearNotifications,
+} from './notifications';
 import type {
   AppHostAppEntry,
   AppLifecycleState,
@@ -44,13 +50,6 @@ export interface LaunchResult {
   raised: boolean;
 }
 
-export interface NotificationEntry {
-  id: string;
-  title: string;
-  body: string;
-  timestamp: number;
-}
-
 // Service-name strings must exactly match what echo/src/bin/daemon.rs
 // registers (`org.geckoOS.<service>`) — the native bridge builds the Echo
 // destination as `org.geckoOS.${service}` verbatim, with no case-folding.
@@ -78,8 +77,6 @@ export const NOVA_SIGNALS = {
 } as const;
 const POWER_IFACE = 'org.geckoOS.power';
 const NETWORK_IFACE = 'org.geckoOS.network';
-const NOTIF_SERVICE = 'notification';
-const NOTIF_IFACE = 'org.geckoOS.notification';
 const TERMINAL_SERVICE = 'terminal';
 export const TERMINAL_IFACE = 'org.geckoOS.terminal';
 export const TERMINAL_SIGNALS = {
@@ -240,26 +237,12 @@ export function useEcho() {
         return res ?? null;
       },
 
-      async getNotifications(): Promise<NotificationEntry[]> {
-        const res = (await echoClient.callMethod(
-          NOTIF_SERVICE,
-          NOTIF_IFACE,
-          'list',
-          {}
-        )) as NotificationEntry[] | { notifications?: NotificationEntry[] } | undefined;
-        if (Array.isArray(res)) return res;
-        return res?.notifications ?? [];
-      },
+      // ---------- Notifications (see notifications.ts) ----------
 
-      async dismissNotification(id: string): Promise<boolean> {
-        const res = (await echoClient.callMethod(
-          NOTIF_SERVICE,
-          NOTIF_IFACE,
-          'close',
-          { notificationId: id }
-        )) as { success?: boolean } | undefined;
-        return res?.success ?? true;
-      },
+      showNotification,
+      getNotifications: listNotifications,
+      dismissNotification,
+      clearNotifications,
 
       // ---------- Nova (app registry) ----------
 
