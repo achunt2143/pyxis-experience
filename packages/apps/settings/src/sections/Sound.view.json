@@ -1,0 +1,30 @@
+{
+  "name": "Settings.Sound",
+  "kind": "pyxis.Control",
+  "published": { "audioState": null, "volume": null, "muted": false, "outputList": [] },
+  "components": [
+    { "kind": "Settings.Groupbox", "title": "Master volume", "glyph": "Volume2", "glyphColor": "#3b82f6", "components": [
+      { "name": "noAudio", "kind": "remochi.Subheader", "content": "No audio output is available.", "showing": false },
+      { "name": "controls", "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:12px", "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:12px", "components": [
+          { "name": "mute", "kind": "pyxis.Control", "tag": "button", "classes": "st-mute", "ontap": "toggleMute", "components": [
+            { "name": "muteIcon", "kind": "pyxis.Icon", "icon": "Volume2", "size": 20 }
+          ] },
+          { "kind": "pyxis.Control", "style": "flex:1", "components": [
+            { "name": "slider", "kind": "remochi.Slider", "min": 0, "max": 100, "width": "100%", "onChange": "volumeMoved" }
+          ] },
+          { "name": "level", "kind": "pyxis.Control", "tag": "span", "style": "min-width:48px;text-align:right;font-size:0.82rem;font-weight:600" }
+        ] },
+        { "kind": "pyxis.Control", "style": "display:flex;justify-content:flex-end", "components": [
+          { "kind": "remochi.Button", "ontap": "playTone", "components": [
+            { "kind": "pyxis.Icon", "icon": "Play", "size": 13, "style": "margin-right:6px;vertical-align:middle" },
+            { "kind": "pyxis.Control", "tag": "span", "content": "Play Test Tone" }
+          ] }
+        ] }
+      ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Output device", "glyph": "Sparkles", "glyphColor": "#3b82f6", "components": [
+      { "name": "outputs", "kind": "pyxis.Repeater", "itemKind": "Settings.OutputRow", "keyField": "id", "itemProps": { "ontap": "pickOutput" }, "style": "display:flex;flex-direction:column;gap:6px" }
+    ] }
+  ]
+}

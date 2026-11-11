@@ -1,0 +1,44 @@
+{
+  "name": "Installer.App",
+  "kind": "pyxis.Control",
+  "style": "width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-background, #f9fafb);overflow:hidden;min-height:0",
+  "published": { "windowId": "", "installer": null, "mode": "wizard", "selected": null, "launched": false, "removing": null },
+  "events": { "onClose": "" },
+  "components": [
+    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:var(--color-surface, #ffffff);border-bottom:1px solid var(--color-border-light, #e5e7eb);flex-shrink:0", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;gap:6px", "components": [
+        { "name": "tabWizard", "kind": "pyxis.Control", "tag": "button", "classes": "inst-tab active", "ontap": "tapWizard", "components": [
+          { "kind": "pyxis.Icon", "icon": "Package", "size": 13 },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Install Package (.ipk)" }
+        ] },
+        { "name": "tabInstalled", "kind": "pyxis.Control", "tag": "button", "classes": "inst-tab", "ontap": "tapInstalled", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "Installed Applications" },
+          { "name": "installedCount", "kind": "pyxis.Control", "tag": "span", "classes": "inst-tab-count", "content": "0" }
+        ] }
+      ] },
+      { "name": "rescan", "kind": "remochi.Button", "variant": "normal", "ontap": "rescan", "components": [
+        { "kind": "pyxis.Icon", "icon": "RefreshCw", "size": 13, "style": "vertical-align:middle;margin-right:4px" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "Rescan", "style": "font-size:11px" }
+      ] }
+    ] },
+    { "name": "wizardBody", "kind": "pyxis.Control", "style": "flex:1;overflow:auto;padding:16px;min-height:0", "components": [
+      { "name": "wizard", "kind": "remochi.Wizard", "showStepNumbers": true, "onComplete": "closeApp", "onCancel": "closeApp", "onStepChange": "wizardStepped", "components": [
+        { "kind": "remochi.WizardStep", "label": "Choose", "title": "Choose a package", "description": "Select an .ipk package to install.", "onNext": "guardNext", "components": [
+          { "name": "choose", "kind": "Installer.Choose", "onRescan": "rescan", "onPick": "pickPackage" }
+        ] },
+        { "kind": "remochi.WizardStep", "label": "Review", "title": "Review details", "description": "Check package specifications and requested permissions.", "onNext": "guardNext", "components": [
+          { "name": "review", "kind": "Installer.Review" }
+        ] },
+        { "kind": "remochi.WizardStep", "label": "Install", "title": "Installing", "description": "Running opkg and registering with Pyxis desktop.", "onNext": "guardNext", "components": [
+          { "name": "install", "kind": "Installer.Install" }
+        ] },
+        { "kind": "remochi.WizardStep", "label": "Done", "title": "Installation complete", "components": [
+          { "name": "done", "kind": "Installer.Done", "onOpen": "launchFromDone", "onAgain": "startOver" }
+        ] }
+      ] }
+    ] },
+    { "name": "installedBody", "kind": "pyxis.Control", "showing": false, "style": "flex:1;overflow:auto;padding:16px;min-height:0", "components": [
+      { "name": "installedPane", "kind": "Installer.Installed", "onLaunch": "launchInstalled", "onRemove": "removePackage" }
+    ] }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "Browser.Pill",
+  "kind": "pyxis.Row",
+  "tag": "button",
+  "classes": "br-pill",
+  "published": { "active": false },
+  "components": [
+    { "name": "label", "kind": "pyxis.Control", "tag": "span" },
+    { "name": "count", "kind": "pyxis.Control", "tag": "span", "classes": "br-pill-count" }
+  ]
+}

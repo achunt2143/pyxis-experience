@@ -1,0 +1,13 @@
+{
+  "name": "Settings.Field",
+  "kind": "pyxis.Control",
+  "tag": "label",
+  "style": "display:flex;flex-direction:column;gap:4px;min-width:0",
+  "published": { "label": "", "placeholder": "", "field": "", "error": "", "text": "" },
+  "events": { "onEnter": "", "onText": "" },
+  "components": [
+    { "name": "caption", "kind": "pyxis.Control", "tag": "span", "classes": "st-field-label" },
+    { "name": "input", "kind": "pyxis.Control", "tag": "input", "classes": "st-input", "oninput": "typed", "onkeydown": "keyed" },
+    { "name": "message", "kind": "pyxis.Control", "tag": "span", "classes": "st-error", "showing": false, "style": "font-size:0.74rem" }
+  ]
+}

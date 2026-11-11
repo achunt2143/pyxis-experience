@@ -1,0 +1,80 @@
+{
+  "name": "Files.Inspector",
+  "kind": "pyxis.Control",
+  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-height:0",
+  "published": { "preview": null, "copiedPath": false, "copiedText": false },
+  "events": { "onClosePreview": "", "onRenameEntry": "", "onDeleteEntry": "" },
+  "components": [
+    { "name": "header", "kind": "remochi.Header", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px", "components": [
+        { "name": "badge", "kind": "remochi.Badge" },
+        { "name": "closeButton", "kind": "remochi.Button", "ontap": "close", "components": [
+          { "kind": "pyxis.Icon", "icon": "X", "size": 14 }
+        ] }
+      ] }
+    ] },
+    { "kind": "pyxis.Control", "style": "flex:1;overflow-y:auto;min-height:0;padding:14px", "components": [
+      { "name": "loading", "kind": "pyxis.Control", "style": "display:flex;justify-content:center;padding:32px", "components": [
+        { "kind": "remochi.Spinner", "active": true, "size": "normal" }
+      ] },
+      { "name": "imageBox", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--mochi-hover, rgba(0,0,0,0.03));border-radius:12px;padding:12px;border:1px solid var(--color-border, var(--mochi-border, #e5e7eb));margin-bottom:14px", "components": [
+        { "name": "image", "kind": "pyxis.Control", "tag": "img", "style": "max-width:100%;max-height:220px;object-fit:contain;border-radius:8px" }
+      ] },
+      { "name": "textBox", "kind": "pyxis.Control", "showing": false, "style": "margin-bottom:14px", "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;justify-content:space-between;margin-bottom:6px;font-size:0.75rem;color:var(--color-text-secondary, #64748b)", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "TEXT PREVIEW" },
+          { "kind": "pyxis.Control", "tag": "button", "classes": "files-link", "ontap": "copyText", "style": "font-size:0.72rem", "components": [
+            { "name": "textIcon", "kind": "pyxis.Icon", "icon": "Copy", "size": 12 },
+            { "name": "textLabel", "kind": "pyxis.Control", "tag": "span", "content": "Copy" }
+          ] }
+        ] },
+        { "name": "text", "kind": "pyxis.Control", "tag": "pre", "classes": "files-text" }
+      ] },
+      { "name": "audioBox", "kind": "pyxis.Control", "showing": false, "style": "padding:24px 12px;text-align:center;background:var(--mochi-hover, rgba(0,0,0,0.03));border-radius:12px;border:1px solid var(--color-border, var(--mochi-border, #e5e7eb));margin-bottom:14px", "components": [
+        { "kind": "pyxis.Icon", "icon": "Music", "size": 40, "color": "#9333ea", "style": "margin-bottom:8px" },
+        { "kind": "pyxis.Control", "content": "Audio File", "style": "font-size:0.82rem;font-weight:600" },
+        { "name": "audioSize", "kind": "pyxis.Control", "style": "font-size:0.75rem;color:var(--color-text-secondary, #64748b)" }
+      ] },
+      { "name": "metaBox", "kind": "pyxis.Control", "showing": false, "style": "padding:20px 12px;text-align:center;background:var(--mochi-hover, rgba(0,0,0,0.03));border-radius:12px;border:1px solid var(--color-border, var(--mochi-border, #e5e7eb));margin-bottom:14px", "components": [
+        { "kind": "pyxis.Icon", "icon": "File", "size": 36, "style": "opacity:0.5;margin-bottom:6px" },
+        { "name": "metaText", "kind": "pyxis.Control", "style": "font-size:0.82rem;font-weight:500" }
+      ] },
+      { "kind": "remochi.NubbinDivider", "orientation": "horizontal", "nubbin": "up" },
+      { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:10px;margin-top:14px", "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:3px", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "FULL PATH", "classes": "files-label" },
+          { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px;background:var(--mochi-hover, rgba(0,0,0,0.03));padding:6px 8px;border-radius:8px;font-size:0.75rem;word-break:break-all", "components": [
+            { "name": "path", "kind": "pyxis.Control", "tag": "span", "style": "flex:1" },
+            { "kind": "pyxis.Control", "tag": "button", "classes": "files-link", "ontap": "copyPath", "attributes": { "title": "Copy Path" }, "components": [
+              { "name": "pathIcon", "kind": "pyxis.Icon", "icon": "Copy", "size": 14 }
+            ] }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "style": "display:grid;grid-template-columns:1fr 1fr;gap:8px", "components": [
+          { "kind": "pyxis.Control", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "content": "SIZE", "classes": "files-label" },
+            { "name": "size", "kind": "pyxis.Control", "style": "font-size:0.8rem;margin-top:2px" }
+          ] },
+          { "kind": "pyxis.Control", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "content": "PERMISSIONS", "classes": "files-label" },
+            { "name": "permissions", "kind": "pyxis.Control", "style": "font-size:0.8rem;margin-top:2px;font-family:monospace" }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "LAST MODIFIED", "classes": "files-label" },
+          { "name": "modified", "kind": "pyxis.Control", "style": "font-size:0.8rem;margin-top:2px" }
+        ] }
+      ] }
+    ] },
+    { "name": "actions", "kind": "pyxis.Control", "style": "padding:12px 14px;border-top:1px solid var(--color-border, var(--mochi-border, #e5e7eb));display:flex;gap:8px;justify-content:flex-end;background:var(--mochi-hover, rgba(0,0,0,0.02))", "components": [
+      { "kind": "remochi.Button", "ontap": "rename", "components": [
+        { "kind": "pyxis.Icon", "icon": "Edit3", "size": 14, "style": "margin-right:4px;vertical-align:middle" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "Rename" }
+      ] },
+      { "kind": "remochi.Button", "variant": "warning", "ontap": "remove", "components": [
+        { "kind": "pyxis.Icon", "icon": "Trash2", "size": 14, "style": "margin-right:4px;vertical-align:middle" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "Delete" }
+      ] }
+    ] }
+  ]
+}

@@ -1,0 +1,76 @@
+{
+  "name": "Notes.Editor",
+  "kind": "pyxis.Control",
+  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-width:0;min-height:0",
+  "published": { "note": null, "loaded": false, "saveStatus": "saved", "copied": false },
+  "events": { "onEdit": "", "onDeleteNote": "" },
+  "components": [
+    { "name": "empty", "kind": "pyxis.Control", "style": "flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--color-text-muted, #9ca3af);gap:8px", "components": [
+      { "kind": "pyxis.Icon", "icon": "FileText", "size": 36, "strokeWidth": 1.5, "color": "var(--color-border, #d1d5db)" },
+      { "name": "emptyText", "kind": "pyxis.Control", "tag": "span", "style": "font-size:13px" }
+    ] },
+    { "name": "pane", "kind": "pyxis.Control", "showing": false, "style": "flex:1;display:flex;flex-direction:column;min-width:0;min-height:0", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;gap:8px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--color-border-light, #e5e7eb);background:var(--color-surface, #ffffff)", "components": [
+        { "name": "title", "kind": "remochi.Input", "placeholder": "Note title", "width": "100%", "classes": "notes-title-input", "style": "display:block;flex:1;min-width:0", "oninput": "titleInput" },
+        { "kind": "pyxis.Control", "style": "width:120px", "components": [
+          { "name": "category", "kind": "remochi.Dropdown", "onChange": "categoryPicked", "options": [
+            { "value": "General", "label": "General" },
+            { "value": "Personal", "label": "Personal" },
+            { "value": "Work", "label": "Work" },
+            { "value": "Ideas", "label": "Ideas" }
+          ] }
+        ] },
+        { "name": "pinWrap", "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Pin Note to Top" }, "components": [
+          { "name": "pinButton", "kind": "remochi.Button", "ontap": "togglePin", "components": [
+            { "name": "pinIcon", "kind": "pyxis.Icon", "icon": "Pin", "size": 15, "style": "vertical-align:middle" }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Copy Note Content" }, "components": [
+          { "kind": "remochi.Button", "ontap": "copy", "components": [
+            { "name": "copyIcon", "kind": "pyxis.Icon", "icon": "Copy", "size": 15, "style": "vertical-align:middle" }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Export Note as Markdown (.md)" }, "components": [
+          { "kind": "remochi.Button", "ontap": "exportIt", "components": [
+            { "kind": "pyxis.Icon", "icon": "Share2", "size": 15, "style": "vertical-align:middle" }
+          ] }
+        ] },
+        { "name": "confirmGroup", "kind": "pyxis.Control", "showing": false, "style": "display:inline-flex;align-items:center;gap:4px", "components": [
+          { "kind": "remochi.Button", "variant": "warning", "ontap": "confirmDelete", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "content": "Confirm", "style": "font-size:11px;font-weight:700" }
+          ] },
+          { "kind": "remochi.Button", "ontap": "cancelDelete", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "content": "Cancel", "style": "font-size:11px" }
+          ] }
+        ] },
+        { "name": "trashWrap", "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Delete Note" }, "components": [
+          { "kind": "remochi.Button", "ontap": "askDelete", "components": [
+            { "kind": "pyxis.Icon", "icon": "Trash2", "size": 15, "style": "vertical-align:middle" }
+          ] }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "style": "flex:1;min-height:0;padding:16px;display:flex", "components": [
+        { "name": "body", "kind": "remochi.TextArea", "placeholder": "Start writing thoughts, memos, or markdown notes…", "classes": "pyxis-notes-body", "minHeight": 200, "oninput": "bodyInput" }
+      ] },
+      { "kind": "pyxis.Control", "style": "padding:8px 16px;font-size:12px;color:var(--color-text-muted, #6b7280);border-top:1px solid var(--color-border-light, #e5e7eb);display:flex;justify-content:space-between;align-items:center;background:var(--color-surface, #ffffff)", "components": [
+        { "kind": "pyxis.Control", "components": [
+          { "name": "saving", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:center;gap:6px", "components": [
+            { "kind": "remochi.Spinner", "styleType": "light", "size": "normal" },
+            { "kind": "pyxis.Control", "tag": "span", "content": "Saving…", "style": "font-size:12px;color:var(--color-text-muted)" }
+          ] },
+          { "name": "saved", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px", "components": [
+            { "kind": "pyxis.Icon", "icon": "CircleCheck", "size": 13, "color": "#10b981" },
+            { "kind": "pyxis.Control", "tag": "span", "content": "Saved to Pyxis PIM storage", "style": "font-size:12px;color:var(--color-text-muted)" }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:14px", "components": [
+          { "name": "edited", "kind": "pyxis.Control", "tag": "span" },
+          { "kind": "pyxis.Control", "tag": "span", "style": "display:inline-flex;align-items:center;gap:4px", "components": [
+            { "kind": "pyxis.Icon", "icon": "FileText", "size": 12, "style": "vertical-align:middle" },
+            { "name": "stats", "kind": "pyxis.Control", "tag": "span" }
+          ] }
+        ] }
+      ] }
+    ] }
+  ]
+}

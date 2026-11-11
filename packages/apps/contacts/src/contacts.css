@@ -1,0 +1,87 @@
+/* Contacts: what a Duyo `style` string cannot say (library internals, state classes). */
+.contacts-search input {
+  height: 34px;
+  font-size: 0.84rem;
+}
+.contacts-name-input input {
+  font-size: 1.25rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 2px 4px;
+}
+.contacts-pill {
+  border: 1px solid;
+  border-radius: 14px;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+}
+.contacts-pill-count {
+  font-size: 0.68rem;
+  border-radius: 10px;
+  padding: 1px 5px;
+}
+.contacts-card,
+.contacts-group {
+  background: var(--color-surface, var(--mochi-surface, #ffffff));
+  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+}
+.contacts-group {
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.contacts-group-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #64748b);
+}
+.contacts-label {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary, #64748b);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.contacts-avatar-big {
+  width: 68px;
+  height: 68px;
+  border-radius: 30px 4px 30px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 26px;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+.contacts-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: var(--color-text, #334155);
+  background: var(--color-surface, var(--mochi-surface, #ffffff));
+  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  border-radius: 12px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.contacts-link {
+  color: var(--mochi-primary, #2f6fed);
+  text-decoration: none;
+  font-weight: 500;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}

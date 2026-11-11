@@ -1,0 +1,13 @@
+{
+  "name": "Settings.Fact",
+  "kind": "pyxis.Row",
+  "classes": "st-fact",
+  "published": { "label": "", "text": "", "mono": false, "glyph": "" },
+  "components": [
+    { "kind": "pyxis.Control", "tag": "span", "classes": "st-fact-label", "components": [
+      { "name": "icon", "kind": "pyxis.Icon", "size": 13, "showing": false },
+      { "name": "labelText", "kind": "pyxis.Control", "tag": "span" }
+    ] },
+    { "name": "valueText", "kind": "pyxis.Control", "tag": "span", "classes": "st-fact-value" }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "name": "Installer.Review",
+  "kind": "pyxis.Control",
+  "published": { "info": {} },
+  "components": [
+    { "name": "none", "kind": "pyxis.Control", "style": "opacity:0.7", "content": "Select a package on the previous step." },
+    { "name": "content", "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:14px", "showing": false, "components": [
+      { "kind": "pyxis.Control", "classes": "inst-card", "style": "display:flex;align-items:center;gap:14px;padding:14px", "components": [
+        { "kind": "pyxis.Control", "style": "width:52px;height:52px;border-radius:24px 8px 24px 24px;background:linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;box-shadow:0 4px 12px rgba(59, 130, 246, 0.3);flex-shrink:0", "components": [
+          { "name": "letter", "kind": "pyxis.Control", "tag": "span" },
+          { "name": "glyph", "kind": "pyxis.Icon", "icon": "Package", "size": 26, "showing": false }
+        ] },
+        { "kind": "pyxis.Control", "style": "flex:1;min-width:0", "components": [
+          { "name": "title", "kind": "pyxis.Control", "style": "font-size:18px;font-weight:700;color:var(--color-text, #111827)" },
+          { "name": "vendor", "kind": "pyxis.Control", "style": "font-size:13px;color:var(--color-text-secondary, #6b7280);margin-top:2px" },
+          { "kind": "pyxis.Control", "style": "display:flex;gap:6px;margin-top:6px;flex-wrap:wrap", "components": [
+            { "name": "version", "kind": "remochi.Badge", "background": "#3b82f6", "color": "#fff" },
+            { "name": "arch", "kind": "remochi.Badge" },
+            { "name": "appType", "kind": "remochi.Badge", "showing": false },
+            { "name": "size", "kind": "remochi.Badge" }
+          ] }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "classes": "inst-card", "style": "overflow:hidden", "components": [
+        { "kind": "pyxis.Control", "style": "padding:10px 14px;background:var(--color-surface-hover, #f8fafc);border-bottom:1px solid var(--color-border-light, #f1f3f5);font-size:12px;font-weight:700;color:var(--color-text-secondary, #6b7280)", "content": "PACKAGE SPECIFICATIONS" },
+        { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column", "components": [
+          { "kind": "pyxis.Control", "classes": "inst-spec-row", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text-secondary, #6b7280);font-weight:500", "content": "Identifier" },
+            { "name": "identifier", "kind": "pyxis.Control", "tag": "code", "style": "color:var(--color-text, #111827)" }
+          ] },
+          { "kind": "pyxis.Control", "classes": "inst-spec-row", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text-secondary, #6b7280);font-weight:500", "content": "Version Status" },
+            { "name": "versionStatus", "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text, #111827)" }
+          ] },
+          { "kind": "pyxis.Control", "classes": "inst-spec-row", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text-secondary, #6b7280);font-weight:500", "content": "Installed Size" },
+            { "name": "installedSize", "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text, #111827)" }
+          ] },
+          { "kind": "pyxis.Control", "classes": "inst-spec-row", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text-secondary, #6b7280);font-weight:500", "content": "Architecture" },
+            { "name": "architecture", "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text, #111827)" }
+          ] },
+          { "kind": "pyxis.Control", "classes": "inst-spec-row", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "style": "color:var(--color-text-secondary, #6b7280);font-weight:500", "content": "Source File" },
+            { "name": "source", "kind": "pyxis.Control", "tag": "code", "style": "font-size:11px;word-break:break-all;color:var(--color-text, #111827)" }
+          ] }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "classes": "inst-card", "style": "padding:14px", "components": [
+        { "kind": "pyxis.Control", "style": "font-size:12px;font-weight:700;color:var(--color-text-secondary, #6b7280);margin-bottom:8px", "content": "REQUESTED PERMISSIONS" },
+        { "name": "noPerms", "kind": "pyxis.Control", "style": "font-size:13px;color:var(--color-text-muted, #9ca3af)", "content": "No extra permissions requested." },
+        { "name": "perms", "kind": "pyxis.Repeater", "itemKind": "Installer.Perm", "keyField": "", "style": "display:flex;flex-wrap:wrap;gap:6px", "showing": false },
+        { "name": "permNote", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:flex-start;gap:6px;margin-top:10px;font-size:12px;color:var(--color-text-muted, #6b7280)", "components": [
+          { "kind": "pyxis.Icon", "icon": "ShieldAlert", "size": 14, "style": "flex-shrink:0;margin-top:1px;color:#f59e0b" },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Some requested permissions have no runtime enforcement and are recorded for the app registry only." }
+        ] }
+      ] },
+      { "name": "downgrade", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:flex-start;gap:8px;padding:12px;border-radius:8px;background:rgba(245, 158, 11, 0.1);border:1px solid rgba(245, 158, 11, 0.3);color:#b45309;font-size:13px", "components": [
+        { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16, "style": "flex-shrink:0;margin-top:1px" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "This installs an older version than the one already present. App data is not migrated backwards." }
+      ] }
+    ] }
+  ]
+}

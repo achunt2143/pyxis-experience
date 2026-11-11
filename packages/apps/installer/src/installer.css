@@ -1,0 +1,91 @@
+/* Installer: what a Duyo `style` string cannot say (hover/selected states, a library's
+   inner elements) and the fixed look of rows whose dynamic look is set from code. */
+
+.inst-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #374151);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.inst-tab.active {
+  border-color: var(--mochi-color-blue, #3b82f6);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--mochi-color-blue, #2563eb);
+  font-weight: 600;
+}
+.inst-tab-count {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--color-surface-hover, #f3f4f6);
+  padding: 1px 6px;
+  border-radius: 10px;
+  opacity: 0.6;
+}
+.inst-tab.active .inst-tab-count {
+  background: rgba(0, 0, 0, 0.08);
+  opacity: 1;
+}
+
+.inst-card {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-light, #e5e7eb);
+  border-radius: 12px;
+}
+
+/* A package in the chooser. */
+.inst-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-light, #e5e7eb);
+  border-radius: 10px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.inst-row.selected {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: var(--mochi-color-blue, #3b82f6);
+}
+.inst-row-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 14px 4px 14px 14px;
+  background: var(--color-surface-hover, #f3f4f6);
+  color: var(--color-text-secondary, #6b7280);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.inst-row.selected .inst-row-icon {
+  background: #3b82f6;
+  color: #ffffff;
+}
+
+/* The review step's spec rows: a rule between rows. */
+.inst-spec-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+.inst-spec-row + .inst-spec-row {
+  border-top: 1px solid var(--color-border-light, #f1f3f5);
+}
+
+/* The search icon sits over the field's left edge. */
+.inst-search input {
+  padding-left: 30px;
+}

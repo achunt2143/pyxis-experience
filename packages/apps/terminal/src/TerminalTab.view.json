@@ -1,0 +1,15 @@
+{
+  "name": "Terminal.Tab",
+  "kind": "pyxis.Row",
+  "classes": "term-tab",
+  "published": { "active": false, "closable": false },
+  "events": { "onCloseTab": "" },
+  "components": [
+    { "kind": "pyxis.Control", "tag": "span", "classes": "term-tab-dot" },
+    { "name": "title", "kind": "pyxis.Control", "tag": "span" },
+    { "name": "close", "kind": "pyxis.Control", "tag": "span", "classes": "term-tab-close", "showing": false,
+      "attributes": { "role": "button", "title": "Close tab" }, "ontap": "closeClicked", "components": [
+      { "kind": "pyxis.Icon", "icon": "X", "size": 10 }
+    ] }
+  ]
+}

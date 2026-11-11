@@ -1,0 +1,30 @@
+{
+  "name": "Settings.About",
+  "kind": "pyxis.Control",
+  "published": { "infoState": "asking", "info": null },
+  "components": [
+    { "kind": "Settings.Groupbox", "title": "System specifications", "glyph": "Info", "glyphColor": "#06b6d4", "group": "about", "components": [
+      { "name": "asking", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;padding:12px 0", "components": [
+        { "kind": "remochi.Spinner", "styleType": "light", "size": "normal" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "Asking the system…", "style": "font-size:0.82rem;color:var(--color-text-secondary)" }
+      ] },
+      { "name": "answer", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;gap:8px", "components": [
+        { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Settings.Fact", "keyField": "key", "style": "display:flex;flex-direction:column;gap:8px" },
+        { "name": "failed", "kind": "pyxis.Control", "classes": "st-secondary", "content": "The system service didn't answer.", "showing": false }
+      ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Heritage & architecture", "glyph": "Sparkles", "glyphColor": "#f59e0b", "components": [
+      { "kind": "pyxis.Control", "tag": "p", "style": "margin:0;font-size:0.8rem;line-height:1.6;color:var(--color-text-secondary, #64748b)", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "Pyxis is a modern open-source Linux experience inspired by the elegant principles of " },
+        { "kind": "pyxis.Control", "tag": "strong", "content": "Palm webOS" },
+        { "kind": "pyxis.Control", "tag": "span", "content": " and the " },
+        { "kind": "pyxis.Control", "tag": "strong", "content": "Zen of Palm" },
+        { "kind": "pyxis.Control", "tag": "span", "content": ". Every application runs in an isolated process sandbox composited via the " },
+        { "kind": "pyxis.Control", "tag": "strong", "content": "Evo Wayland compositor" },
+        { "kind": "pyxis.Control", "tag": "span", "content": " and rendered using the tactile " },
+        { "kind": "pyxis.Control", "tag": "strong", "content": "Remochi UI library" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "." }
+      ] }
+    ] }
+  ]
+}

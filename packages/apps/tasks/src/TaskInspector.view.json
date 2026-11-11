@@ -1,0 +1,65 @@
+{
+  "name": "Tasks.Inspector",
+  "kind": "pyxis.Control",
+  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-height:0",
+  "published": { "task": null, "saveStatus": "saved" },
+  "events": { "onEditTask": "", "onCloseInspector": "", "onAskDelete": "" },
+  "components": [
+    { "kind": "remochi.Header", "content": "Task Details", "components": [
+      { "name": "closeButton", "kind": "remochi.Button", "ontap": "close", "components": [
+        { "kind": "pyxis.Icon", "icon": "X", "size": 14 }
+      ] }
+    ] },
+    { "kind": "pyxis.Control", "style": "flex:1;overflow-y:auto;min-height:0;padding:16px;display:flex;flex-direction:column;gap:14px", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:flex-start;gap:10px", "components": [
+        { "kind": "pyxis.Control", "style": "margin-top:6px", "components": [
+          { "name": "done", "kind": "remochi.Checkbox", "onChange": "doneToggled" }
+        ] },
+        { "kind": "pyxis.Control", "style": "flex:1", "components": [
+          { "name": "text", "kind": "remochi.Input", "placeholder": "Task name", "width": "100%", "classes": "tasks-name-input", "style": "display:block", "oninput": "textInput" }
+        ] }
+      ] },
+      { "kind": "remochi.NubbinDivider", "orientation": "horizontal", "nubbin": "up" },
+      { "kind": "pyxis.Control", "classes": "tasks-group", "style": "gap:8px", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "PRIORITY", "classes": "tasks-group-label" },
+        { "name": "priorities", "kind": "pyxis.Repeater", "itemKind": "Tasks.Pill", "keyField": "id", "itemProps": { "ontap": "pickPriority" },
+          "style": "display:grid;grid-template-columns:repeat(4, 1fr);gap:6px" }
+      ] },
+      { "kind": "pyxis.Control", "classes": "tasks-group", "style": "gap:12px", "components": [
+        { "kind": "pyxis.Control", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "DUE DATE", "classes": "tasks-group-label", "style": "display:block;margin-bottom:4px" },
+          { "name": "due", "kind": "remochi.DateInput", "placeholder": "Select due date…", "onChange": "dueInput" }
+        ] },
+        { "kind": "pyxis.Control", "components": [
+          { "name": "category", "kind": "remochi.Dropdown", "label": "List / Category", "onChange": "categoryInput", "options": [
+            { "value": "Inbox", "label": "Inbox" },
+            { "value": "Work", "label": "Work" },
+            { "value": "Personal", "label": "Personal" },
+            { "value": "Shopping", "label": "Shopping" }
+          ] }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "classes": "tasks-group", "style": "gap:6px", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "NOTES & DETAILS", "classes": "tasks-group-label" },
+        { "name": "notes", "kind": "remochi.TextArea", "placeholder": "Add detailed notes, checklists, links…", "rows": 4, "oninput": "notesInput" }
+      ] },
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:center;gap:6px;font-size:0.74rem;color:var(--color-text-secondary, #64748b);margin-top:auto;padding:4px 0", "components": [
+        { "name": "saved", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px", "components": [
+          { "kind": "pyxis.Icon", "icon": "Check", "size": 12, "color": "#10b981" },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Saved to Pyxis PIM storage" }
+        ] },
+        { "name": "saving", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:center;gap:6px", "components": [
+          { "kind": "remochi.Spinner", "styleType": "light", "size": "normal" },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Saving…" }
+        ] }
+      ] }
+    ] },
+    { "kind": "pyxis.Control", "style": "padding:12px 16px;border-top:1px solid var(--color-border, var(--mochi-border, #e5e7eb));display:flex;justify-content:space-between;align-items:center;background:var(--mochi-hover, rgba(0,0,0,0.02))", "components": [
+      { "name": "created", "kind": "pyxis.Control", "tag": "span", "style": "font-size:0.72rem;color:var(--color-text-secondary, #64748b)" },
+      { "kind": "remochi.Button", "variant": "warning", "ontap": "askDelete", "components": [
+        { "kind": "pyxis.Icon", "icon": "Trash2", "size": 13, "style": "margin-right:4px;vertical-align:middle" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "Delete" }
+      ] }
+    ] }
+  ]
+}

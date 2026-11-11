@@ -1,0 +1,10 @@
+{
+  "name": "Contacts.Pill",
+  "kind": "pyxis.Row",
+  "tag": "button",
+  "classes": "contacts-pill",
+  "components": [
+    { "name": "label", "kind": "pyxis.Control", "tag": "span" },
+    { "name": "count", "kind": "pyxis.Control", "tag": "span", "classes": "contacts-pill-count" }
+  ]
+}

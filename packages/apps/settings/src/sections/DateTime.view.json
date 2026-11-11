@@ -1,0 +1,28 @@
+{
+  "name": "Settings.DateTime",
+  "kind": "pyxis.Control",
+  "published": { "clock": null, "hour24": false, "clockError": "" },
+  "components": [
+    { "kind": "Settings.Groupbox", "title": "Clock", "glyph": "Clock", "glyphColor": "#0ea5e9", "group": "clock", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap", "components": [
+        { "kind": "pyxis.Control", "components": [
+          { "name": "time", "kind": "pyxis.Control", "attributes": { "data-clock-time": true }, "style": "font-size:2rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums" },
+          { "kind": "pyxis.Control", "classes": "st-secondary", "style": "margin-top:4px", "components": [
+            { "name": "dateText", "kind": "pyxis.Control", "tag": "span" },
+            { "kind": "pyxis.Control", "tag": "span", "content": " · " },
+            { "name": "zoneText", "kind": "pyxis.Control", "tag": "span", "attributes": { "data-clock-zone": true } },
+            { "name": "offsetText", "kind": "pyxis.Control", "tag": "span" }
+          ] },
+          { "name": "unsynced", "kind": "pyxis.Control", "classes": "st-secondary", "showing": false, "content": "The time service hasn't answered; this is the page's own clock.", "style": "margin-top:2px" }
+        ] },
+        { "kind": "pyxis.Control", "attributes": { "data-clock24h": true }, "style": "display:flex;align-items:center;gap:10px", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "24-hour clock", "style": "font-weight:600;font-size:0.88rem" },
+          { "name": "toggle", "kind": "remochi.Toggle", "onChange": "toggled" }
+        ] }
+      ] },
+      { "name": "error", "kind": "pyxis.Control", "classes": "st-error", "showing": false }
+    ] },
+    { "name": "zone", "kind": "Settings.TimeZone" },
+    { "name": "place", "kind": "Settings.Location" }
+  ]
+}

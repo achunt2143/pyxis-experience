@@ -1,0 +1,33 @@
+{
+  "name": "Tasks.App",
+  "kind": "pyxis.Control",
+  "style": "width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-background, var(--mochi-bg, #f5f5f5));color:var(--color-text, var(--mochi-text, #111827));overflow:hidden;user-select:none;min-height:0",
+  "published": { "windowId": "", "tasks": [], "selectedId": null, "selectedList": "all", "sortBy": "createdAt", "loaded": false, "saveStatus": "saved" },
+  "events": { "onClose": "" },
+  "components": [
+    { "kind": "pyxis.Control", "style": "flex:1;min-height:0;position:relative", "components": [
+      { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 1, "peek": 260, "onActiveIndexChange": "stackMoved", "components": [
+        { "kind": "remochi.Repanel", "components": [
+          { "name": "lists", "kind": "Tasks.Lists", "onPickList": "listPicked" }
+        ] },
+        { "kind": "remochi.Repanel", "components": [
+          { "name": "stream", "kind": "Tasks.Stream", "onAddTask": "addTask", "onSelectTask": "selectTask", "onToggleTask": "toggleTask", "onSortChange": "sortPicked", "onClearDone": "askClear" }
+        ] }
+      ] }
+    ] },
+    { "name": "clearDialog", "kind": "remochi.Dialog", "title": "Clear Completed Tasks", "dialogType": "confirm", "confirmText": "Clear Done", "cancelText": "Cancel", "onConfirm": "clearConfirmed", "onClose": "dialogDismissed", "components": [
+      { "kind": "pyxis.Control", "tag": "p", "style": "margin:0;color:var(--color-text);font-size:0.9rem;line-height:1.5", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "Are you sure you want to permanently clear all " },
+        { "name": "clearCount", "kind": "pyxis.Control", "tag": "span", "content": "0" },
+        { "kind": "pyxis.Control", "tag": "span", "content": " completed tasks?" }
+      ] }
+    ] },
+    { "name": "deleteDialog", "kind": "remochi.Dialog", "title": "Delete Task", "dialogType": "confirm", "confirmText": "Delete", "cancelText": "Cancel", "onConfirm": "deleteConfirmed", "onClose": "dialogDismissed", "components": [
+      { "kind": "pyxis.Control", "tag": "p", "style": "margin:0;color:var(--color-text);font-size:0.9rem;line-height:1.5", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "Delete " },
+        { "name": "deleteName", "kind": "pyxis.Control", "tag": "strong", "content": "this task" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "? This cannot be undone." }
+      ] }
+    ] }
+  ]
+}

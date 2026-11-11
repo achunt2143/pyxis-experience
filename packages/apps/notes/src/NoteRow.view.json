@@ -1,0 +1,20 @@
+{
+  "name": "Notes.Row",
+  "kind": "pyxis.Row",
+  "classes": "notes-row",
+  "published": { "selected": false },
+  "components": [
+    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;gap:8px", "components": [
+      { "name": "title", "kind": "pyxis.Control", "tag": "span", "classes": "notes-title", "style": "font-size:13px;color:var(--color-text, #1f2937);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1" },
+      { "name": "pin", "kind": "pyxis.Icon", "icon": "Pin", "size": 12, "color": "#f59e0b", "style": "fill:#f59e0b;flex-shrink:0", "showing": false }
+    ] },
+    { "name": "snippet", "kind": "pyxis.Control", "classes": "notes-snippet", "style": "font-size:12px;color:var(--color-text-muted, #6b7280);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4" },
+    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;margin-top:2px;font-size:11px;color:var(--color-text-muted, #9ca3af)", "components": [
+      { "kind": "pyxis.Control", "tag": "span", "style": "display:inline-flex;align-items:center;gap:5px", "components": [
+        { "name": "dot", "kind": "pyxis.Control", "tag": "span", "classes": "notes-dot" },
+        { "name": "category", "kind": "pyxis.Control", "tag": "span" }
+      ] },
+      { "name": "date", "kind": "pyxis.Control", "tag": "span" }
+    ] }
+  ]
+}

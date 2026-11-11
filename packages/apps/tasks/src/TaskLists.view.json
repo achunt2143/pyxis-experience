@@ -1,0 +1,28 @@
+{
+  "name": "Tasks.Lists",
+  "kind": "pyxis.Control",
+  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-height:0",
+  "published": { "counts": {}, "selectedList": "all", "progress": 0 },
+  "events": { "onPickList": "" },
+  "components": [
+    { "kind": "remochi.Header", "content": "Tasks" },
+    { "kind": "pyxis.Control", "style": "flex:1;overflow-y:auto;min-height:0;padding:4px 8px", "components": [
+      { "kind": "remochi.List", "components": [
+        { "kind": "remochi.ListHeader", "content": "VIEWS" },
+        { "name": "smart", "kind": "pyxis.Repeater", "itemKind": "Tasks.ViewRow", "keyField": "id", "itemProps": { "ontap": "pickList" } },
+        { "kind": "pyxis.Control", "style": "margin:10px 4px 6px", "components": [
+          { "kind": "remochi.Divider" }
+        ] },
+        { "kind": "remochi.ListHeader", "content": "LISTS" },
+        { "name": "custom", "kind": "pyxis.Repeater", "itemKind": "Tasks.ViewRow", "keyField": "id", "itemProps": { "ontap": "pickList" } }
+      ] }
+    ] },
+    { "kind": "pyxis.Control", "style": "padding:12px 14px;border-top:1px solid var(--color-border, var(--mochi-border, #e5e7eb));background:var(--mochi-hover, rgba(0,0,0,0.02))", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;justify-content:space-between;margin-bottom:6px", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "LIST PROGRESS", "style": "font-size:0.72rem;font-weight:600;color:var(--color-text-secondary, #64748b)" },
+        { "name": "percent", "kind": "pyxis.Control", "tag": "span", "content": "0%", "style": "font-size:0.72rem;color:var(--mochi-primary, #2f6fed);font-weight:600" }
+      ] },
+      { "name": "bar", "kind": "remochi.ProgressBar", "color": "blue", "height": "6px" }
+    ] }
+  ]
+}

@@ -1,0 +1,203 @@
+/* Settings: what a Duyo `style` string cannot say, and the fixed look of kinds whose state is
+   set from code. The values are the old inline styles' (styles.ts holds the same ones for the
+   React islands). */
+
+.st-app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background, var(--mochi-bg, #f5f5f5));
+  color: var(--color-text, var(--mochi-text, #111827));
+  overflow: hidden;
+  user-select: none;
+}
+
+.st-groupbox {
+  background: var(--color-surface, var(--mochi-surface, #ffffff));
+  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  border-radius: 14px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+.st-groupbox-header {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary, #64748b);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.st-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.st-secondary {
+  font-size: 0.76rem;
+  color: var(--color-text-secondary, #64748b);
+}
+.st-field-label {
+  color: var(--color-text-secondary, #64748b);
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+.st-error {
+  font-size: 0.78rem;
+  color: var(--color-error, #ef4444);
+}
+.st-status {
+  font-size: 0.78rem;
+  color: #10b981;
+  font-weight: 600;
+}
+.st-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* A text field: the old textInputStyle. */
+.st-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  background: var(--color-surface, var(--mochi-surface, #ffffff));
+  color: inherit;
+  font: inherit;
+  font-size: 0.84rem;
+  user-select: text;
+  box-sizing: border-box;
+}
+.st-input.invalid {
+  border-color: var(--color-error, #ef4444);
+}
+.st-input.search {
+  padding-left: 30px;
+}
+
+/* A radio option drawn as a card. */
+.st-choice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  background: var(--color-surface, var(--mochi-surface, #ffffff));
+  border: 2px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  transition: all 0.15s ease;
+  min-width: 0;
+  font: inherit;
+}
+.st-choice.checked {
+  border-color: var(--mochi-primary, #2f6fed);
+}
+.st-choice-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.st-choice-label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.st-choice-hint {
+  display: block;
+  font-size: 0.76rem;
+  margin-top: 2px;
+  color: var(--color-text-secondary, #64748b);
+}
+
+/* A label / value row, as About and Date & Time list facts. */
+.st-fact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.03));
+  font-size: 0.82rem;
+}
+.st-fact-label {
+  color: var(--color-text-secondary, #64748b);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.st-fact-value {
+  font-weight: 600;
+  text-align: right;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.st-fact-value.mono {
+  font-family: monospace;
+}
+
+/* The section rail. */
+.st-rail-row .mochi-item {
+  cursor: pointer;
+}
+
+.st-power-button {
+  background: var(--color-surface, var(--mochi-surface, #ffffff));
+  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  border-radius: 10px;
+  padding: 12px 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.12s ease;
+  color: inherit;
+  font: inherit;
+}
+.st-power-button.danger {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+.st-output {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  transition: all 0.12s ease;
+}
+.st-output.current {
+  border-color: var(--mochi-primary, #2f6fed);
+  background: var(--mochi-primary-soft, rgba(47, 111, 237, 0.12));
+}
+
+.st-mute {
+  background: transparent;
+  border: none;
+  padding: 4px;
+  cursor: pointer;
+  display: flex;
+  color: var(--mochi-primary, #2f6fed);
+}
+.st-mute.muted {
+  color: var(--color-error, #ef4444);
+}

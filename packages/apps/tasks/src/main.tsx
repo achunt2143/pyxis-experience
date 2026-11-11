@@ -1,4 +1,5 @@
-import { mountStandaloneApp } from '@pyxis/app-sdk';
-import TasksApp from './TasksApp';
+import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
+import { islandPack } from './islands';
+import './TasksApp';
 
-mountStandaloneApp(TasksApp);
+mountDuyoApp('Tasks.App', { packs: [islandPack()] });

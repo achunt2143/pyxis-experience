@@ -1,4 +1,5 @@
-import { mountStandaloneApp } from '@pyxis/app-sdk';
-import BrowserApp from './BrowserApp';
+import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
+import './BrowserApp';
+import { browserPack } from './pack';
 
-mountStandaloneApp(BrowserApp);
+mountDuyoApp('Browser.App', { packs: [browserPack] });

@@ -1,0 +1,19 @@
+{
+  "name": "Notes.App",
+  "kind": "pyxis.Control",
+  "style": "width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-background, #f9fafb);min-height:0",
+  "published": { "windowId": "", "notes": [], "selectedId": null, "search": "", "category": "All", "loaded": false, "saveStatus": "saved" },
+  "events": { "onClose": "" },
+  "components": [
+    { "kind": "pyxis.Control", "style": "flex:1;min-height:0;position:relative", "components": [
+      { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 0, "peek": 280, "components": [
+        { "kind": "remochi.Repanel", "components": [
+          { "name": "list", "kind": "Notes.List", "onAddNote": "addNote", "onSelectNote": "selectNote", "onSearchChange": "searchEdited", "onCategoryChange": "categoryPicked" }
+        ] },
+        { "kind": "remochi.Repanel", "components": [
+          { "name": "editor", "kind": "Notes.Editor", "onEdit": "editNote", "onDeleteNote": "deleteNote" }
+        ] }
+      ] }
+    ] }
+  ]
+}

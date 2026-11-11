@@ -1,0 +1,77 @@
+/* Files: what a Duyo `style` string cannot say (pseudo-classes, a library's inner elements)
+   and the fixed look of kinds whose dynamic look is set from code. */
+
+/* The search field is a little shorter and smaller than remochi's default. */
+.files-search input {
+  height: 32px;
+  font-size: 0.82rem;
+}
+
+/* A breadcrumb button; the last one (where you are) is highlighted. */
+.files-crumb {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--color-text, var(--mochi-text, #111827));
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.files-crumb.last {
+  background: var(--mochi-primary-soft, rgba(47, 111, 237, 0.12));
+  border-color: var(--mochi-primary, #2f6fed);
+  color: var(--mochi-primary, #2f6fed);
+  font-weight: 600;
+}
+
+/* The status bar's Refresh. */
+.files-refresh {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-secondary, #64748b);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+}
+
+/* The inspector's copy links. */
+.files-link {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--mochi-primary, #2f6fed);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+}
+
+.files-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-text-secondary, #64748b);
+}
+
+.files-text {
+  margin: 0;
+  font-family: Menlo, Monaco, 'Courier New', monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+  background: var(--mochi-field-bg, rgba(0, 0, 0, 0.03));
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+}

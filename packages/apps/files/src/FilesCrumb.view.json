@@ -1,0 +1,9 @@
+{
+  "name": "Files.Crumb",
+  "kind": "pyxis.Row",
+  "style": "display:flex;align-items:center;gap:4px;flex-shrink:0",
+  "components": [
+    { "name": "chevron", "kind": "pyxis.Icon", "icon": "ChevronRight", "size": 14, "style": "opacity:0.4;flex-shrink:0;margin:0 -2px", "showing": false },
+    { "name": "button", "kind": "pyxis.Control", "tag": "button", "classes": "files-crumb" }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "Tasks.Pill",
+  "kind": "pyxis.Row",
+  "tag": "button",
+  "components": [
+    { "name": "icon", "kind": "pyxis.Icon", "icon": "Flag", "size": 11 },
+    { "name": "label", "kind": "pyxis.Control", "tag": "span" }
+  ]
+}

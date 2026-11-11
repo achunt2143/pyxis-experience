@@ -1,0 +1,14 @@
+{
+  "name": "Settings.Accessibility",
+  "kind": "pyxis.Control",
+  "published": { "animationMode": "full" },
+  "components": [
+    { "kind": "Settings.Groupbox", "title": "Animations", "glyph": "Accessibility", "glyphColor": "#ec4899", "components": [
+      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Animations" }, "style": "display:flex;flex-direction:column;gap:8px", "components": [
+        { "name": "full", "kind": "Settings.Choice", "option": "full", "label": "Full", "hint": "Windows and panels open, close and move with motion", "attributes": { "data-animation-mode": "full" }, "ontap": "pick" },
+        { "name": "reduced", "kind": "Settings.Choice", "option": "reduced", "label": "Reduced", "hint": "Short fades only, with no scaling or sliding", "attributes": { "data-animation-mode": "reduced" }, "ontap": "pick" },
+        { "name": "off", "kind": "Settings.Choice", "option": "off", "label": "Off", "hint": "Everything changes at once", "attributes": { "data-animation-mode": "off" }, "ontap": "pick" }
+      ] }
+    ] }
+  ]
+}

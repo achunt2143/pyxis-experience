@@ -1,0 +1,13 @@
+{
+  "name": "Settings.Groupbox",
+  "kind": "pyxis.Control",
+  "tag": "section",
+  "classes": "st-groupbox",
+  "published": { "title": "", "glyph": "", "glyphColor": "", "group": "" },
+  "components": [
+    { "kind": "pyxis.Control", "tag": "span", "classes": "st-groupbox-header", "components": [
+      { "name": "icon", "kind": "pyxis.Icon", "size": 13 },
+      { "name": "label", "kind": "pyxis.Control", "tag": "span" }
+    ] }
+  ]
+}

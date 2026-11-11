@@ -1,0 +1,21 @@
+{
+  "name": "Settings.TimeZone",
+  "kind": "pyxis.Control",
+  "published": { "clock": null, "entries": null, "query": "", "pending": null, "status": "", "failure": "" },
+  "components": [
+    { "kind": "Settings.Groupbox", "title": "Time zone", "glyph": "Globe2", "glyphColor": "#10b981", "group": "timezone", "components": [
+      { "name": "current", "kind": "pyxis.Control", "style": "display:flex;align-items:baseline;gap:8px;flex-wrap:wrap", "components": [
+        { "name": "city", "kind": "pyxis.Control", "tag": "span", "style": "font-weight:700;font-size:0.95rem" },
+        { "name": "detail", "kind": "pyxis.Control", "tag": "span", "classes": "st-secondary" }
+      ] },
+      { "kind": "pyxis.Control", "style": "position:relative", "components": [
+        { "kind": "pyxis.Icon", "icon": "Search", "size": 14, "style": "position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:0.5;pointer-events:none" },
+        { "name": "search", "kind": "pyxis.Control", "tag": "input", "type": "search", "classes": "st-input search", "placeholder": "Search by city, country or offset (e.g. Tokyo, Brazil, UTC+5:30)",
+          "attributes": { "aria-label": "Search time zones", "aria-controls": "timezone-list", "data-timezone-search": true }, "oninput": "searched" }
+      ] },
+      { "name": "list", "kind": "Settings.ZoneList", "onChoose": "chosen" },
+      { "name": "statusLine", "kind": "pyxis.Control", "classes": "st-status", "showing": false },
+      { "name": "errorLine", "kind": "pyxis.Control", "classes": "st-error", "showing": false }
+    ] }
+  ]
+}

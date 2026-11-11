@@ -1,4 +1,5 @@
-import { mountStandaloneApp } from '@pyxis/app-sdk';
-import SettingsApp from './SettingsApp';
+import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
+import { islandPack } from './registerIsland';
+import './SettingsApp';
 
-mountStandaloneApp(SettingsApp);
+mountDuyoApp('Settings.App', { packs: [islandPack()] });

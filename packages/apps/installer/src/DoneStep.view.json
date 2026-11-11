@@ -1,0 +1,34 @@
+{
+  "name": "Installer.Done",
+  "kind": "pyxis.Control",
+  "published": { "info": {} },
+  "events": { "onOpen": "", "onAgain": "" },
+  "components": [
+    { "name": "none", "kind": "pyxis.Control", "style": "opacity:0.7", "content": "Nothing installed yet." },
+    { "name": "content", "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:12px", "showing": false, "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:14px;padding:16px;background:rgba(16, 185, 129, 0.1);border:1px solid rgba(16, 185, 129, 0.25);border-radius:12px", "components": [
+        { "kind": "pyxis.Icon", "icon": "CircleCheck", "size": 32, "color": "#10b981", "style": "flex-shrink:0" },
+        { "kind": "pyxis.Control", "components": [
+          { "name": "title", "kind": "pyxis.Control", "style": "font-size:18px;font-weight:700;color:#065f46" },
+          { "name": "detail", "kind": "pyxis.Control", "style": "font-size:13px;color:#047857;margin-top:2px" }
+        ] }
+      ] },
+      { "name": "notLaunchable", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:flex-start;gap:8px;font-size:13px;opacity:0.85", "components": [
+        { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16, "style": "flex-shrink:0" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "Installed, but the launcher has not registered it as a launchable app. It may be a service or library." }
+      ] },
+      { "kind": "pyxis.Control", "style": "display:flex;gap:10px;margin-top:8px", "components": [
+        { "name": "open", "kind": "remochi.Button", "variant": "affirmative", "ontap": "openTap", "showing": false, "components": [
+          { "kind": "pyxis.Icon", "icon": "Play", "size": 14, "style": "vertical-align:middle;margin-right:6px" },
+          { "name": "openLabel", "kind": "pyxis.Control", "tag": "span" }
+        ] },
+        { "kind": "remochi.Button", "variant": "normal", "ontap": "againTap", "content": "Install another package" }
+      ] },
+      { "name": "logBox", "kind": "pyxis.Control", "style": "margin-top:12px", "showing": false, "components": [
+        { "kind": "remochi.Collapsable", "title": "Installation log", "expanded": false, "components": [
+          { "name": "log", "kind": "pyxis.Control", "tag": "pre", "style": "font-size:11px;line-height:1.45;white-space:pre-wrap;background:rgba(0,0,0,0.05);padding:10px;border-radius:6px;margin-top:8px;max-height:160px;overflow:auto" }
+        ] }
+      ] }
+    ] }
+  ]
+}

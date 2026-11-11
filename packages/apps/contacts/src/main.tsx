@@ -1,4 +1,5 @@
-import { mountStandaloneApp } from '@pyxis/app-sdk';
-import ContactsApp from './ContactsApp';
+import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
+import { islandPack } from './islands';
+import './ContactsApp';
 
-mountStandaloneApp(ContactsApp);
+mountDuyoApp('Contacts.App', { packs: [islandPack()] });

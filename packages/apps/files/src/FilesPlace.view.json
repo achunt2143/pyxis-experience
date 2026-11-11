@@ -1,0 +1,8 @@
+{
+  "name": "Files.Place",
+  "kind": "pyxis.Row",
+  "published": { "selected": false },
+  "components": [
+    { "name": "item", "kind": "remochi.Item", "variant": "compact" }
+  ]
+}

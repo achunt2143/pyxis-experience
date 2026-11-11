@@ -1,0 +1,8 @@
+{
+  "name": "Installer.Perm",
+  "kind": "pyxis.Row",
+  "tag": "span",
+  "components": [
+    { "name": "badge", "kind": "remochi.Badge" }
+  ]
+}

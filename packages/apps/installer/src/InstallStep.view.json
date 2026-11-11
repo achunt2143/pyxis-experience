@@ -1,0 +1,23 @@
+{
+  "name": "Installer.Install",
+  "kind": "pyxis.Control",
+  "style": "display:flex;flex-direction:column;gap:12px",
+  "published": { "info": {} },
+  "components": [
+    { "name": "phase", "kind": "remochi.Subheader", "content": "Ready" },
+    { "name": "bar", "kind": "remochi.ProgressBar", "value": 0, "color": "blue" },
+    { "name": "message", "kind": "pyxis.Control", "style": "min-height:22px;font-size:13px;opacity:0.8", "content": "Waiting to start…" },
+    { "name": "busy", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px", "showing": false, "components": [
+      { "kind": "remochi.Spinner" },
+      { "name": "busyText", "kind": "pyxis.Control", "tag": "span", "style": "font-size:13px;opacity:0.7" }
+    ] },
+    { "name": "failed", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:flex-start;gap:8px;color:#b3261e;font-size:13px", "components": [
+      { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16, "style": "flex-shrink:0;margin-top:1px" },
+      { "kind": "pyxis.Control", "components": [
+        { "kind": "pyxis.Control", "style": "font-weight:600", "content": "Installation failed" },
+        { "name": "failText", "kind": "pyxis.Control", "style": "white-space:pre-wrap" },
+        { "kind": "pyxis.Control", "style": "opacity:0.75;margin-top:6px", "content": "Go Back to pick a different package, or fix the issue and retry." }
+      ] }
+    ] }
+  ]
+}

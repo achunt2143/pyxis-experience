@@ -1,0 +1,41 @@
+{
+  "name": "Installer.Choose",
+  "kind": "pyxis.Control",
+  "style": "display:flex;flex-direction:column;gap:12px",
+  "published": { "info": {} },
+  "events": { "onRescan": "", "onPick": "" },
+  "components": [
+    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;justify-content:space-between", "components": [
+      { "name": "heading", "kind": "remochi.Subheader", "content": "Scanning for packages…" },
+      { "name": "rescan", "kind": "remochi.Button", "variant": "normal", "ontap": "rescanTap", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "style": "display:flex;align-items:center;gap:6px", "components": [
+          { "kind": "pyxis.Icon", "icon": "RefreshCw", "size": 14 },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Rescan" }
+        ] }
+      ] }
+    ] },
+    { "name": "spinner", "kind": "remochi.Spinner", "showing": false },
+    { "name": "errorRow", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;color:#b3261e;font-size:13px", "showing": false, "components": [
+      { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16 },
+      { "name": "errorText", "kind": "pyxis.Control", "tag": "span" }
+    ] },
+    { "name": "empty", "kind": "pyxis.Control", "classes": "inst-card", "showing": false,
+      "style": "padding:24px;text-align:center;line-height:1.6;font-size:13px;color:var(--color-text-secondary, #6b7280)", "components": [
+      { "kind": "pyxis.Icon", "icon": "Package", "size": 36, "color": "var(--color-border, #d1d5db)", "style": "margin:0 auto 10px auto;display:block" },
+      { "kind": "pyxis.Control", "style": "font-weight:600;color:var(--color-text, #111827)", "content": "No .ipk packages found" },
+      { "kind": "pyxis.Control", "style": "margin-top:4px", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "Place packages in " },
+        { "kind": "pyxis.Control", "tag": "code", "content": "/var/lib/pyxis/incoming" },
+        { "kind": "pyxis.Control", "tag": "span", "content": ", " },
+        { "kind": "pyxis.Control", "tag": "code", "content": "/tmp" },
+        { "kind": "pyxis.Control", "tag": "span", "content": ", or a mounted drive under " },
+        { "kind": "pyxis.Control", "tag": "code", "content": "/media" },
+        { "kind": "pyxis.Control", "tag": "span", "content": ", then click Rescan." }
+      ] }
+    ] },
+    { "name": "list", "kind": "remochi.List", "showing": false, "components": [
+      { "kind": "remochi.ListHeader", "content": "Available Packages" },
+      { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Installer.PackageRow", "keyField": "path", "itemProps": { "ontap": "pickRow" }, "onSetupItem": "setupRow" }
+    ] }
+  ]
+}

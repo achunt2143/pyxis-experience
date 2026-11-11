@@ -1,5 +1,6 @@
-import { mountStandaloneApp } from '@pyxis/app-sdk';
-import TerminalApp from './TerminalApp';
+import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
+import './TerminalApp';
+import { terminalPack } from './pack';
 
 // Terminal defaults to the dark theme — a light terminal is a war crime.
-mountStandaloneApp(TerminalApp, { defaultTheme: 'dark' });
+mountDuyoApp('Terminal.App', { defaultTheme: 'dark', packs: [terminalPack] });

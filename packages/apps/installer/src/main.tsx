@@ -1,4 +1,4 @@
-import { mountStandaloneApp } from '@pyxis/app-sdk';
-import InstallerApp from './InstallerApp';
+import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
+import './InstallerApp';
 
-mountStandaloneApp(InstallerApp);
+mountDuyoApp('Installer.App');

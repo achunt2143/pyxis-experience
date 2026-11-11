@@ -1,0 +1,8 @@
+{
+  "name": "Settings.RailRow",
+  "kind": "pyxis.Row",
+  "classes": "st-rail-row",
+  "components": [
+    { "name": "item", "kind": "remochi.Item", "variant": "compact", "hoverable": true }
+  ]
+}

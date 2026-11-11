@@ -1,0 +1,132 @@
+/* Browser: what a Duyo `style` string cannot say (:hover, a library's inner elements) and
+   the fixed look of the list rows, whose hover states used to be mouseenter handlers. */
+
+/* The address field: room for the search icon on the left, the clear and star buttons on the right. */
+.br-address input {
+  width: 100%;
+  padding-left: 32px;
+  padding-right: 64px;
+}
+
+.br-icon-btn {
+  background: none;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  display: flex;
+}
+
+/* Speed dial tile. `--site` is the tile's own colour (set by the row). */
+.br-tile {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border-light, #e5e7eb);
+  border-radius: 12px;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  position: relative;
+}
+.br-tile:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+  border-color: var(--site);
+}
+
+.br-add-tile {
+  background: transparent;
+  border: 1px dashed var(--color-border, #d1d5db);
+  border-radius: 12px;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  gap: 8px;
+  cursor: pointer;
+  min-height: 120px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.br-add-tile:hover {
+  border-color: var(--mochi-color-blue, #3b82f6);
+  background: rgba(59, 130, 246, 0.04);
+}
+
+/* Bookmark and history rows: a card of them, separated by hairlines. */
+.br-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border-light, #f1f3f5);
+  transition: background 0.1s ease;
+}
+.br-row:last-child {
+  border-bottom: none;
+}
+.br-row:hover {
+  background: var(--color-surface-hover, #f8fafc);
+}
+
+.br-suggestion {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border-light, #f3f4f6);
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+.br-suggestion:last-child {
+  border-bottom: none;
+}
+.br-suggestion:hover {
+  background: var(--color-surface-hover, #f8fafc);
+}
+
+/* View selector pills. */
+.br-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 16px;
+  border: 1px solid var(--color-border, #e5e7eb);
+  background: var(--color-surface, #ffffff);
+  color: var(--color-text, #374151);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.br-pill.active {
+  border-color: var(--mochi-color-blue, #3b82f6);
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--mochi-color-blue, #2563eb);
+  font-weight: 600;
+}
+.br-pill-count {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--color-surface-hover, #f3f4f6);
+  padding: 1px 6px;
+  border-radius: 10px;
+  opacity: 0.6;
+}
+.br-pill.active .br-pill-count {
+  background: rgba(0, 0, 0, 0.08);
+  opacity: 1;
+}
+
+.br-empty {
+  padding: 32px;
+  text-align: center;
+  color: var(--color-text-muted, #9ca3af);
+  font-size: 13px;
+}

@@ -1,4 +1,4 @@
-import { mountStandaloneApp } from '@pyxis/app-sdk';
-import NotesApp from './NotesApp';
+import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
+import './NotesApp';
 
-mountStandaloneApp(NotesApp);
+mountDuyoApp('Notes.App');

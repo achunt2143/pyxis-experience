@@ -1,0 +1,12 @@
+{
+  "name": "Notes.Pill",
+  "kind": "pyxis.Row",
+  "tag": "button",
+  "classes": "notes-pill",
+  "components": [
+    { "name": "pin", "kind": "pyxis.Icon", "icon": "Pin", "size": 11, "showing": false },
+    { "name": "dot", "kind": "pyxis.Control", "tag": "span", "classes": "notes-pill-dot", "showing": false },
+    { "name": "label", "kind": "pyxis.Control", "tag": "span" },
+    { "name": "count", "kind": "pyxis.Control", "tag": "span", "classes": "notes-pill-count" }
+  ]
+}
