@@ -11,7 +11,8 @@
     "dev": "vite",
     "dev:apps": "npm run dev --workspaces --if-present",
     "dev:all": "concurrently -n bloom,terminal,browser,files,notes,contacts,tasks,settings,installer -c auto \"npm:dev\" \"npm:dev -w packages/apps/terminal\" \"npm:dev -w packages/apps/browser\" \"npm:dev -w packages/apps/files\" \"npm:dev -w packages/apps/notes\" \"npm:dev -w packages/apps/contacts\" \"npm:dev -w packages/apps/tasks\" \"npm:dev -w packages/apps/settings\" \"npm:dev -w packages/apps/installer\"",
-    "build": "tsc -b && vite build",
+    "views": "duyo-views src",
+    "build": "duyo-views src --check && tsc -b && vite build",
     "build:all": "npm run build --workspaces --if-present && npm run build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -19,12 +20,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@duyojs/duyo": "^1.1.0",
     "@pyxis/app-sdk": "*",
     "framer-motion": "^12.25.0",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "remochi": "^0.3.0"
+    "remochi": "^0.4.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",

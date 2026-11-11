@@ -5,14 +5,16 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "views": "duyo-views src",
+    "build": "duyo-views src --check && tsc -b && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@duyojs/duyo": "^1.1.0",
     "@pyxis/app-sdk": "*",
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "remochi": "^0.3.0"
+    "remochi": "^0.4.0"
   }
 }

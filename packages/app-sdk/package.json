@@ -5,9 +5,25 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./duyo": "./src/duyo/index.ts"
+  },
   "dependencies": {
+    "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "remochi": "^0.3.0"
+    "remochi": "^0.4.0"
+  },
+  "peerDependencies": {
+    "@duyojs/duyo": "^1.1.0"
+  },
+  "peerDependenciesMeta": {
+    "@duyojs/duyo": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@duyojs/duyo": "^1.1.0"
   }
 }
