@@ -7,5 +7,5 @@
   "category": "system",
   "singleInstance": true,
   "display": "windowed",
-  "permissions": ["filesystem:read"]
+  "permissions": ["filesystem:read", "filesystem:write", "filesystem:user", "filesystem:system"]
 }

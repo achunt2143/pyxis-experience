@@ -33,58 +33,77 @@ export interface AppAccent {
   border: string;
   iconColor: string;
   shadow: string;
+  /**
+   * The app's light, `#rrggbb`: what Evo's Lumen motion tints with (the
+   * Droplet's orb) and the dock's landing ripple is drawn in. Sent to Evo
+   * with each minimize target (overlay/useMinimizeTargets).
+   */
+  hue?: string;
 }
 
 export const APP_ACCENTS: Record<string, AppAccent> = {
   terminal: {
     bg: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
+    hue: '#34d399',
     border: '#334155',
     iconColor: '#34d399',
     shadow: 'rgba(15, 23, 42, 0.35)',
   },
   browser: {
     bg: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+    hue: '#0284c7',
     border: '#38bdf8',
     iconColor: '#ffffff',
     shadow: 'rgba(2, 132, 199, 0.35)',
   },
   files: {
     bg: 'linear-gradient(135deg, #d97706 0%, #b45309 100%)',
+    hue: '#d97706',
     border: '#fbbf24',
     iconColor: '#ffffff',
     shadow: 'rgba(217, 119, 6, 0.35)',
   },
   notes: {
     bg: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
+    hue: '#eab308',
     border: '#fde047',
     iconColor: '#422006',
     shadow: 'rgba(234, 179, 8, 0.35)',
   },
   contacts: {
     bg: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+    hue: '#0d9488',
     border: '#2dd4bf',
     iconColor: '#ffffff',
     shadow: 'rgba(13, 148, 136, 0.35)',
   },
   tasks: {
     bg: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)',
+    hue: '#7c3aed',
     border: '#a78bfa',
     iconColor: '#ffffff',
     shadow: 'rgba(124, 58, 237, 0.35)',
   },
   settings: {
     bg: 'linear-gradient(135deg, #475569 0%, #334155 100%)',
+    hue: '#64748b',
     border: '#64748b',
     iconColor: '#f8fafc',
     shadow: 'rgba(71, 85, 105, 0.35)',
   },
   installer: {
     bg: 'linear-gradient(135deg, #ea580c 0%, #c2410c 100%)',
+    hue: '#ea580c',
     border: '#fb923c',
     iconColor: '#ffffff',
     shadow: 'rgba(234, 88, 12, 0.35)',
   },
 };
+
+/** An app's Lumen hue (`AppAccent.hue`), or undefined for an app Bloom has no accent for. */
+export function appHue(id: string): string | undefined {
+  return APP_ACCENTS[id]?.hue;
+}
 
 export function getAppAccent(id: string): AppAccent {
   return (

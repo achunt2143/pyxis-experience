@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import echoClient from './EchoClient';
+import { EVO_SERVICE, type EvoWindowInfo } from './evo';
+import { EVO_IFACE } from './overlay';
 import {
   showNotification,
   listNotifications,
@@ -127,7 +129,20 @@ export function useEcho() {
           appId,
           params: params ?? null,
         })) as LaunchResult | undefined;
-        return res && res.sessionId ? res : null;
+        if (!res || !res.sessionId) return null;
+        // `raised` only means AppHost's active session moved; it says
+        // nothing to the compositor. Nova may also raise the window itself
+        // (it is being taught to), and a second FocusWindow is harmless, so
+        // ask for the focus here rather than depend on which Nova is running.
+        // A raised app with no window yet has nothing to focus: not an error.
+        if (res.raised) {
+          try {
+            await echoClient.callMethod(NOVA_SERVICE, NOVA_IFACE, 'Focus', { appId });
+          } catch {
+            /* no mapped window yet */
+          }
+        }
+        return res;
       },
 
       // Close every session of an app via Nova (resolves app-id → session,
@@ -156,6 +171,45 @@ export function useEcho() {
           appId,
         })) as { appId: string; sessionId: string; windowId: number } | undefined;
         return res && res.sessionId ? res : null;
+      },
+
+      // ---------- Evo (compositor windows) ----------
+      //
+      // Keyed by compositor `window_id`, not app id (use `focusApp` for the
+      // latter). These need `windows:manage`, which only the shell holds.
+
+      async listWindows(): Promise<EvoWindowInfo[]> {
+        const res = (await echoClient.callMethod(EVO_SERVICE, EVO_IFACE, 'ListWindows', {})) as
+          | { windows?: EvoWindowInfo[] }
+          | undefined;
+        return res?.windows ?? [];
+      },
+
+      // Ask the toplevel to close, as its titlebar X does. The app may still
+      // veto (an unsaved-changes prompt), unlike `closeApp`, which signals
+      // the process.
+      async closeWindow(windowId: number): Promise<void> {
+        await echoClient.callMethod(EVO_SERVICE, EVO_IFACE, 'CloseWindow', {
+          window_id: windowId,
+        });
+      },
+
+      async focusWindow(windowId: number): Promise<void> {
+        await echoClient.callMethod(EVO_SERVICE, EVO_IFACE, 'FocusWindow', {
+          window_id: windowId,
+        });
+      },
+
+      async minimizeWindow(windowId: number): Promise<void> {
+        await echoClient.callMethod(EVO_SERVICE, EVO_IFACE, 'MinimizeWindow', {
+          window_id: windowId,
+        });
+      },
+
+      async restoreWindow(windowId: number): Promise<void> {
+        await echoClient.callMethod(EVO_SERVICE, EVO_IFACE, 'RestoreWindow', {
+          window_id: windowId,
+        });
       },
 
       // Open `url` in a real, independent vela browser window via Nova
@@ -491,7 +545,13 @@ export interface AppHostState {
   refresh: () => Promise<void>;
 }
 
-export function useAppHost(): AppHostState {
+/**
+ * The live AppHost state, built once. Mount `AppHostProvider` at the root and
+ * read it with `useAppHost()`: the shell used to call this hook in every
+ * component that wanted a session, and each call made its own `ListApps` +
+ * `ListRunningApps` round trips and its own seven signal subscriptions.
+ */
+export function useAppHostState(): AppHostState {
   const echo = useEcho();
   const [manifests, setManifests] = useState<AppManifest[]>([]);
   const [sessions, setSessions] = useState<Record<string, AppSession>>({});
@@ -695,6 +755,16 @@ export function useAppHost(): AppHostState {
     relaunch,
     refresh,
   };
+}
+
+export const AppHostContext = createContext<AppHostState | null>(null);
+
+export function useAppHost(): AppHostState {
+  const state = useContext(AppHostContext);
+  // Throw rather than quietly start a private copy: that is the duplicate
+  // subscription set the provider exists to remove.
+  if (!state) throw new Error('useAppHost() needs an <AppHostProvider> above it');
+  return state;
 }
 
 /**

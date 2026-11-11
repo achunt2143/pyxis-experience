@@ -8,6 +8,8 @@ import { useApps } from '../hooks/useApps';
 import { AppIcon } from './AppIcon';
 import type { AppLifecycleState } from '../types';
 import '../styles/pinned-item-overrides.css';
+import { useMotion } from '../useMotion';
+import { TRANSITION } from '../motion';
 
 // Visual styling per AppHost lifecycle state. Centralised here so the dock
 // and other consumers can reuse the same vocabulary.
@@ -39,6 +41,7 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
   appDrawerOpen,
   onOpenAppDrawer,
 }) => {
+  const { tr, to } = useMotion();
   const [hoveredApp, setHoveredApp] = useState<string | null>(null);
   const { stateForApp, sessionForApp, manifests } = useAppHost();
   // Pinned strip comes from Nova's registry (via useApps), filtered by the
@@ -69,7 +72,7 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
           out so icons/tooltips render upright. */}
       <motion.div
         animate={{ height }}
-        transition={{ duration: 0.3, ease: 'easeInOut' }}
+        transition={tr(TRANSITION.geometry)}
         style={{
           position: 'fixed',
           left: 0,
@@ -197,10 +200,9 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
               <AnimatePresence>
                 {isActive && (
                   <motion.div
-                    initial={{ scaleX: 0, opacity: 0 }}
-                    animate={{ scaleX: 1, opacity: 1 }}
-                    exit={{ scaleX: 0, opacity: 0 }}
-                    transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    initial={to({ scaleX: 0, opacity: 0 })}
+                    animate={{ ...to({ scaleX: 1, opacity: 1 }), transition: tr(TRANSITION.open) }}
+                    exit={{ ...to({ scaleX: 0, opacity: 0 }), transition: tr(TRANSITION.close) }}
                     style={{
                       position: 'absolute',
                       bottom: -8,

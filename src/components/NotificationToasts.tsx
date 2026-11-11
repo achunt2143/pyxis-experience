@@ -6,11 +6,15 @@ import {
   dismissNotification,
   onNotificationClosed,
   onNotificationShown,
-  useBooleanSetting,
+  useSetting,
+  asBoolean,
   usePyxisTheme,
   SETTING_KEYS,
   type NotificationEntry,
 } from '@pyxis/app-sdk';
+import { useOverlayRegion } from '../overlay/useOverlayRegion';
+import { useMotion } from '../useMotion';
+import { TRANSITION } from '../motion';
 
 /** More than this and the oldest toast makes way; all of them stay in the centre. */
 const MAX_TOASTS = 3;
@@ -24,17 +28,24 @@ const MAX_TOASTS = 3;
  * every toast except critical ones, which the user asked to be interrupted
  * for. The notifications still land in the centre.
  *
- * Desktop unmounts this while the notification centre is open. The centre
- * shows everything already, and a sticky toast would sit over its header.
- * Unmounting also drops the toasts, so the ones the user saw in the centre
- * do not pop back up when it closes.
+ * On a device this runs in the overlay window (src/overlay/OverlayApp.tsx),
+ * which Evo keeps above app windows, so no app can hide a toast. There,
+ * `reportRegion` tells Evo where the toasts are, which is the only part of
+ * the overlay that takes clicks. The desktop draws the toasts itself only
+ * when no overlay is running (the browser dev server, or an overlay that
+ * failed to open), and then they sit beneath app windows like the rest of
+ * the desktop.
  *
- * Known limit: this draws inside Bloom, and Evo stacks Bloom beneath every
- * app window. An app covering this corner hides the toast.
+ * Toasts are hidden while the notification centre or quick settings is
+ * open. The centre shows everything already, and a toast would sit over
+ * either panel. Hiding them also drops them, so the ones the user saw in the
+ * centre do not pop back up when it closes.
  */
-export const NotificationToasts: React.FC = () => {
+export const NotificationToasts: React.FC<{ reportRegion?: boolean }> = ({ reportRegion = false }) => {
   const [toasts, setToasts] = useState<NotificationEntry[]>([]);
-  const dnd = useBooleanSetting(SETTING_KEYS.dnd, false);
+  const dnd = useSetting(SETTING_KEYS.dnd, false, asBoolean);
+  const stackRef = useRef<HTMLDivElement>(null);
+  useOverlayRegion(stackRef, reportRegion);
   // Read by the subscription below, which is set up once. A ref, so that
   // toggling Do Not Disturb doesn't tear down and redo the subscription.
   const dndRef = useRef(dnd);
@@ -63,6 +74,7 @@ export const NotificationToasts: React.FC = () => {
 
   return (
     <div
+      ref={stackRef}
       aria-live="polite"
       style={{
         position: 'fixed',
@@ -93,6 +105,7 @@ const Toast: React.FC<{ notification: NotificationEntry; onHide: (id: string) =>
   notification,
   onHide,
 }) => {
+  const { tr, to } = useMotion();
   const theme = usePyxisTheme('light');
   const critical = notification.urgency === 'critical';
   const { id, timeout } = notification;
@@ -110,31 +123,62 @@ const Toast: React.FC<{ notification: NotificationEntry; onHide: (id: string) =>
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, x: 40 }}
-      animate={{ opacity: 1, x: 0 }}
-      exit={{ opacity: 0, x: 40, transition: { duration: 0.18 } }}
-      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      initial={to({ opacity: 0, x: 40, scale: 0.97 })}
+      animate={{ ...to({ opacity: 1, x: 0, scale: 1 }), transition: tr(TRANSITION.open) }}
+      exit={{ ...to({ opacity: 0, x: 40, scale: 0.97 }), transition: tr(TRANSITION.close) }}
       onClick={() => onHide(id)}
       role="status"
       data-notification-id={notification.id}
       style={{
         pointerEvents: 'auto',
-        cursor: 'default',
+        cursor: 'pointer',
         borderRadius: 14,
-        boxShadow: '0 12px 30px rgba(0,0,0,0.24)',
-        outline: critical ? '2px solid var(--color-error, #e53935)' : undefined,
+        boxShadow: '0 14px 34px rgba(0, 0, 0, 0.22)',
+        outline: critical ? '2px solid var(--color-error, #ef4444)' : undefined,
       }}
     >
       <FloatingPanel style={theme === 'dark' ? 'shadow' : 'default'}>
-        <div style={{ display: 'flex', gap: 10, padding: '12px 12px 12px 14px', color: 'var(--color-text)' }}>
-          <Bell size={16} style={{ flex: 'none', marginTop: 2, color: 'var(--color-primary)' }} />
-          <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            padding: '12px 14px',
+            color: 'var(--color-text)',
+            position: 'relative',
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: '12px 3px 12px 12px',
+              background: critical ? 'rgba(239, 68, 68, 0.15)' : 'rgba(59, 130, 246, 0.12)',
+              color: critical ? 'var(--color-error, #ef4444)' : 'var(--color-primary, #3b82f6)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <Bell size={16} />
+          </div>
+
+          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
             {notification.appId && (
-              <div style={{ fontSize: '0.7rem', color: 'var(--color-text-secondary)', marginBottom: 2 }}>
+              <div
+                style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                  color: 'var(--color-text-secondary, #6b7280)',
+                  letterSpacing: '0.04em',
+                  marginBottom: 2,
+                }}
+              >
                 {notification.appId}
               </div>
             )}
-            <div style={{ fontWeight: 600, fontSize: '0.85rem', overflowWrap: 'anywhere' }}>
+            <div style={{ fontWeight: 600, fontSize: '0.85rem', overflowWrap: 'anywhere', lineHeight: 1.3 }}>
               {notification.title}
             </div>
             {notification.body && (
@@ -144,12 +188,14 @@ const Toast: React.FC<{ notification: NotificationEntry; onHide: (id: string) =>
                   color: 'var(--color-text-secondary)',
                   marginTop: 2,
                   overflowWrap: 'anywhere',
+                  lineHeight: 1.35,
                 }}
               >
                 {notification.body}
               </div>
             )}
           </div>
+
           <button
             type="button"
             aria-label="Dismiss notification"
@@ -159,17 +205,29 @@ const Toast: React.FC<{ notification: NotificationEntry; onHide: (id: string) =>
               onHide(id);
             }}
             style={{
-              flex: 'none',
-              alignSelf: 'flex-start',
-              background: 'none',
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              background: 'transparent',
               border: 'none',
               cursor: 'pointer',
               color: 'var(--color-text-secondary)',
-              padding: 2,
+              padding: 4,
+              borderRadius: 6,
               display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              opacity: 0.6,
+              transition: 'opacity 0.12s ease',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.opacity = '1';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.opacity = '0.6';
             }}
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
       </FloatingPanel>

@@ -1,239 +1,251 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AnimatePresence } from 'framer-motion';
-import { Dialog } from 'remochi';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { useWindows } from '../hooks/useWindows';
-import { useApps } from '../hooks/useApps';
+import { useWallpaperDrift } from '../hooks/useWallpaperDrift';
+import { useCompositorWindows } from '../hooks/useAppWindows';
+import { useMotion } from '../useMotion';
+import { LUMEN } from '../motion';
 import { IN_COMPOSITOR } from '../utils/environment';
-import { TopSystemBar } from './TopSystemBar';
-import { QuickSettingsMenu } from './QuickSettingsMenu';
-import { NotificationCenter } from './NotificationCenter';
-import { NotificationToasts } from './NotificationToasts';
-import { useNotifications } from '../hooks/useNotifications';
-import { LeftLauncher } from './LeftLauncher';
-import AppDrawer from './AppDrawer';
-import BottomDock from './BottomDock';
+import { useOverlayPresence } from '../overlay/overlayChannel';
+import { useForwardJustType } from '../overlay/useForwardJustType';
+import ShellLayer from './ShellLayer';
 import DesktopWindow from './DesktopWindow';
 import {
-  useEcho,
-  useAppHost,
-  getSetting,
-  onSettingChange,
+  DEFAULT_WALLPAPER_ID,
+  DynamicWallpaper,
+  EVO_IFACE,
+  EVO_SERVICE,
+  echoClient,
+  isWallpaperId,
+  parseClockTime,
   SETTING_KEYS,
-  WALLPAPERS as WALLPAPER_DEFS,
-  playSystemSound,
+  asNumber,
+  oneOf,
+  useSetting,
+  useWallpaperExposure,
+  type DynamicWallpaperProps,
+  type EvoWindowInfo,
+  type ExposureWindow,
 } from '@pyxis/app-sdk';
+import type { WindowsState } from '../hooks/compositorWindows';
 
-const WALLPAPERS: Record<string, string> = Object.fromEntries(
-  WALLPAPER_DEFS.map((w) => [w.id, w.css])
-);
-const DEFAULT_WALLPAPER = WALLPAPER_DEFS[0].css;
+/** Evo lists the shell's own windows too; they are the desktop, not over it. */
+const SHELL_APP_IDS = new Set(['bloom', 'bloom-overlay']);
 
-// Start page for the real vela browser window opened by the "Browser" app.
-// Must be http(s) (Nova.OpenExternalBrowser rejects other schemes).
-const BROWSER_START_PAGE = 'https://duckduckgo.com/';
+const asWallpaperId = (raw: unknown) => (isWallpaperId(raw) ? raw : undefined);
 
+/**
+ * `npm run dev` only: look at the whole day quickly.
+ * `?wallpaperTime=HH:MM` draws Daylight at that time; `?wallpaperSpeed=N`
+ * runs the day N times faster (from that time, or from now);
+ * `?wallpaperFlow=N` drifts the masses N times faster;
+ * `?wallpaper=<id>` and `?wallpaperBackend=webgl|css` pick those.
+ */
+function devOverrides(): Partial<DynamicWallpaperProps> {
+  if (!import.meta.env.DEV || typeof location === 'undefined') return {};
+  const q = new URLSearchParams(location.search);
+  const out: Partial<DynamicWallpaperProps> = {};
+  const time = parseClockTime(q.get('wallpaperTime'));
+  if (time !== null) out.time = time;
+  const speed = Number(q.get('wallpaperSpeed'));
+  if (speed > 0) out.daySpeed = speed;
+  const flow = Number(q.get('wallpaperFlow'));
+  if (flow > 0) out.flowSpeed = flow;
+  const id = q.get('wallpaper');
+  if (isWallpaperId(id)) out.wallpaper = id;
+  const backend = q.get('wallpaperBackend');
+  if (backend === 'webgl' || backend === 'css') out.backend = backend;
+  return out;
+}
+
+const DEV_OVERRIDES = devOverrides();
+
+/** How often the frames are re-read while an app window is on screen (a resize sends no signal). */
+const FRAMES_POLL_MS = 10_000;
+
+type ListedWindow = ExposureWindow & { id: number };
+
+const toExposure = (w: EvoWindowInfo): ListedWindow => ({
+  id: w.window_id,
+  x: w.x,
+  y: w.y,
+  width: w.width,
+  height: w.height,
+  minimized: w.minimized ?? w.visible === false,
+  maximized: w.maximized ?? false,
+  fullscreen: w.fullscreen ?? false,
+});
+
+/**
+ * The app windows' frames, for the wallpaper's exposure. Evo's window store
+ * is live for state (minimized, maximized, fullscreen, moves) but no signal
+ * carries a size change, so a window keeps the size it was created with
+ * (often 0x0, before its first buffer). So the frames are re-read with
+ * `ListWindows`: shortly after any window signal, again once the
+ * configure has landed, and every few seconds while a window is up.
+ */
+function useExposureWindows(compositor: WindowsState): ExposureWindow[] | null {
+  const [listed, setListed] = useState<ListedWindow[] | null>(null);
+  const anyOnScreen = Object.values(compositor.byId).some(
+    (w) => !SHELL_APP_IDS.has(w.waylandAppId) && !w.minimized
+  );
+
+  useEffect(() => {
+    if (!IN_COMPOSITOR) return;
+    let cancelled = false;
+    const list = async () => {
+      try {
+        const res = (await echoClient.callMethod(EVO_SERVICE, EVO_IFACE, 'ListWindows', {})) as
+          | { windows?: EvoWindowInfo[] }
+          | undefined;
+        if (!cancelled && res?.windows) {
+          setListed(res.windows.filter((w) => !SHELL_APP_IDS.has(w.app_id)).map(toExposure));
+        }
+      } catch {
+        /* keep the last list */
+      }
+    };
+    const timers = [setTimeout(list, 300), setTimeout(list, 1500)];
+    const poll = anyOnScreen ? setInterval(list, FRAMES_POLL_MS) : undefined;
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+      if (poll) clearInterval(poll);
+    };
+  }, [compositor, anyOnScreen]);
+
+  // Frames from the last list, flags from the store (live, where the list
+  // can be a few hundred ms old); a window the list hasn't seen yet comes
+  // from the store alone.
+  return useMemo(() => {
+    if (!IN_COMPOSITOR) return null;
+    const frames = new Map((listed ?? []).map((w) => [w.id, w]));
+    return Object.values(compositor.byId)
+      .filter((w) => !SHELL_APP_IDS.has(w.waylandAppId))
+      .map((w) => {
+        const f = frames.get(w.windowId);
+        return {
+          x: f?.x ?? w.x,
+          y: f?.y ?? w.y,
+          width: f?.width ?? w.width,
+          height: f?.height ?? w.height,
+          minimized: w.minimized,
+          maximized: w.maximized,
+          fullscreen: w.fullscreen,
+        };
+      });
+  }, [compositor, listed]);
+}
+
+/**
+ * The desktop: the wallpaper, beneath every app window (Evo stacks it
+ * there). The shell UI that has to be seen over apps (top bar, dock, every
+ * panel, toasts) is the overlay's (src/overlay/OverlayApp.tsx, drawn by
+ * ShellLayer). This window draws that same ShellLayer itself only while no
+ * overlay is alive, so the shell is never lost: in the browser dev server
+ * (which has no compositor to stack anything), or if the overlay window
+ * failed to open. Drawn here it sits beneath apps, like the rest of the
+ * desktop, and tells Evo nothing.
+ */
 export const Desktop: React.FC = () => {
+  const windowStore = useWindows();
   const {
     windows,
-    createWindow,
     closeWindow,
     minimizeWindow,
     maximizeWindow,
     focusWindow,
     updateWindowPosition,
     activeWindowId,
-  } = useWindows();
+  } = windowStore;
 
-  const echo = useEcho();
-  const { relaunch } = useAppHost();
-  // Nova's registry. Every launch path below resolves its app id here, so
-  // an .ipk app launches by exactly the same route a built-in does.
-  const { byId: appsById } = useApps();
-
-  const [wallpaper, setWallpaper] = useState<string>(DEFAULT_WALLPAPER);
-  const [launchError, setLaunchErrorState] = useState<string | null>(null);
-  // Every error dialog is announced with the system error sound. Clearing
-  // the dialog (null) is silent.
-  const setLaunchError = (message: string | null) => {
-    setLaunchErrorState(message);
-    if (message) void playSystemSound('error');
-  };
-
-  // Launch an app for real via Nova (single-instance raise-if-running or
-  // spawn) — the only thing that happens on IN_COMPOSITOR launch. Bloom
-  // never pre-creates a local "window" record for a real app anymore (see
-  // useWindows.ts / DesktopWindow.tsx's IN_COMPOSITOR gate): the app is a
-  // separate vela process that Evo composites and decorates directly, and
-  // its dock representation (BottomDock's orphan-session icon) is driven
-  // entirely by real AppHost session/surface state, not local UI state.
-  // Outside the compositor (dev/design preview, no real launch possible),
-  // fall back to the existing iframe-window preview via createWindow.
-  const launchApp = (appId: string, name: string) => {
-    if (!IN_COMPOSITOR) {
-      createWindow(appId, name);
-      return;
-    }
-    // The "Browser" entry launches a real, full vela (Gecko) window directly
-    // rather than Bloom's BrowserApp shell. BrowserApp was only ever a toolbar
-    // that turned around and called OpenExternalBrowser anyway (a web app can't
-    // embed/drive a browsing context — X-Frame-Options/CSP block iframing, and
-    // there's no Gecko embedding API), so going straight to vela gives a real
-    // browser (its own chrome, tabs, persistent profile) in one click.
-    // NB: OpenExternalBrowser only accepts http(s), so we can't hand it
-    // `about:home`; a start page is used instead. Opening vela on its own
-    // native home/new-tab would be a small Nova change (allow an empty URL).
-    if (appId === 'browser') {
-      echo.openExternalBrowser(BROWSER_START_PAGE).then((res) => {
-        if (!res) setLaunchError("Couldn't open the browser");
-      }).catch((err) => {
-        setLaunchError(
-          `Couldn't open the browser: ${err instanceof Error ? err.message : String(err)}`
-        );
-      });
-      return;
-    }
-    echo.launchApp(appId).catch((err) => {
-      setLaunchError(
-        `Couldn't launch ${name}: ${err instanceof Error ? err.message : String(err)}`
-      );
-    });
-  };
-
-  // Dock click on an app that has a real running session but no local
-  // window record (BottomDock's "orphan" branch) — relaunch if it crashed,
-  // otherwise focusApp, which calls Nova's Focus method
-  // (org.geckoOS.nova.Focus -> evo's FocusWindow Echo IPC command) to
-  // actually raise the real compositor window and move keyboard focus to
-  // it. This used to re-issue launchApp, which Nova's single-instance
-  // policy turned into AppHost::set_active — bookkeeping only, it never
-  // told Evo to move input focus or restack the window (there was no
-  // incoming Echo IPC command for that at all; see
-  // evo/src/enhancements/echo_ipc.rs's `FocusWindow`).
-  const handleOrphanSelect = (appId: string, crashed: boolean) => {
-    if (crashed) {
-      relaunch(appId).catch(() => {});
-    } else {
-      echo.focusApp(appId).catch((err) => {
-        setLaunchError(
-          `Couldn't reach ${appId}: ${err instanceof Error ? err.message : String(err)}`
-        );
-      });
-    }
-  };
-
-  // Desktop Quick Settings, notification centre and App Drawer popovers.
-  // Quick settings and the centre share the top-right corner, so opening
-  // one closes the other.
-  const [quickSettingsOpen, setQuickSettingsOpen] = useState(false);
-  const [notificationsOpen, setNotificationsOpen] = useState(false);
-  const [appDrawerOpen, setAppDrawerOpen] = useState(false);
-  const notificationCenter = useNotifications();
-
-  // Wallpaper preference lives in the org.geckoOS.settings service; the
-  // Settings app (a separate process) broadcasts changes on the settings bus.
+  const wallpaper = useSetting<string>(SETTING_KEYS.wallpaper, DEFAULT_WALLPAPER_ID, asWallpaperId);
+  const wallpaperMotion = useSetting(SETTING_KEYS.wallpaperMotion, 'flow', oneOf('flow', 'still'));
+  const pinnedTime = useSetting<number | null>(SETTING_KEYS.wallpaperPinnedTime, null, asNumber);
+  // What the desktop is showing, one line per change, for the on-device
+  // suites: a choice made in Settings (another origin) has reached the shell
+  // when this line says so. vela's log gets `dump()`, not the console.
   useEffect(() => {
-    let mounted = true;
-    getSetting<string>(SETTING_KEYS.wallpaper).then((saved) => {
-      if (mounted && saved && WALLPAPERS[saved]) setWallpaper(WALLPAPERS[saved]);
-    });
-    const unsub = onSettingChange(({ key, value }) => {
-      if (key === SETTING_KEYS.wallpaper && typeof value === 'string' && WALLPAPERS[value]) {
-        setWallpaper(WALLPAPERS[value]);
-      }
-    });
-    return () => {
-      mounted = false;
-      unsub();
-    };
-  }, []);
+    const line = `PYXIS-WALLPAPER-SETTING wallpaper=${wallpaper} motion=${wallpaperMotion} pinned=${pinnedTime ?? 'none'}`;
+    console.log(line);
+    try {
+      (globalThis as { dump?: (s: string) => void }).dump?.(`${line}\n`);
+    } catch {
+      /* dump is Gecko's, and may be off */
+    }
+  }, [wallpaper, wallpaperMotion, pinnedTime]);
 
-  // Check if any window is maximized
-  const hasMaximizedWindow = useMemo(
-    () => windows.some(w => w.state === 'maximized'),
-    [windows]
-  );
+  // The wallpaper stops drawing while nobody can see it move: the app
+  // windows on screen (Evo's frames, which are this document's CSS px)
+  // leave at most 15% of it showing, or one is maximized or fullscreen.
+  // Outside the compositor nothing covers it.
+  const compositor = useCompositorWindows();
+  const exposureWindows = useExposureWindows(compositor);
+  const exposure = useWallpaperExposure(exposureWindows);
+  // The exposure as it settles, for the on-device suites: the state line is
+  // written when the state changes, which is before the frames are re-read
+  // (flags arrive by signal, sizes by ListWindows), so its figure is stale.
+  const loggedExposure = useRef<number | null>(null);
+  const windowCount = exposureWindows?.length ?? 0;
+  useEffect(() => {
+    if (!IN_COMPOSITOR) return;
+    const last = loggedExposure.current;
+    if (last !== null && Math.abs(exposure.exposed - last) < 0.05) return;
+    loggedExposure.current = exposure.exposed;
+    const line = `PYXIS-WALLPAPER-EXPOSURE exposed=${exposure.exposed.toFixed(2)} windows=${windowCount}`;
+    try {
+      (globalThis as { dump?: (s: string) => void }).dump?.(`${line}\n`);
+    } catch {
+      /* dump is Gecko's, and may be off */
+    }
+  }, [exposure.exposed, windowCount]);
+
+  // Lumen: while Super+D has the windows receded, the wallpaper eases in a
+  // little, and back out when they return. A scale, so full mode only.
+  const receded = useWallpaperDrift();
+  const { mode, tr } = useMotion();
+  const drift = mode === 'full' && receded ? LUMEN.wallpaper.scale : 1;
+
+  // `unknown` is the overlay's startup: draw nothing of the shell yet, so it
+  // does not flash up here and vanish when the overlay arrives.
+  const { presence, postSearch } = useOverlayPresence();
+  const shellHere = !IN_COMPOSITOR || presence === 'absent';
+  // With no app focused it is this window that has the keyboard, and the
+  // search box is in the overlay.
+  useForwardJustType(IN_COMPOSITOR && presence === 'present', postSearch);
 
   return (
     <>
-      {/* Quick Settings — desktop system tray drop-down popover card */}
-      <QuickSettingsMenu
-        isOpen={quickSettingsOpen}
-        onOpenChange={setQuickSettingsOpen}
-        onLaunchApp={(appId) => {
-          launchApp(appId, appsById(appId)?.name ?? appId);
-        }}
-      />
-
-      <NotificationCenter
-        isOpen={notificationsOpen}
-        onOpenChange={setNotificationsOpen}
-        notifications={notificationCenter.notifications}
-        onDismiss={(id) => void notificationCenter.dismiss(id)}
-        onClearAll={() => void notificationCenter.clearAll()}
-      />
-      {!notificationsOpen && <NotificationToasts />}
-
-      {/* App Drawer — desktop application launcher popover card */}
-      <AppDrawer
-        isOpen={appDrawerOpen}
-        onClose={() => setAppDrawerOpen(false)}
-        onAppSelect={(appId: string) => {
-          launchApp(appId, appsById(appId)?.name ?? appId);
-        }}
-        isCompact={hasMaximizedWindow}
-      />
-
       <div
         style={{
           width: '100vw',
           height: '100vh',
           overflow: 'hidden',
           position: 'relative',
-          background: wallpaper,
-          transition: 'background 0.4s ease',
           perspective: '1200px',
         }}
       >
-        {/* Animated gradient overlay for depth */}
-        <div
+        <motion.div
+          data-wallpaper=""
+          data-receded={receded ? 'true' : 'false'}
+          initial={false}
+          animate={{ scale: drift }}
+          transition={tr({ duration: LUMEN.wallpaper.duration, ease: LUMEN.wallpaper.ease })}
           style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'radial-gradient(circle at 20% 50%, rgba(74, 139, 194, 0.3), transparent 50%), radial-gradient(circle at 80% 80%, rgba(255, 212, 121, 0.18), transparent 50%)',
-            animation: 'gradientShift 15s ease infinite',
+            inset: 0,
             pointerEvents: 'none',
           }}
-        />
-
-        {/* Top System Bar */}
-        <TopSystemBar
-          quickSettingsOpen={quickSettingsOpen}
-          onToggleQuickSettings={() => {
-            setNotificationsOpen(false);
-            setQuickSettingsOpen((open) => !open);
-          }}
-          notificationsOpen={notificationsOpen}
-          onToggleNotifications={() => {
-            setQuickSettingsOpen(false);
-            setNotificationsOpen((open) => !open);
-          }}
-          notificationCount={notificationCenter.notifications.length}
-          onLaunchApp={launchApp}
-        />
-
-        {/* Left Launcher - shrinks to half when window maximized */}
-        <LeftLauncher
-          activeApp={activeWindowId ? windows.find(w => w.id === activeWindowId)?.appId : undefined}
-          onAppSelect={(appId: string) => {
-            launchApp(appId, appsById(appId)?.name ?? appId);
-          }}
-          isCompact={hasMaximizedWindow}
-          appDrawerOpen={appDrawerOpen}
-          onOpenAppDrawer={() => setAppDrawerOpen((open) => !open)}
-        />
+        >
+          {/* Daylight (or a fixed palette), flowing; see wallpaper/ in the SDK. */}
+          <DynamicWallpaper
+            wallpaper={wallpaper}
+            animationMode={mode}
+            paused={exposure.pause}
+            logDetail={`mode=${mode} exposed=${exposure.exposed.toFixed(2)} fullscreen=${exposure.fullscreen} hidden=${exposure.documentHidden} windows=${exposureWindows?.length ?? 'none'}`}
+            {...DEV_OVERRIDES}
+          />
+        </motion.div>
 
         {/* Desktop Windows — dev/design preview only. In the real
             compositor, launched apps are separate Evo-composited,
@@ -262,38 +274,9 @@ export const Desktop: React.FC = () => {
           </AnimatePresence>
         )}
 
-        {/* Bottom Dock - shrinks to half when window maximized */}
-        <BottomDock
-          windows={windows}
-          activeWindowId={activeWindowId ?? undefined}
-          onWindowSelect={(windowId) => {
-            const window = windows.find((w) => w.id === windowId);
-            if (window?.state === 'minimized') {
-              minimizeWindow(windowId);
-              focusWindow(windowId);
-            } else if (window?.id === activeWindowId) {
-              minimizeWindow(windowId);
-            } else {
-              focusWindow(windowId);
-            }
-          }}
-          onWindowClose={(windowId) => closeWindow(windowId)}
-          onOrphanSelect={handleOrphanSelect}
-          isCompact={hasMaximizedWindow}
-        />
       </div>
 
-      <Dialog
-        isOpen={launchError !== null}
-        title="Launch Error"
-        type="alert"
-        confirmText="OK"
-        onConfirm={() => setLaunchError(null)}
-        onCancel={() => setLaunchError(null)}
-        onClose={() => setLaunchError(null)}
-      >
-        <p style={{ margin: 0, color: 'var(--color-error)' }}>{launchError}</p>
-      </Dialog>
+      {shellHere && <ShellLayer windowStore={windowStore} reporting={false} />}
     </>
   );
 };

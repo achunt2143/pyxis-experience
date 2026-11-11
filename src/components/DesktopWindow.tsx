@@ -5,6 +5,8 @@ import { AlertTriangle, RotateCcw, X } from 'lucide-react';
 import { type DesktopWindowType, type AppLifecycleState } from '../types';
 import { useAppHost } from '@pyxis/app-sdk';
 import { IN_COMPOSITOR } from '../utils/environment';
+import { useMotion } from '../useMotion';
+import { PULSE, TRANSITION } from '../motion';
 
 // Visual map for lifecycle dots in the title bar.
 const STATE_COLOR: Record<AppLifecycleState, string> = {
@@ -93,7 +95,7 @@ const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
       </div>
       <div style={{ marginTop: '8px' }}>
         <Button
-          variant="warning"
+          type="warning"
           disabled={busy}
           onClick={onRelaunch}
         >
@@ -195,6 +197,7 @@ const WindowContent: React.FC<{
 // Tiny lifecycle indicator rendered in the title bar so users can see a
 // window's host state (and any surfaces bound to it) without opening the dock.
 const SurfaceIndicator: React.FC<{ appId: string }> = ({ appId }) => {
+  const { mode } = useMotion();
   const { stateForApp, sessionForApp, surfacesForApp } = useAppHost();
   const state = stateForApp(appId);
   if (!state) return null;
@@ -220,15 +223,11 @@ const SurfaceIndicator: React.FC<{ appId: string }> = ({ appId }) => {
     >
       <motion.div
         animate={
-          state === 'starting'
+          state === 'starting' && mode === 'full'
             ? { opacity: [0.4, 1, 0.4] }
             : { opacity: 1 }
         }
-        transition={
-          state === 'starting'
-            ? { duration: 1.2, repeat: Infinity }
-            : undefined
-        }
+        transition={state === 'starting' && mode === 'full' ? PULSE : undefined}
         style={{
           width: 8,
           height: 8,
@@ -266,6 +265,7 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
   onPositionChange,
   children,
 }, ref) => {
+  const { tr, to } = useMotion();
   // Belt-and-suspenders: Desktop.tsx is the real gate (it doesn't mount this
   // component at all in compositor mode), but guard here too so a future
   // caller mounting DesktopWindow directly in production can't reintroduce
@@ -315,39 +315,41 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
       ref={ref}
       key={window.id}
       layout
-      initial={{
-        scale: 0.86,
+      initial={to({
+        scale: 0.92,
         opacity: 0,
-        rotateX: 20,
         x: maxX,
-        y: maxY + 36,
-      }}
+        y: maxY + 12,
+      })}
       animate={{
-        scale: 1,
-        opacity: 1,
-        rotateX: 0,
-        x: maxX,
-        y: maxY,
-        width: maxWidth,
-        height: maxHeight,
-      }}
-      exit={{
-        scale: isMinimizing ? 0.65 : 0.82,
-        opacity: 0,
-        rotateX: isMinimizing ? 28 : 22,
-        x: maxX,
-        y: maxY + (isMinimizing ? 130 : 48),
+        ...to({
+          scale: 1,
+          opacity: 1,
+          x: maxX,
+          y: maxY,
+          width: maxWidth,
+          height: maxHeight,
+        }),
+        // Place and size follow the geometry spring; the open fade and
+        // scale use the open curve.
         transition: {
-          duration: isMinimizing ? 0.28 : 0.22,
-          ease: [0.32, 0, 0.24, 1],
+          ...tr(TRANSITION.geometry),
+          opacity: tr(TRANSITION.open),
+          scale: tr(TRANSITION.open),
         },
       }}
-      transition={{
-        type: 'spring',
-        stiffness: 280,
-        damping: 24,
-        mass: 0.85,
-        opacity: { duration: 0.18 },
+      exit={{
+        // Minimizing slides toward the dock on the minimize spring; closing
+        // is the accelerate fade.
+        ...to({
+          scale: isMinimizing ? 0.65 : 0.94,
+          opacity: 0,
+          x: maxX,
+          y: maxY + (isMinimizing ? 130 : 0),
+        }),
+        transition: isMinimizing
+          ? { ...tr(TRANSITION.minimize), opacity: tr(TRANSITION.close) }
+          : tr(TRANSITION.close),
       }}
       drag={window.state !== 'maximized'}
       dragMomentum={false}

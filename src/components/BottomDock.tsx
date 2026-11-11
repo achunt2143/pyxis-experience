@@ -1,52 +1,79 @@
 import React, { useState, useMemo } from 'react';
-import { Repanel, Badge } from 'remochi';
-import { motion, AnimatePresence } from 'framer-motion';
-import type { DesktopWindowType } from '../types';
-import { Globe, X, AlertTriangle } from 'lucide-react';
-import { useAppHost, usePyxisTheme } from '@pyxis/app-sdk';
-import { getAppAccent } from '../apps/registry';
+import { Badge } from 'remochi';
+import { motion } from 'framer-motion';
+import type { DesktopWindowType, AppLifecycleState } from '../types';
+import { Globe, X, AlertTriangle, Grid3x3, Layers } from 'lucide-react';
+import { useAppHost } from '@pyxis/app-sdk';
+import { appHue, getAppAccent } from '../apps/registry';
 import { useApps } from '../hooks/useApps';
+import { useAppWindows } from '../hooks/useAppWindows';
 import { AppIcon } from './AppIcon';
+import { useMotion } from '../useMotion';
+import { TRANSITION } from '../motion';
+import { LandingDip, LandingRipple } from './DockLanding';
+import { useDockLandings } from '../hooks/useDockLandings';
 
-interface BottomDockProps {
+export interface BottomDockProps {
   windows: DesktopWindowType[];
   activeWindowId?: string;
   onWindowSelect?: (windowId: string) => void;
   onWindowClose?: (windowId: string) => void;
-  /** Click on an app with a real running session but no local window record
-   * (the orphan-icon branch below) — the normal case in compositor mode,
-   * since real launches never create a local window (see Desktop.tsx). */
-  onOrphanSelect?: (appId: string, crashed: boolean) => void;
-  isCompact?: boolean; // New prop
+  /** Compositor mode: dock click on a running app (minimize / restore / focus / relaunch). */
+  onToggleApp?: (appId: string) => void;
+  onLaunchApp?: (appId: string, name: string) => void;
+  appDrawerOpen?: boolean;
+  onToggleAppDrawer?: () => void;
+  overviewOpen?: boolean;
+  onToggleOverview?: () => void;
+  isCompact?: boolean;
 }
 
-// Toggle this to switch between expansion styles
-const EXPAND_TO_SUBDOCK = false; // Set to true for horizontal "dock-within-a-dock" layout
+function badgeColor(state: AppLifecycleState | null): string | null {
+  switch (state) {
+    case 'starting':
+      return '#FFB74D'; // amber
+    case 'running':
+      return '#4CAF50'; // green
+    case 'crashed':
+      return '#F44336'; // red
+    default:
+      return null;
+  }
+}
 
+/**
+ * BottomDock — Unified Palm Quick Launch & Running Tasks Dock.
+ *
+ * Combines App Drawer trigger, Multitasking Overview trigger, Pinned Favorites,
+ * and Live Running Windows into a single centered, tactile Mochi dock.
+ */
 export const BottomDock: React.FC<BottomDockProps> = ({
   windows,
   activeWindowId,
   onWindowSelect,
   onWindowClose,
-  onOrphanSelect,
+  onToggleApp,
+  onLaunchApp,
+  appDrawerOpen = false,
+  onToggleAppDrawer,
+  overviewOpen = false,
+  onToggleOverview,
   isCompact = false,
 }) => {
+  const { tr, to } = useMotion();
   const [hoveredGroup, setHoveredGroup] = useState<string | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
   const [hoveredWindow, setHoveredWindow] = useState<string | null>(null);
   const { stateForApp, sessionForApp, sessions } = useAppHost();
-  const { byId: appsById } = useApps();
-  const iconSize = isCompact ? 28 : 56;
-  const padding = isCompact ? 1 : 1.5;
+  const { viewForApp } = useAppWindows();
+  const { byId: appsById, pinned: pinnedApps } = useApps();
+  // Evo's Lumen landings: a window reaching or leaving an icon ripples it.
+  const landings = useDockLandings();
 
-  // remochi Panel style follows the shell theme: dark mode uses the
-  // "shadow" variant, light mode uses "default".
-  const theme = usePyxisTheme('light');
-  const panelStyle = theme === 'dark' ? 'shadow' : 'default';
+  const iconSize = isCompact ? 32 : 46;
+  const waterdropRadius = isCompact ? '10px 2px 10px 10px' : '16px 4px 16px 16px';
 
-  // Apps with running sessions but no open windows still belong on the dock
-  // — the dock now reflects "running sessions" not just "open windows". We
-  // synthesize phantom-window groups for any orphan running session.
+  // Running sessions from AppHost
   const orphanAppIds = useMemo(() => {
     const openAppIds = new Set(windows.map((w) => w.appId));
     const seen = new Set<string>();
@@ -54,10 +81,6 @@ export const BottomDock: React.FC<BottomDockProps> = ({
       if (
         (s.state === 'running' ||
           s.state === 'starting' ||
-          // A suspended app is minimized, not gone — it MUST keep its dock
-          // icon, since clicking it is the only way to restore it (focusApp
-          // -> Nova.Focus -> Evo unminimize + SIGCONT resume). Omitting it
-          // here is exactly why "restore from the dock" did nothing.
           s.state === 'suspended' ||
           s.state === 'crashed') &&
         !openAppIds.has(s.appId)
@@ -68,7 +91,7 @@ export const BottomDock: React.FC<BottomDockProps> = ({
     return Array.from(seen);
   }, [windows, sessions]);
 
-  // Group windows by app, then add phantom entries for orphan running sessions.
+  // Group windows by app
   const groupedWindows = useMemo(() => {
     const groups: { [key: string]: DesktopWindowType[] } = {};
     windows.forEach((w) => {
@@ -83,505 +106,526 @@ export const BottomDock: React.FC<BottomDockProps> = ({
     return groups;
   }, [windows, orphanAppIds]);
 
-  // The dock shows whenever there are open windows (including minimized ones)
-  // or orphan running sessions. It only hides when all windows are closed and
-  // no running sessions remain.
-  const hasAnythingToShow =
-    windows.length > 0 || orphanAppIds.length > 0;
+  // Determine unpinned running apps to append to the dock
+  const unpinnedRunningAppIds = useMemo(() => {
+    const pinnedSet = new Set(pinnedApps.map((p) => p.id));
+    const runningKeys = Object.keys(groupedWindows);
+    return runningKeys.filter((id) => !pinnedSet.has(id));
+  }, [pinnedApps, groupedWindows]);
 
-  // Calculate dynamic dock width for subdock expansion
-  const dockWidth = useMemo(() => {
-    if (EXPAND_TO_SUBDOCK && expandedGroup) {
-      const expandedWindows = groupedWindows[expandedGroup]?.length || 0;
-      return Math.max(300, expandedWindows * 70 + 100);
+  const handleAppClick = (appId: string, name: string) => {
+    const appWindows = groupedWindows[appId] || [];
+    const isOrphan = orphanAppIds.includes(appId);
+    if (appWindows.length > 1) {
+      setExpandedGroup((prev) => (prev === appId ? null : appId));
+      return;
     }
-    return 'auto';
-  }, [expandedGroup, groupedWindows]);
+
+    if (appWindows.length === 1) {
+      const win = appWindows[0];
+      if (win.id === activeWindowId && win.state !== 'minimized') {
+        // Toggle minimize if already active
+        onWindowSelect?.(win.id);
+      } else {
+        onWindowSelect?.(win.id);
+      }
+      return;
+    }
+
+    if (isOrphan) {
+      // Still starting: there is no window to focus yet, and asking for one
+      // used to raise a "no mapped compositor window" error dialog.
+      if (viewForApp(appId)?.starting) return;
+      onToggleApp?.(appId);
+      return;
+    }
+
+    // Not running -> Launch app
+    onLaunchApp?.(appId, name);
+  };
 
   return (
-    <AnimatePresence>
-      {hasAnythingToShow && (
-        <motion.div
-          key="pyxis-bottom-dock"
-          initial={{ y: 90, opacity: 0 }}
-          animate={{
-            y: 0,
-            opacity: 1,
-            width: dockWidth,
-            height: isCompact ? 48 : 'auto',
-          }}
-          exit={{
-            y: 90,
-            opacity: 0,
-            transition: { type: 'spring', stiffness: 350, damping: 30 },
-          }}
-          transition={{
-            type: 'spring',
-            stiffness: 300,
-            damping: 30,
-            width: { duration: 0.3 },
-            height: { duration: 0.3 },
-          }}
-          style={{
-            position: 'fixed',
-            right: 0,
-            bottom: 0,
-            zIndex: 1100,
-          }}
-        >
-          <Repanel style={panelStyle}>
-            <div
-              style={{
-                height: '100%',
-                display: 'flex',
-                alignItems: 'flex-end',
-                gap: isCompact ? '8px' : '16px',
-                paddingLeft: isCompact ? '8px' : '16px',
-                paddingRight: isCompact ? '8px' : '16px',
-                paddingTop: `${padding * 8}px`,
-                paddingBottom: `${padding * 8}px`,
-                color: 'var(--color-text)',
-              }}
-            >
-              <AnimatePresence mode="popLayout">
-                {Object.entries(groupedWindows).map(([appId, appWindows]) => {
-                  // undefined for a window whose app Nova doesn't list —
-                  // Nova's external-browser sessions, most often — which
-                  // is why the fallback here is a globe rather than the
-                  // generic package glyph.
-                  const app = appsById(appId);
-                  const isHovered = hoveredGroup === appId;
-                  const isExpanded = expandedGroup === appId;
-                  const hasMultiple = appWindows.length > 1;
-                  const lifecycleState = stateForApp(appId);
-                  const session = sessionForApp(appId);
-                  const isAllMinimized =
-                    appWindows.length > 0 && appWindows.every((w) => w.state === 'minimized');
-                  const isActiveGroup = appWindows.some(
-                    (w) => w.id === activeWindowId && w.state !== 'minimized'
-                  );
-                  const accent = getAppAccent(appId);
-                  const waterdropRadius = isCompact
-                    ? '12px 2px 12px 12px'
-                    : '22px 4px 22px 22px';
+    <motion.div
+      key="pyxis-bottom-dock"
+      // The shell's bottom edge: it takes clicks (data-shell-region) and apps
+      // are kept out from under it (data-shell-edge, see overlay/useWorkArea).
+      // Each icon's `data-app` button is where that app's windows minimize
+      // into and restore out of (overlay/useMinimizeTargets, from layout, not
+      // the transformed box, since the dock springs in).
+      data-shell-region=""
+      data-shell-edge="bottom"
+      initial={to({ y: 80, opacity: 0 })}
+      animate={to({ y: 0, opacity: 1 })}
+      transition={tr(TRANSITION.geometry)}
+      style={{
+        position: 'fixed',
+        bottom: isCompact ? 6 : 10,
+        left: 0,
+        right: 0,
+        margin: '0 auto',
+        width: 'fit-content',
+        zIndex: 1100,
+        display: 'flex',
+        alignItems: 'center',
+        gap: isCompact ? '6px' : '8px',
+        padding: isCompact ? '4px 10px' : '6px 12px',
+        background: 'var(--color-surface, rgba(255, 255, 255, 0.88))',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        border: '1px solid var(--color-border-light, rgba(255, 255, 255, 0.2))',
+        borderRadius: isCompact ? '18px' : '24px',
+        boxShadow: '0 12px 36px rgba(0, 0, 0, 0.2), 0 2px 6px rgba(0, 0, 0, 0.08)',
+        userSelect: 'none',
+      }}
+    >
+      {/* 1. App Drawer Trigger Button */}
+      <motion.button
+        type="button"
+        title="App Drawer (All Applications)"
+        onClick={onToggleAppDrawer}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.92 }}
+        style={{
+          width: iconSize,
+          height: iconSize,
+          borderRadius: waterdropRadius,
+          background: appDrawerOpen
+            ? 'var(--mochi-primary-soft, rgba(59, 130, 246, 0.15))'
+            : 'var(--mochi-hover, rgba(0, 0, 0, 0.04))',
+          border: appDrawerOpen
+            ? '1.5px solid var(--color-primary, #3b82f6)'
+            : '1px solid transparent',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          color: appDrawerOpen ? 'var(--color-primary, #3b82f6)' : 'var(--color-text)',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        <Grid3x3 size={isCompact ? 18 : 22} />
+      </motion.button>
 
-                  return (
-                    <motion.div
-                      key={appId}
-                      layout
-                      initial={{ scale: 0.6, opacity: 0, y: 16 }}
-                      animate={{ scale: 1, opacity: 1, y: 0 }}
-                      exit={{
-                        scale: 0.4,
-                        opacity: 0,
-                        y: 20,
-                        transition: { duration: 0.2, ease: 'easeIn' },
-                      }}
-                      transition={{ type: 'spring', stiffness: 420, damping: 26 }}
-                      onMouseEnter={() => setHoveredGroup(appId)}
-                      onMouseLeave={() => setHoveredGroup(null)}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '8px',
-                        position: 'relative',
-                      }}
-                    >
-              {/* Expanded Grid View (Above Dock) */}
-              {isExpanded && hasMultiple && !EXPAND_TO_SUBDOCK && (
+      {/* 2. Card Multitasking Overview Trigger Button */}
+      <motion.button
+        type="button"
+        title="Card Multitasking Overview"
+        onClick={onToggleOverview}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.92 }}
+        style={{
+          width: iconSize,
+          height: iconSize,
+          borderRadius: waterdropRadius,
+          background: overviewOpen
+            ? 'var(--mochi-primary-soft, rgba(59, 130, 246, 0.15))'
+            : 'var(--mochi-hover, rgba(0, 0, 0, 0.04))',
+          border: overviewOpen
+            ? '1.5px solid var(--color-primary, #3b82f6)'
+            : '1px solid transparent',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          color: overviewOpen ? 'var(--color-primary, #3b82f6)' : 'var(--color-text)',
+          transition: 'all 0.15s ease',
+        }}
+      >
+        <Layers size={isCompact ? 18 : 22} />
+      </motion.button>
+
+      {/* Vertical Divider */}
+      <div
+        style={{
+          width: '1px',
+          height: isCompact ? '20px' : '28px',
+          background: 'var(--color-border-light, rgba(0, 0, 0, 0.12))',
+          margin: '0 2px',
+        }}
+      />
+
+      {/* 3. Pinned Applications (with Live Running Status) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? '6px' : '8px' }}>
+        {pinnedApps.map((app) => {
+          const appId = app.id;
+          const appWindows = groupedWindows[appId] || [];
+          const isOrphan = orphanAppIds.includes(appId);
+          const isRunning = appWindows.length > 0 || isOrphan;
+          const lifecycleState = stateForApp(appId);
+          const session = sessionForApp(appId);
+          const dot = isRunning ? badgeColor(lifecycleState ?? 'running') : null;
+          const view = viewForApp(appId);
+          const isMinimized = view?.minimized ?? false;
+          const isActiveGroup =
+            appWindows.some((w) => w.id === activeWindowId && w.state !== 'minimized') ||
+            (view?.focused ?? false);
+          const hasMultiple = appWindows.length > 1;
+          const isHovered = hoveredGroup === appId;
+          const isExpanded = expandedGroup === appId;
+          const accent = getAppAccent(appId);
+
+          return (
+            <div
+              key={appId}
+              style={{ position: 'relative' }}
+              onMouseEnter={() => setHoveredGroup(appId)}
+              onMouseLeave={() => setHoveredGroup(null)}
+            >
+              {/* Multi-Window Popup Card (Expanded above dock) */}
+              {isExpanded && hasMultiple && (
                 <motion.div
-                  initial={{ opacity: 0, y: 20, scale: 0.8 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 20, scale: 0.8 }}
-                  transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+                  data-shell-popup=""
+                  initial={to({ opacity: 0, y: 8, scale: 0.97 })}
+                  animate={{ ...to({ opacity: 1, y: 0, scale: 1 }), transition: tr(TRANSITION.popupIn) }}
+                  exit={{ ...to({ opacity: 0, y: 8, scale: 0.97 }), transition: tr(TRANSITION.popupOut) }}
                   style={{
                     position: 'absolute',
                     bottom: '100%',
-                    marginBottom: '16px',
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-                    gap: '12px',
-                    padding: '16px',
-                    background: 'var(--color-surface)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: '16px',
-                    boxShadow: '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14)',
-                    minWidth: 280,
-                    maxWidth: 400,
-                    zIndex: 1200,
-                  }}
-                >
-                  <AnimatePresence mode="popLayout">
-                    {appWindows.map((win, idx) => (
-                      <motion.div
-                        key={win.id}
-                        layout
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.8 }}
-                        transition={{ delay: idx * 0.05 }}
-                        onMouseEnter={() => setHoveredWindow(win.id)}
-                        onMouseLeave={() => setHoveredWindow(null)}
-                        onClick={() => {
-                          onWindowSelect?.(win.id);
-                          setExpandedGroup(null);
-                        }}
-                        style={{
-                          padding: '12px',
-                          borderRadius: '14px',
-                          cursor: 'pointer',
-                          background: hoveredWindow === win.id
-                            ? 'var(--mochi-primary-soft)'
-                            : 'var(--mochi-hover)',
-                          border: hoveredWindow === win.id
-                            ? `1.5px solid ${accent.border}`
-                            : '1px solid var(--color-border-light)',
-                          transition: 'all 0.2s ease',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          alignItems: 'center',
-                          gap: '8px',
-                          position: 'relative',
-                        }}
-                      >
-                        <div
-                          style={{
-                            width: isCompact ? 32 : 40,
-                            height: isCompact ? 32 : 40,
-                            borderRadius: isCompact ? '12px 2px 12px 12px' : '16px 3px 16px 16px',
-                            background: accent.bg,
-                            border: `1px solid ${accent.border}`,
-                            boxShadow: `0 2px 8px ${accent.shadow}`,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: accent.iconColor,
-                          }}
-                        >
-                          <AppIcon app={app} size={isCompact ? 16 : 22} fallback={Globe} />
-                        </div>
-                        <span style={{ maxWidth: '100%', fontSize: '0.75rem', fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {win.title}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onWindowClose?.(win.id);
-                          }}
-                          style={{
-                            position: 'absolute',
-                            top: 4,
-                            right: 4,
-                            width: '20px',
-                            height: '20px',
-                            borderRadius: '50%',
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            color: 'var(--color-text-secondary)',
-                          }}
-                          aria-label="Close window"
-                        >
-                          <X size={14} />
-                        </button>
-                      </motion.div>
-                    ))}
-                  </AnimatePresence>
-                </motion.div>
-              )}
-
-              {/* Subdock Expansion (Horizontal) */}
-              {isExpanded && hasMultiple && EXPAND_TO_SUBDOCK && (
-                <motion.div
-                  initial={{ width: 0, opacity: 0 }}
-                  animate={{ width: 'auto', opacity: 1 }}
-                  exit={{ width: 0, opacity: 0 }}
-                  style={{
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    marginBottom: '14px',
                     display: 'flex',
-                    gap: '8px',
-                    position: 'absolute',
-                    left: '100%',
-                    marginLeft: '8px',
-                    alignItems: 'center',
+                    flexDirection: 'column',
+                    gap: '6px',
+                    padding: '10px',
+                    background: 'var(--color-surface, #ffffff)',
+                    border: '1px solid var(--color-border, #d1d5db)',
+                    borderRadius: '16px',
+                    boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+                    minWidth: 200,
+                    maxWidth: 320,
+                    zIndex: 1300,
                   }}
                 >
-                  <AnimatePresence mode="popLayout">
-                    {appWindows.map((win, idx) => (
-                      <motion.button
-                        key={win.id}
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', padding: '2px 6px' }}>
+                    {app.name} ({appWindows.length} windows)
+                  </div>
+                  {appWindows.map((win) => (
+                    <div
+                      key={win.id}
+                      onClick={() => {
+                        onWindowSelect?.(win.id);
+                        setExpandedGroup(null);
+                      }}
+                      onMouseEnter={() => setHoveredWindow(win.id)}
+                      onMouseLeave={() => setHoveredWindow(null)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        borderRadius: '8px',
+                        background: hoveredWindow === win.id ? 'var(--mochi-primary-soft, #eff6ff)' : 'transparent',
+                        cursor: 'pointer',
+                        fontSize: '12px',
+                        color: 'var(--color-text)',
+                      }}
+                    >
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                        {win.title}
+                      </span>
+                      <button
                         type="button"
-                        title={win.title}
-                        layout
-                        initial={{ scale: 0, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0, opacity: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                        onClick={() => {
-                          onWindowSelect?.(win.id);
-                          setExpandedGroup(null);
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onWindowClose?.(win.id);
                         }}
                         style={{
-                          width: iconSize,
-                          height: iconSize,
-                          borderRadius: waterdropRadius,
-                          background: accent.bg,
-                          border: `1.5px solid ${accent.border}`,
-                          boxShadow: `0 2px 8px ${accent.shadow}`,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
+                          background: 'none',
+                          border: 'none',
                           cursor: 'pointer',
-                          color: accent.iconColor,
+                          padding: 2,
+                          color: 'var(--color-text-secondary)',
+                          display: 'flex',
                         }}
                       >
-                        <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
-                      </motion.button>
-                    ))}
-                  </AnimatePresence>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ))}
                 </motion.div>
               )}
 
-              {/* Main Icon/Thumbnail Stack with 3D Isometric Effect */}
-              <div
+              {/* Main Pinned Button */}
+              <motion.button
+                type="button"
+                title={`${app.name}${isMinimized ? ' (Minimized)' : isRunning ? ' (Running)' : ''}${session?.pid ? ` · pid ${session.pid}` : ''}`}
+                onClick={() => handleAppClick(appId, app.name)}
+                data-app={appId}
+                data-focused={isActiveGroup ? 'true' : 'false'}
+                data-minimized={isMinimized ? 'true' : 'false'}
+                data-state={lifecycleState ?? 'stopped'}
+                whileHover={{ scale: 1.15, y: -4 }}
+                whileTap={{ scale: 0.92 }}
                 style={{
+                  width: iconSize,
+                  height: iconSize,
+                  borderRadius: waterdropRadius,
+                  background: isHovered || isActiveGroup ? accent.bg : 'var(--mochi-hover, rgba(0,0,0,0.03))',
+                  border: isActiveGroup
+                    ? `1.5px solid ${accent.border}`
+                    : isHovered
+                      ? `1px solid ${accent.border}`
+                      : '1px solid transparent',
+                  boxShadow: isActiveGroup
+                    ? `0 4px 12px ${accent.shadow}`
+                    : isHovered
+                      ? `0 2px 8px ${accent.shadow}`
+                      : 'none',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
                   position: 'relative',
-                  perspective: '1000px',
-                  transformStyle: 'preserve-3d',
+                  padding: 0,
+                  transition: 'background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
                 }}
               >
-                {appWindows.length === 0 ? (
-                  // Orphan running session — a real Nova-launched process
-                  // that Evo composites/decorates in its own window
-                  // elsewhere on screen, not a local DOM window Bloom
-                  // controls. This is the normal, expected shape for every
-                  // running app in compositor mode (see Desktop.tsx —
-                  // real launches never create a local window record).
-                  <motion.button
-                    key={`orphan-${appId}`}
-                    title={`${appId}${
-                      session?.pid ? ` · pid ${session.pid}` : ''
-                    } · ${lifecycleState ?? 'running'}${
-                      lifecycleState === 'crashed' ? ' · click to relaunch' : ''
-                    }${
-                      lifecycleState === 'suspended' ? ' · click to restore' : ''
-                    }`}
-                    animate={{
-                      scale: isHovered ? 1.08 : 1,
-                      y: isHovered ? -6 : 0,
+                <LandingDip landing={landings[appId]}>
+                  <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
+                </LandingDip>
+                <LandingRipple
+                  landing={landings[appId]}
+                  color={appHue(appId) ?? accent.border}
+                  radius={waterdropRadius}
+                />
+
+                {/* Multiple windows count badge */}
+                {hasMultiple && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      top: -4,
+                      right: -4,
+                      zIndex: 2,
                     }}
-                    transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                    onClick={() =>
-                      onOrphanSelect?.(appId, lifecycleState === 'crashed')
-                    }
+                  >
+                    <Badge content={appWindows.length} />
+                  </div>
+                )}
+
+                {/* Running status indicator bar (mimics Mochi button bar) */}
+                {isRunning && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: isCompact ? 2 : 3,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: isCompact ? 16 : 22,
+                      height: isCompact ? 2.5 : 3,
+                      borderRadius: 1.5,
+                      background: dot ?? 'var(--mochi-primary, #3b82f6)',
+                      boxShadow: isMinimized ? 'none' : `0 0 5px ${(dot ?? '#3b82f6')}80`,
+                      // A minimized app is running but out of sight: a faint, short bar.
+                      opacity: isMinimized ? 0.4 : 1,
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
+              </motion.button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 4. Unpinned Dynamic Running Applications */}
+      {unpinnedRunningAppIds.length > 0 && (
+        <>
+          <div
+            style={{
+              width: '1px',
+              height: isCompact ? '18px' : '24px',
+              background: 'var(--color-border-light, rgba(0, 0, 0, 0.1))',
+              margin: '0 2px',
+            }}
+          />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: isCompact ? '6px' : '8px' }}>
+            {unpinnedRunningAppIds.map((appId) => {
+              const app = appsById(appId);
+              const appWindows = groupedWindows[appId] || [];
+              const lifecycleState = stateForApp(appId);
+              const session = sessionForApp(appId);
+              const dot = badgeColor(lifecycleState ?? 'running');
+              const view = viewForApp(appId);
+              const isMinimized = view?.minimized ?? false;
+              const isActiveGroup =
+                appWindows.some((w) => w.id === activeWindowId && w.state !== 'minimized') ||
+                (view?.focused ?? false);
+              const hasMultiple = appWindows.length > 1;
+              const isHovered = hoveredGroup === appId;
+              const isExpanded = expandedGroup === appId;
+              const accent = getAppAccent(appId);
+
+              return (
+                <div
+                  key={appId}
+                  style={{ position: 'relative' }}
+                  onMouseEnter={() => setHoveredGroup(appId)}
+                  onMouseLeave={() => setHoveredGroup(null)}
+                >
+                  {/* Multi-window popup */}
+                  {isExpanded && hasMultiple && (
+                    <motion.div
+                      data-shell-popup=""
+                      initial={to({ opacity: 0, y: 8, scale: 0.97 })}
+                      animate={{ ...to({ opacity: 1, y: 0, scale: 1 }), transition: tr(TRANSITION.popupIn) }}
+                      exit={{ ...to({ opacity: 0, y: 8, scale: 0.97 }), transition: tr(TRANSITION.popupOut) }}
+                      style={{
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        marginBottom: '14px',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '6px',
+                        padding: '10px',
+                        background: 'var(--color-surface, #ffffff)',
+                        border: '1px solid var(--color-border, #d1d5db)',
+                        borderRadius: '16px',
+                        boxShadow: '0 12px 32px rgba(0,0,0,0.18)',
+                        minWidth: 200,
+                        maxWidth: 320,
+                        zIndex: 1300,
+                      }}
+                    >
+                      <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-secondary)', padding: '2px 6px' }}>
+                        {app?.name ?? appId} ({appWindows.length} windows)
+                      </div>
+                      {appWindows.map((win) => (
+                        <div
+                          key={win.id}
+                          onClick={() => {
+                            onWindowSelect?.(win.id);
+                            setExpandedGroup(null);
+                          }}
+                          onMouseEnter={() => setHoveredWindow(win.id)}
+                          onMouseLeave={() => setHoveredWindow(null)}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            padding: '6px 10px',
+                            borderRadius: '8px',
+                            background: hoveredWindow === win.id ? 'var(--mochi-primary-soft, #eff6ff)' : 'transparent',
+                            cursor: 'pointer',
+                            fontSize: '12px',
+                            color: 'var(--color-text)',
+                          }}
+                        >
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            {win.title}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onWindowClose?.(win.id);
+                            }}
+                            style={{
+                              background: 'none',
+                              border: 'none',
+                              cursor: 'pointer',
+                              padding: 2,
+                              color: 'var(--color-text-secondary)',
+                              display: 'flex',
+                            }}
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </motion.div>
+                  )}
+
+                  <motion.button
+                    type="button"
+                    title={`${app?.name ?? appId}${isMinimized ? ' (Minimized)' : ''}${session?.pid ? ` · pid ${session.pid}` : ''}`}
+                    onClick={() => handleAppClick(appId, app?.name ?? appId)}
+                    data-app={appId}
+                    data-focused={isActiveGroup ? 'true' : 'false'}
+                    data-minimized={isMinimized ? 'true' : 'false'}
+                    data-state={lifecycleState ?? 'stopped'}
+                    whileHover={{ scale: 1.15, y: -4 }}
+                    whileTap={{ scale: 0.92 }}
                     style={{
                       width: iconSize,
                       height: iconSize,
                       borderRadius: waterdropRadius,
-                      background: isHovered ? accent.bg : 'var(--mochi-hover)',
-                      border: isHovered ? `1.5px solid ${accent.border}` : '1.5px dashed var(--color-border)',
-                      boxShadow: isHovered ? `0 4px 12px ${accent.shadow}` : 'none',
-                      color: isHovered ? accent.iconColor : 'var(--color-text)',
-                      position: 'relative',
+                      background: isHovered || isActiveGroup ? accent.bg : 'var(--mochi-hover, rgba(0,0,0,0.03))',
+                      border: isActiveGroup
+                        ? `1.5px solid ${accent.border}`
+                        : isHovered
+                          ? `1px solid ${accent.border}`
+                          : '1px solid var(--color-border-light, rgba(0,0,0,0.08))',
+                      boxShadow: isActiveGroup
+                        ? `0 4px 12px ${accent.shadow}`
+                        : isHovered
+                          ? `0 2px 8px ${accent.shadow}`
+                          : 'none',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       cursor: 'pointer',
+                      position: 'relative',
                       padding: 0,
-                      transition: 'background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
+                      transition: 'background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
                     }}
                   >
-                    <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
-                  </motion.button>
-                ) : (
-                  appWindows.map((win, idx) => {
-                    const isLast = idx === appWindows.length - 1;
-                    const shouldShowStacked = hasMultiple && !isExpanded;
-                    const isWinMinimized = win.state === 'minimized';
+                    <LandingDip landing={landings[appId]}>
+                      <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
+                    </LandingDip>
+                    <LandingRipple
+                      landing={landings[appId]}
+                      color={appHue(appId) ?? accent.border}
+                      radius={waterdropRadius}
+                    />
 
-                    return (
-                      <motion.button
-                        key={win.id}
-                        title={`${win.title}${
-                          session?.pid ? ` · pid ${session.pid}` : ''
-                        }${lifecycleState ? ` · ${lifecycleState}` : ''}${
-                          isWinMinimized ? ' · minimized (click to restore)' : ''
-                        }`}
-                        animate={{
-                          scale: isHovered ? 1.08 : 1,
-                          y: isHovered ? -6 : 0,
-                          x: shouldShowStacked ? idx * 8 : 0,
-                          z: shouldShowStacked ? idx * -5 : 0,
-                          rotateY: shouldShowStacked ? -25 : 0, // 3D stacking rotation
-                          opacity: isWinMinimized && !isHovered && !isActiveGroup ? 0.72 : 1,
-                        }}
-                        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
-                        onClick={() => {
-                          if (hasMultiple && !isExpanded) {
-                            setExpandedGroup(appId);
-                          } else {
-                            onWindowSelect?.(win.id);
-                            setExpandedGroup(null);
-                          }
-                        }}
+                    {lifecycleState === 'crashed' && (
+                      <div
                         style={{
-                          width: iconSize,
-                          height: iconSize,
-                          borderRadius: waterdropRadius,
-                          background: isHovered || isActiveGroup ? accent.bg : 'var(--mochi-hover)',
-                          border: isHovered || isActiveGroup
-                            ? `1.5px solid ${accent.border}`
-                            : isWinMinimized
-                              ? '1.5px dashed var(--color-border)'
-                              : '1px solid var(--color-border-light)',
-                          color: isHovered || isActiveGroup ? accent.iconColor : 'var(--color-text)',
-                          position: shouldShowStacked && !isLast ? 'absolute' : 'relative',
-                          top: 0,
-                          left: 0,
-                          boxShadow: shouldShowStacked
-                            ? '2px 2px 8px rgba(0,0,0,0.2)'
-                            : (isHovered || isActiveGroup)
-                              ? `0 4px 12px ${accent.shadow}`
-                              : '0px 2px 4px rgba(0,0,0,0.1)',
-                          zIndex: idx,
-                          transformStyle: 'preserve-3d',
+                          position: 'absolute',
+                          top: -4,
+                          right: -4,
+                          width: 14,
+                          height: 14,
+                          borderRadius: '50%',
+                          backgroundColor: '#F44336',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
-                          cursor: 'pointer',
-                          padding: 0,
-                          transition: 'background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease',
                         }}
                       >
-                        <AppIcon app={app} size={isCompact ? 20 : 28} fallback={Globe} />
-                      </motion.button>
-                    );
-                  })
-                )}
+                        <AlertTriangle size={8} color="#fff" />
+                      </div>
+                    )}
 
-                {/* Active app bar — mirrors remochi's ViewSelectButton
-                    .mochi-button-bar underline (flush, 2px, primary,
-                    square corners) instead of a floating pill, offset
-                    -8px below the icon so it doesn't sit flush against
-                    it. */}
-                <AnimatePresence>
-                  {isActiveGroup && (
-                    <motion.div
-                      initial={{ scaleX: 0, opacity: 0 }}
-                      animate={{ scaleX: 1, opacity: 1 }}
-                      exit={{ scaleX: 0, opacity: 0 }}
-                      transition={{ duration: 0.3, ease: 'easeInOut' }}
+                    {/* Running status indicator bar (mimics Mochi button bar) */}
+                    <div
                       style={{
                         position: 'absolute',
-                        bottom: -8,
-                        left: 0,
-                        width: iconSize,
-                        height: '2px',
-                        backgroundColor: accent.border || 'var(--mochi-primary)',
-                        borderRadius: '2px',
-                        boxShadow: `0 0 6px ${accent.shadow}`,
+                        bottom: isCompact ? 2 : 3,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: isCompact ? 16 : 22,
+                        height: isCompact ? 2.5 : 3,
+                        borderRadius: 1.5,
+                        background: dot ?? 'var(--mochi-primary, #3b82f6)',
+                        boxShadow: isMinimized ? 'none' : `0 0 5px ${(dot ?? '#3b82f6')}80`,
+                        opacity: isMinimized ? 0.4 : 1,
                         pointerEvents: 'none',
                       }}
                     />
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Remochi Badge for multiple windows */}
-              {hasMultiple && !isExpanded && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: -6,
-                    right: -6,
-                    zIndex: 10,
-                  }}
-                >
-                  <Badge
-                    content={appWindows.length}
-                    background={accent.border}
-                    color="#ffffff"
-                  />
+                  </motion.button>
                 </div>
-              )}
-
-              {/* Lifecycle indicator under the icon (running / starting). */}
-              {lifecycleState === 'running' && (
-                <div
-                  style={{
-                    width: 4,
-                    height: 4,
-                    borderRadius: '50%',
-                    backgroundColor: '#4CAF50',
-                    boxShadow: '0 0 4px #4CAF50',
-                  }}
-                />
-              )}
-              {lifecycleState === 'starting' && (
-                <div
-                  style={{
-                    width: 4,
-                    height: 4,
-                    borderRadius: '50%',
-                    backgroundColor: '#FFB74D',
-                    boxShadow: '0 0 4px #FFB74D',
-                    animation: 'pyxisDockPulse 1s ease-in-out infinite',
-                  }}
-                />
-              )}
-
-              {/* Suspended (minimized): a static amber dot — distinct from the
-                  running green dot — so a paused app reads as present but
-                  parked, and the user knows there's something to click back. */}
-              {(lifecycleState === 'suspended' || (!lifecycleState && isAllMinimized)) && (
-                <div
-                  style={{
-                    width: 4,
-                    height: 4,
-                    borderRadius: '50%',
-                    backgroundColor: '#FFA726',
-                    boxShadow: '0 0 4px #FFA726',
-                    opacity: 0.85,
-                  }}
-                />
-              )}
-
-              {/* Crashed warning overlay. */}
-              {lifecycleState === 'crashed' && (
-                <motion.div
-                  initial={{ scale: 0 }}
-                  animate={{ scale: 1 }}
-                  style={{
-                    position: 'absolute',
-                    top: -4,
-                    left: -4,
-                    width: 18,
-                    height: 18,
-                    borderRadius: '50%',
-                    backgroundColor: '#F44336',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '2px solid rgba(255,255,255,0.6)',
-                    zIndex: 11,
-                  }}
-                >
-                  <AlertTriangle size={10} color="#fff" />
-                </motion.div>
-              )}
-            </motion.div>
-          );
-        })}
-      </AnimatePresence>
-        </div>
-      </Repanel>
+              );
+            })}
+          </div>
+        </>
+      )}
     </motion.div>
-  )}
-</AnimatePresence>
   );
 };
 

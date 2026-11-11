@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import 'remochi/css';
-import { ThemeWrapper } from 'remochi';
+import { ThemeWrapper, useTheme } from 'remochi';
 import { usePyxisTheme, type PyxisTheme } from './usePyxisTheme';
 
 export type { PyxisTheme };
@@ -17,13 +17,17 @@ export interface AppShellProps {
  * Common chrome for every standalone Pyxis app page: loads the remochi
  * global CSS bundle and mounts the app inside remochi's ThemeWrapper so all
  * components pick up the Mochi design language and the user's persisted
- * theme. ThemeWrapper only reads `defaultTheme` at mount, so it is keyed by
- * the live theme value to re-mount when the preference changes.
+ * theme. ThemeWrapper only reads `defaultTheme` at mount, so a later change
+ * is steered from inside it (ThemeSync) rather than by re-mounting it: a
+ * re-mount rebuilt the whole app, losing whatever was on screen, at every
+ * theme change, and with `auto` that is twice a day without the user doing
+ * anything.
  */
 export const AppShell: React.FC<AppShellProps> = ({ children, defaultTheme }) => {
   const theme = usePyxisTheme(defaultTheme ?? 'light');
   return (
-    <ThemeWrapper key={theme} defaultTheme={theme}>
+    <ThemeWrapper defaultTheme={theme}>
+      <ThemeSync theme={theme} />
       <div
         style={{
           width: '100vw',
@@ -37,6 +41,15 @@ export const AppShell: React.FC<AppShellProps> = ({ children, defaultTheme }) =>
       </div>
     </ThemeWrapper>
   );
+};
+
+/** Brings ThemeWrapper's own theme in line with the user's preference. */
+const ThemeSync: React.FC<{ theme: PyxisTheme }> = ({ theme }) => {
+  const { theme: current, toggleTheme } = useTheme();
+  useEffect(() => {
+    if (current !== theme) toggleTheme();
+  }, [current, theme, toggleTheme]);
+  return null;
 };
 
 export default AppShell;

@@ -29,6 +29,8 @@
 
 import { safeGetItem, safeSetItem } from './safeStorage';
 import type { NovaAppInfo } from './types';
+import { SETTING_DEFAULTS, settingDefault, validateSetting } from './settingsSchema';
+import { mockTime } from './timeMock';
 
 export interface EchoHeader {
   id: string;
@@ -235,17 +237,148 @@ let mockSurfaceSeq = 1;
 
 const mockSessions = new Map<string, MockSession>();
 
+// ---- Evo (compositor windows) ----
+//
+// A stand-in for Evo's toplevels so the dev server can exercise the dock and
+// overview. A window exists for exactly as long as a session surface does
+// (the real window_id is the number AppHost lists in `session.surfaces`),
+// and every change is announced with the signal and payload Evo emits
+// (evo/src/enhancements/echo_ipc.rs); src/hooks/__tests__/evoContract.test.ts
+// holds the two together.
+const EVO_MOCK_IFACE = 'org.geckoOS.evo';
+
+interface MockWindow {
+  window_id: number;
+  app_id: string;
+  width: number;
+  height: number;
+  x: number;
+  y: number;
+  focused: boolean;
+  visible: boolean;
+}
+const mockWindows = new Map<number, MockWindow>();
+
+const MOCK_EVO_METHODS = new Set([
+  'ListWindows',
+  'FocusWindow',
+  'MinimizeWindow',
+  'RestoreWindow',
+  'CloseWindow',
+  'MaximizeWindow',
+  'UnmaximizeWindow',
+]);
+
+/**
+ * Placeholder pictures for `GetWindowThumbnails` in the dev server: a drawn
+ * stand-in window (title bar, a few lines) tinted by app, at the window's
+ * aspect ratio and the size Evo would answer with. Not what the device sends:
+ * Evo's are JPEGs of the real window.
+ */
+function mockThumbnails(args: Record<string, unknown>) {
+  const maxW = Math.min(480, Math.max(16, Number(args.max_width) || 480));
+  const maxH = Math.min(480, Math.max(16, Number(args.max_height) || 300));
+  const wanted = Array.isArray(args.window_ids) ? new Set(args.window_ids.map(Number)) : null;
+  const thumbnails = [];
+  for (const w of mockWindows.values()) {
+    if (wanted && !wanted.has(w.window_id)) continue;
+    const s = Math.min(maxW / w.width, maxH / w.height, 1);
+    const width = Math.max(1, Math.round(w.width * s));
+    const height = Math.max(1, Math.round(w.height * s));
+    let hue = 0;
+    for (const ch of w.app_id) hue = (hue * 31 + ch.charCodeAt(0)) % 360;
+    const svg =
+      `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">` +
+      `<rect width="100%" height="100%" fill="hsl(${hue} 35% 94%)"/>` +
+      `<rect width="100%" height="${Math.round(height * 0.1)}" fill="hsl(${hue} 40% 82%)"/>` +
+      `<circle cx="${Math.round(height * 0.05)}" cy="${Math.round(height * 0.05)}" r="${Math.round(height * 0.02)}" fill="hsl(${hue} 60% 55%)"/>` +
+      [0.22, 0.32, 0.42, 0.62]
+        .map(
+          (y, i) =>
+            `<rect x="${Math.round(width * 0.08)}" y="${Math.round(height * y)}" width="${Math.round(width * (i === 3 ? 0.5 : 0.84 - i * 0.12))}" height="${Math.max(2, Math.round(height * 0.04))}" rx="3" fill="hsl(${hue} 30% 70%)"/>`
+        )
+        .join('') +
+      `</svg>`;
+    thumbnails.push({
+      window_id: w.window_id,
+      width,
+      height,
+      data: `data:image/svg+xml;base64,${btoa(svg)}`,
+    });
+  }
+  return { thumbnails };
+}
+
+type MockFanOut = (signal: string, data: unknown, ifaceOverride?: string) => void;
+
+function evoEmit(fanOut: MockFanOut | undefined, signal: string, data: Record<string, unknown>) {
+  fanOut?.(signal, { ...data, timestamp: Date.now() }, EVO_MOCK_IFACE);
+}
+
+function setMockFocus(windowId: number | null, fanOut?: MockFanOut) {
+  for (const w of mockWindows.values()) w.focused = w.window_id === windowId;
+  evoEmit(fanOut, 'WindowFocusChanged', { window_id: windowId, workspace_id: 0 });
+}
+
+function mapMockWindow(windowId: number, appId: string, fanOut?: MockFanOut) {
+  if (mockWindows.has(windowId)) return;
+  const n = mockWindows.size;
+  const win: MockWindow = {
+    window_id: windowId,
+    app_id: appId,
+    width: 900,
+    height: 600,
+    x: 60 + n * 30,
+    y: 60 + n * 30,
+    focused: false,
+    visible: true,
+  };
+  mockWindows.set(windowId, win);
+  evoEmit(fanOut, 'WindowCreated', {
+    window_id: windowId,
+    app_id: appId,
+    width: win.width,
+    height: win.height,
+  });
+  // A newly mapped toplevel takes focus, as in the compositor.
+  setMockFocus(windowId, fanOut);
+}
+
+function unmapMockWindow(windowId: number, fanOut?: MockFanOut) {
+  const win = mockWindows.get(windowId);
+  if (!win) return;
+  mockWindows.delete(windowId);
+  evoEmit(fanOut, 'WindowClosed', { window_id: windowId });
+  if (win.focused) {
+    const next = Array.from(mockWindows.values()).reverse().find((w) => w.visible);
+    setMockFocus(next?.window_id ?? null, fanOut);
+  }
+}
+
 function mockNowSecs() {
   return Math.floor(Date.now() / 1000);
 }
 
 // Seed tree for the filesystem mock's `readDirectory`, keyed by the exact
-// path a caller would request (starting at '~', the same root FilesApp and
-// the real daemon's expand_path() both use). Each child's own key is
-// `${parentPath}/${name}`, matching what readDirectory hands back in each
-// entry's `path` field — FilesApp navigates by following that field
-// directly, so mock and native paths are constructed the same way.
+// path a caller would request: rooted at '~', which is where an app's calls
+// start on a device too (its own storage, or the user's home for Files), or
+// at '/' for the read-only rest of the system that Files can browse. Each
+// child's own key is `${parentPath}/${name}`, matching what readDirectory
+// hands back in each entry's `path` field — FilesApp navigates by following
+// that field directly, so mock and native paths are constructed the same way.
 const MOCK_FS_TREE: Record<string, { name: string; isDirectory: boolean; size?: number }[]> = {
+  '/': [
+    { name: 'etc', isDirectory: true },
+    { name: 'home', isDirectory: true },
+    { name: 'usr', isDirectory: true },
+  ],
+  '/etc': [
+    { name: 'hostname', isDirectory: false, size: 6 },
+    { name: 'os-release', isDirectory: false, size: 64 },
+  ],
+  '/home': [{ name: 'geckouser', isDirectory: true }],
+  '/home/geckouser': [],
+  '/usr': [],
   '~': [
     { name: 'Documents', isDirectory: true },
     { name: 'Downloads', isDirectory: true },
@@ -285,7 +418,22 @@ const MOCK_FILE_CONTENT: Record<string, string> = {
     'Shopping list\n- terminfo\n- bash-completion\n- coffee\n',
   '~/Documents/project-spec.md':
     '# Project Spec\n\n1. Compositor-first\n2. IPC-driven\n3. Web-tech shell\n',
+  '/etc/hostname': 'pyxis\n',
+  '/etc/os-release': 'NAME="Pyxis"\nID=pyxis\nPRETTY_NAME="Pyxis (mock)"\n',
 };
+
+// What the mock refuses on an absolute path, as the bridge does on a device:
+// outside the home, files are read-only.
+const MOCK_FS_WRITES = new Set([
+  'writeFile',
+  'appendFile',
+  'deleteFile',
+  'deleteDirectory',
+  'createDirectory',
+  'copy',
+  'move',
+  'chmod',
+]);
 
 // Parent of a '~'-rooted path ('~/Documents/x' -> '~/Documents'; '~' -> null).
 function mockParentPath(p: string): string | null {
@@ -459,6 +607,7 @@ function mockResponse(
               ...withSurface,
               surfaces: [...withSurface.surfaces],
             });
+            mapMockWindow(surfaceId, appId, fanOut);
           }, 200);
         }, 250);
 
@@ -480,6 +629,7 @@ function mockResponse(
         // Detach any mock surfaces first so subscribers see them disappear
         // before the session itself is reaped.
         if (s.surfaces.length > 0) {
+          s.surfaces.forEach((id) => unmapMockWindow(id, fanOut));
           const drained: MockSession = { ...s, surfaces: [] };
           fanOut?.('AppSurfaceUnmapped', {
             ...drained,
@@ -583,6 +733,7 @@ function mockResponse(
           ...target,
           surfaces: [...target.surfaces],
         });
+        mapMockWindow(surfaceId, appId, fanOut);
         return { ...target, surfaces: [...target.surfaces] };
       }
       case 'UnbindSurface': {
@@ -606,6 +757,7 @@ function mockResponse(
           ...updated,
           surfaces: [...updated.surfaces],
         });
+        unmapMockWindow(surfaceId, fanOut);
         // Reap synthesized foreign sessions when their last surface goes.
         if (updated.surfaces.length === 0 && updated.pid === 0) {
           mockSessions.delete(updated.sessionId);
@@ -633,6 +785,73 @@ function mockResponse(
         };
       default:
         return { success: false, error: `unknown method ${method}` };
+    }
+  }
+
+  // ---- Evo window calls (org.geckoOS.evo) ----
+  // Keyed by window_id, like the real handlers. Focus on a minimized window
+  // does nothing here: restoring is a separate call, so a shell that forgets
+  // it is visibly wrong in dev too.
+  if (iface.endsWith('evo') && MOCK_EVO_METHODS.has(method)) {
+    if (method === 'ListWindows') {
+      return { windows: Array.from(mockWindows.values()).map((w) => ({ ...w })) };
+    }
+    const windowId = Number(args.window_id);
+    const win = mockWindows.get(windowId);
+    if (!win) return { error: `no window ${windowId}` };
+    switch (method) {
+      case 'FocusWindow':
+        if (win.visible) setMockFocus(windowId, fanOut);
+        return { success: true, window_id: windowId };
+      case 'MinimizeWindow': {
+        win.visible = false;
+        evoEmit(fanOut, 'WindowMinimized', { window_id: windowId, minimized: true });
+        // Lumen: the Droplet reaches the icon 90% of the way through its
+        // ~480 ms, and Evo says so (the dock ripples).
+        setTimeout(
+          () => evoEmit(fanOut, 'MinimizeLanded', { app_id: win.app_id, window_id: windowId, phase: 'land' }),
+          430
+        );
+        if (win.focused) {
+          const next = Array.from(mockWindows.values()).reverse().find((w) => w.visible);
+          setMockFocus(next?.window_id ?? null, fanOut);
+        }
+        return { success: true, window_id: windowId };
+      }
+      case 'MaximizeWindow':
+      case 'UnmaximizeWindow':
+        evoEmit(fanOut, 'WindowMaximized', {
+          window_id: windowId,
+          maximized: method === 'MaximizeWindow',
+        });
+        return { success: true, window_id: windowId };
+      case 'RestoreWindow':
+        win.visible = true;
+        evoEmit(fanOut, 'MinimizeLanded', { app_id: win.app_id, window_id: windowId, phase: 'rise' });
+        evoEmit(fanOut, 'WindowMinimized', { window_id: windowId, minimized: false });
+        return { success: true, window_id: windowId };
+      case 'CloseWindow': {
+        // Closing an app's last window ends the app, as closing vela's does.
+        const owner = Array.from(mockSessions.values()).find((x) =>
+          x.surfaces.includes(windowId)
+        );
+        if (owner) {
+          const left = { ...owner, surfaces: owner.surfaces.filter((id) => id !== windowId) };
+          mockSessions.set(owner.sessionId, left);
+          unmapMockWindow(windowId, fanOut);
+          if (left.surfaces.length === 0) {
+            mockSessions.delete(owner.sessionId);
+            fanOut?.('AppStopped', { ...left, state: 'stopped', surfaces: [] }, 'org.geckoOS.appHost');
+          } else {
+            fanOut?.('AppSurfaceUnmapped', { ...left, surfaces: [...left.surfaces] }, 'org.geckoOS.appHost');
+          }
+        } else {
+          unmapMockWindow(windowId, fanOut);
+        }
+        return { success: true, window_id: windowId };
+      }
+      default:
+        return { success: false, error: `unknown evo method ${method}` };
     }
   }
 
@@ -772,6 +991,7 @@ function mockResponse(
         );
         if (!s) return { error: `app '${appId}' is not running` };
         const windowId = s.surfaces[0] ?? 0;
+        if (mockWindows.get(windowId)?.visible) setMockFocus(windowId, fanOut);
         return { appId, sessionId: s.sessionId, windowId };
       }
       case 'OpenExternalBrowser': {
@@ -842,10 +1062,12 @@ function mockResponse(
     }
   }
   // ---- Settings (org.geckoOS.settings) ----
-  // Mirrors echo/src/services/settings.rs's get/set/getAll/delete/clear
-  // response shapes, persisted to localStorage so dev-mode preferences
-  // survive reloads (degrades to in-memory-nothing on pyxis:// where
-  // localStorage throws — see safeStorage.ts).
+  // Mirrors echo/src/services/settings.rs: get answers an absent key with its
+  // default, set refuses a bad pyxis.* value (settingsSchema.ts mirrors the
+  // Rust schema), and every write that changes a key signals SettingChanged.
+  // Persisted to localStorage so dev-mode preferences survive reloads
+  // (degrades to in-memory-nothing on pyxis:// where localStorage throws, see
+  // safeStorage.ts).
   if (iface.endsWith('settings')) {
     const STORE_KEY = 'pyxis.mock.settings';
     const load = (): Record<string, unknown> => {
@@ -858,29 +1080,47 @@ function mockResponse(
     const store = (s: Record<string, unknown>) =>
       safeSetItem(STORE_KEY, JSON.stringify(s));
     const settings = load();
+    const has = (key: string) => Object.hasOwn(settings, key);
+    const effective = (key: string) => (has(key) ? settings[key] : settingDefault(key));
+    const changed = (key: string, value: unknown, previous: unknown, exists: boolean) =>
+      fanOut?.('SettingChanged', { key, value, previous, exists });
     switch (method) {
       case 'get': {
         const key = String(args.key ?? '');
-        return { key, value: settings[key] ?? null, exists: key in settings };
+        return { key, value: effective(key), exists: has(key) };
       }
       case 'set': {
         const key = String(args.key ?? '');
-        settings[key] = args.value;
-        store(settings);
-        return { success: true, key, value: args.value };
+        const value = args.value ?? null;
+        const refusal = validateSetting(key, value);
+        if (refusal) throw new Error(refusal);
+        const previous = effective(key);
+        if (!has(key) || JSON.stringify(settings[key]) !== JSON.stringify(value)) {
+          settings[key] = value;
+          store(settings);
+          changed(key, value, previous, true);
+        }
+        return { success: true, key, value };
       }
       case 'getAll':
-        return { settings, count: Object.keys(settings).length };
+        return { settings, count: Object.keys(settings).length, defaults: SETTING_DEFAULTS };
       case 'delete': {
         const key = String(args.key ?? '');
-        const existed = key in settings;
-        delete settings[key];
-        store(settings);
+        const existed = has(key);
+        if (existed) {
+          const previous = settings[key];
+          delete settings[key];
+          store(settings);
+          changed(key, settingDefault(key), previous, false);
+        }
         return { success: existed, key };
       }
       case 'clear':
       case 'reset':
         store({});
+        for (const [key, previous] of Object.entries(settings)) {
+          changed(key, settingDefault(key), previous, false);
+        }
         return { success: true };
       default:
         return { success: false, error: `unknown method ${method}` };
@@ -901,6 +1141,12 @@ function mockResponse(
     // Reflect a written/seeded file's content, or null if none.
     const fileContent = (p: string): string | null =>
       safeGetItem(fsKey(p)) ?? MOCK_FILE_CONTENT[p] ?? null;
+    const absolute = [args.path, args.source, args.destination].some(
+      (p) => typeof p === 'string' && p.startsWith('/')
+    );
+    if (absolute && MOCK_FS_WRITES.has(method)) {
+      return { error: `${method} refused: outside your home, files are read-only` };
+    }
     switch (method) {
       case 'readDirectory': {
         const dir = MOCK_FS_TREE[path];
@@ -910,7 +1156,7 @@ function mockResponse(
         const now = mockNowSecs();
         const entries = dir.map((e) => ({
           name: e.name,
-          path: `${path}/${e.name}`,
+          path: path === '/' ? `/${e.name}` : `${path}/${e.name}`,
           isFile: !e.isDirectory,
           isDirectory: e.isDirectory,
           isSymlink: false,
@@ -1093,8 +1339,45 @@ function mockResponse(
   if (iface.toLowerCase().endsWith('notification')) {
     return mockNotifications(method, args, fanOut);
   }
+  if (iface === 'org.geckoOS.time') {
+    return mockTime(method, args, fanOut);
+  }
   if (iface === 'org.geckoOS.audio') {
     return mockAudio(method, args, fanOut);
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'SetOverlayFocus') {
+    return { success: true, focused: Boolean(args.focused) };
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'GetOverlayState') {
+    return { keyboard: false, rects: [], workArea: { top: 0, bottom: 0, left: 0, right: 0 } };
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'SetWorkArea') {
+    return { success: true, ...args };
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'SetMinimizeTargets') {
+    // No compositor to minimize into; accept the table, as Evo does.
+    const targets = Array.isArray(args.targets) ? args.targets : [];
+    return { ok: true, targets: targets.length };
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'GetWindowThumbnails') {
+    return mockThumbnails(args);
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'SetAnimationSettings') {
+    if (args.mode === 'full' || args.mode === 'reduced' || args.mode === 'off') mockAnimation.mode = args.mode;
+    if (typeof args.scale === 'number' && Number.isFinite(args.scale)) {
+      mockAnimation.scale = Math.min(10, Math.max(0, args.scale));
+    }
+    return { ok: true, mode: mockAnimation.mode, scale: mockAnimation.scale };
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'GetAnimationState') {
+    const zero = { open: 0, close: 0, minimize: 0, restore: 0, geometry: 0 };
+    return { ...mockAnimation, active: 0, started: { ...zero }, completed: { ...zero } };
+  }
+  if (iface === 'org.geckoOS.evo' && method === 'SetOverlayRegion') {
+    // No compositor in the browser. Accept the region, as Evo does, so the
+    // overlay page runs the same way in a dev-server tab.
+    const rects = Array.isArray(args.rects) ? args.rects : [];
+    return { success: true, rects: rects.length };
   }
   if (iface === 'org.geckoOS.sound') {
     // No sound files in the browser; succeed, as the device does for any
@@ -1105,6 +1388,9 @@ function mockResponse(
   }
   return { success: true };
 }
+
+// What the mock compositor was last told about animations.
+const mockAnimation = { mode: 'full', scale: 1 };
 
 // A stand-in for echo's audio service: one volume, two outputs, and the
 // same signals the device sends when either changes.

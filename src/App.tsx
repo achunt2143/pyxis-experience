@@ -1,7 +1,9 @@
 import 'remochi/css';
 import { ThemeWrapper } from 'remochi';
 import Desktop from './components/Desktop';
-import { usePyxisTheme } from '@pyxis/app-sdk';
+import { AppHostProvider, usePyxisTheme } from '@pyxis/app-sdk';
+import { CompositorWindowsProvider } from './hooks/CompositorWindowsProvider';
+import { MotionProvider } from './MotionProvider';
 
 /**
  * Bloom shell root. remochi's ThemeWrapper provides the Mochi design tokens
@@ -12,7 +14,15 @@ function App() {
   const theme = usePyxisTheme('light');
   return (
     <ThemeWrapper key={theme} defaultTheme={theme}>
-      <Desktop />
+      {/* One AppHost subscription set and one Evo window store for the whole
+          shell; the dock, overview and launchers all read these. */}
+      <AppHostProvider>
+        <CompositorWindowsProvider>
+          <MotionProvider>
+            <Desktop />
+          </MotionProvider>
+        </CompositorWindowsProvider>
+      </AppHostProvider>
     </ThemeWrapper>
   );
 }

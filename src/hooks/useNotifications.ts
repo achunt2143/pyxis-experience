@@ -13,10 +13,13 @@ import {
  * store's own signals, so it never polls. It also catches a dismissal made
  * somewhere else, such as a toast's X or another view of the centre.
  *
+ * Signals are lost while the overlay restarts or the bridge reconnects, so
+ * the list is read again each time the centre opens (`open`).
+ *
  * Desktop owns the one instance and hands it to the Bell badge and the
  * centre, so the two cannot disagree about the count.
  */
-export function useNotifications() {
+export function useNotifications(open = false) {
   const [notifications, setNotifications] = useState<NotificationEntry[]>([]);
 
   useEffect(() => {
@@ -36,6 +39,17 @@ export function useNotifications() {
       offClosed();
     };
   }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    void listNotifications().then((list) => {
+      if (mounted) setNotifications(list);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [open]);
 
   // The Closed signal removes the entry, but drop it here too once the store
   // agrees. A dismissal should not wait on a signal round trip to disappear.

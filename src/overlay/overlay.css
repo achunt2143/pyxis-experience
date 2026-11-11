@@ -1,0 +1,17 @@
+/*
+ * The overlay is a transparent window over the whole screen (see
+ * OverlayApp.tsx). Nothing in it may paint a background except what it
+ * actually shows, and two things paint a full-page one by default: Bloom's
+ * base styles (index.css, on html and body) and remochi's theme wrapper
+ * (min-height: 100vh, plus the theme's background colour).
+ */
+html,
+body,
+#root,
+.mochi-theme-wrapper {
+  background: transparent !important;
+}
+
+.mochi-theme-wrapper {
+  min-height: 0 !important;
+}

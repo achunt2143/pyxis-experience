@@ -16,5 +16,12 @@
 //     Apps are embedded by iframe so the shell still renders real app UI for
 //     iteration; DesktopWindow's draggable/decorated frame is legitimate
 //     there since there is no second, real window to conflict with.
+//
+// `npm run dev` only: `?compositor` in the URL turns the compositor model on
+// in a plain browser tab, against the EchoClient mock's Evo windows, so the
+// dock and overview can be exercised without a device. A production build
+// ignores it.
 export const IN_COMPOSITOR =
-  typeof location !== 'undefined' && location.protocol === 'pyxis:';
+  typeof location !== 'undefined' &&
+  (location.protocol === 'pyxis:' ||
+    (import.meta.env.DEV && new URLSearchParams(location.search).has('compositor')));

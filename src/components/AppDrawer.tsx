@@ -6,12 +6,13 @@ import {
   Input,
   Button,
   ViewSelectButton,
-  Divider,
 } from 'remochi';
 import { usePyxisTheme, useAppHost } from '@pyxis/app-sdk';
 import { getAppAccent } from '../apps/registry';
 import { useApps, type DesktopApp } from '../hooks/useApps';
 import { AppIcon } from './AppIcon';
+import { useMotion } from '../useMotion';
+import { PANEL_ENTER, PANEL_REST, SCRIM_IN, SCRIM_OUT, TRANSITION } from '../motion';
 
 export interface AppDrawerProps {
   isOpen: boolean;
@@ -155,16 +156,6 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
                         }}
                       >
                         Applications
-                        <span
-                          style={{
-                            fontSize: '0.74rem',
-                            fontWeight: 400,
-                            color: 'var(--color-text-secondary)',
-                            marginLeft: 6,
-                          }}
-                        >
-                          • pyxis
-                        </span>
                       </div>
                     </div>
 
@@ -263,7 +254,7 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
                       )}
                       {!error && !loading && search && (
                         <div style={{ marginTop: 8 }}>
-                          <Button variant="blue" onClick={() => setSearch('')}>
+                          <Button type="blue" onClick={() => setSearch('')}>
                             Clear search filter
                           </Button>
                         </div>
@@ -378,30 +369,6 @@ const AppDrawerContent: React.FC<AppDrawerContentProps> = ({
                   )}
                 </div>
 
-                <Divider orientation="horizontal" style={{ margin: 0 }} />
-
-                {/* Footer: Keyboard shortcut guide and status */}
-                <div
-                  style={{
-                    padding: '8px 16px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    fontSize: '0.72rem',
-                    color: 'var(--color-text-secondary)',
-                    background: 'var(--mochi-hover, rgba(0,0,0,0.02))',
-                  }}
-                >
-                  <div>
-                    {filteredApps.length}{' '}
-                    {filteredApps.length === 1 ? 'app' : 'apps'}
-                  </div>
-                  <div>
-                    <span style={{ opacity: 0.75 }}>↑↓←→</span> navigate •{' '}
-                    <span style={{ opacity: 0.75 }}>↵</span> launch •{' '}
-                    <span style={{ opacity: 0.75 }}>Esc</span> close
-                  </div>
-                </div>
               </div>
     </FloatingPanel>
   );
@@ -413,6 +380,7 @@ export const AppDrawer: React.FC<AppDrawerProps> = ({
   onAppSelect,
   isCompact = false,
 }) => {
+  const { tr, to } = useMotion();
   return (
     <>
       {/* Click-outside backdrop */}
@@ -420,9 +388,8 @@ export const AppDrawer: React.FC<AppDrawerProps> = ({
         {isOpen && (
           <motion.div
             initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.15 }}
+            animate={{ opacity: 1, transition: tr(SCRIM_IN) }}
+            exit={{ opacity: 0, transition: tr(SCRIM_OUT) }}
             style={{
               position: 'fixed',
               inset: 0,
@@ -439,24 +406,21 @@ export const AppDrawer: React.FC<AppDrawerProps> = ({
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: '100%' }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{
-              opacity: 0,
-              y: '100%',
-              transition: { duration: 0.22, ease: [0.32, 0, 0.24, 1] },
-            }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            initial={to({ ...PANEL_ENTER, y: 8 })}
+            animate={{ ...to(PANEL_REST), transition: tr(TRANSITION.open) }}
+            exit={{ ...to({ ...PANEL_ENTER, y: 8 }), transition: tr(TRANSITION.close) }}
             style={{
               position: 'fixed',
-              left: 16,
-              bottom: isCompact ? 50 : 74,
+              left: '50%',
+              marginLeft: -220,
+              bottom: isCompact ? 52 : 72,
               width: 440,
               maxWidth: 'calc(100vw - 32px)',
               maxHeight: 'min(580px, calc(100vh - 86px))',
               zIndex: 1300,
-              boxShadow: '0 20px 45px rgba(0, 0, 0, 0.28)',
-              borderRadius: 16,
+              transformOrigin: 'bottom center',
+              boxShadow: '0 24px 50px rgba(0, 0, 0, 0.32)',
+              borderRadius: 18,
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',

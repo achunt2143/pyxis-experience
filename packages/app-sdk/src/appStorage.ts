@@ -4,10 +4,16 @@
  * Small JSON-document store for the PIM apps (Notes, Contacts, Tasks…).
  *
  * Native path: persists through the real `org.geckoOS.filesystem` Echo
- * service (echo/src/services/filesystem.rs) under
- * `~/.local/share/geckoos/pim/<app>.json`. `writeFile` creates parent
- * directories itself and `~` is expanded daemon-side, so no extra setup
- * calls are needed.
+ * service as `~/<store>.json`. On a device, `~` is the calling app's own
+ * storage: the bridge confines every filesystem call an app makes to
+ * /var/lib/pyxis/data/<app id> (echo/src/services/filesystem/scope.rs), so
+ * one app's documents are out of every other app's reach. `writeFile` makes
+ * missing directories itself, so no setup calls are needed.
+ *
+ * Another app's documents: pass its id as `app`. Only an app holding the
+ * privileged `filesystem:apps` gets them (the shell, whose desktop search
+ * reads Notes, Contacts and Tasks and adds notes and tasks); the bridge
+ * refuses anyone else.
  *
  * Dev/browser path: EchoClient's mock backend answers the same
  * readFile/writeFile calls out of localStorage, so apps behave identically
@@ -18,15 +24,25 @@ import echoClient from './EchoClient';
 const FS_SERVICE = 'filesystem';
 const FS_IFACE = 'org.geckoOS.filesystem';
 
-function docPath(app: string): string {
-  return `~/.local/share/geckoos/pim/${app}.json`;
+function docPath(store: string): string {
+  return `~/${store}.json`;
 }
 
-export async function loadAppData<T>(app: string, fallback: T): Promise<T> {
+export interface AppDataOptions {
+  /** Whose documents: another app's id. Needs `filesystem:apps`. */
+  app?: string;
+}
+
+export async function loadAppData<T>(
+  store: string,
+  fallback: T,
+  options: AppDataOptions = {}
+): Promise<T> {
   try {
     const res = (await echoClient.callMethod(FS_SERVICE, FS_IFACE, 'readFile', {
-      path: docPath(app),
+      path: docPath(store),
       encoding: 'utf-8',
+      ...(options.app ? { app: options.app } : {}),
     })) as { content?: string } | undefined;
     if (res?.content) {
       return JSON.parse(res.content) as T;
@@ -37,12 +53,17 @@ export async function loadAppData<T>(app: string, fallback: T): Promise<T> {
   return fallback;
 }
 
-export async function saveAppData(app: string, data: unknown): Promise<boolean> {
+export async function saveAppData(
+  store: string,
+  data: unknown,
+  options: AppDataOptions = {}
+): Promise<boolean> {
   try {
     const res = (await echoClient.callMethod(FS_SERVICE, FS_IFACE, 'writeFile', {
-      path: docPath(app),
+      path: docPath(store),
       content: JSON.stringify(data, null, 2),
       encoding: 'utf-8',
+      ...(options.app ? { app: options.app } : {}),
     })) as { success?: boolean } | undefined;
     return res?.success !== false;
   } catch {
