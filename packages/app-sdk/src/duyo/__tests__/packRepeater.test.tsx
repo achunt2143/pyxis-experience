@@ -131,8 +131,8 @@ describe('pyxis.Repeater', () => {
     expect(f.rows().map((r) => r.get('index'))).toEqual([0, 1, 2]);
     expect(elementOf(f.container, a)).toBe(elA);
 
-    // Duyo's own child list is creation order (it cannot be reordered through its API).
-    expect(f.list.children.map((x) => x.id)).toEqual([a.id, b.id, c.id]);
+    // Duyo's own child list now follows item order via moveChild().
+    expect(f.list.children.map((x) => x.id)).toEqual([c.id, a.id, b.id]);
   });
 
   it('destroys rows for removed keys, creates new ones, and keeps the order', () => {

@@ -7,16 +7,17 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./duyo": "./src/duyo/index.ts"
+    "./duyo": "./src/duyo/index.ts",
+    "./identity.css": "./src/identity.css"
   },
   "dependencies": {
     "lucide-react": "^0.562.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "remochi": "^0.4.0"
+    "remochi": "^0.5.1"
   },
   "peerDependencies": {
-    "@duyojs/duyo": "^1.1.0"
+    "@duyojs/duyo": "^1.1.3"
   },
   "peerDependenciesMeta": {
     "@duyojs/duyo": {
@@ -24,6 +25,6 @@
     }
   },
   "devDependencies": {
-    "@duyojs/duyo": "^1.1.0"
+    "@duyojs/duyo": "^1.1.3"
   }
 }

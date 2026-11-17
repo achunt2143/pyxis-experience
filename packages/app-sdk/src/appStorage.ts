@@ -59,13 +59,25 @@ export async function saveAppData(
   options: AppDataOptions = {}
 ): Promise<boolean> {
   try {
-    const res = (await echoClient.callMethod(FS_SERVICE, FS_IFACE, 'writeFile', {
+    const content = JSON.stringify(data, null, 2);
+    if (typeof content !== 'string') return false;
+    const params = {
       path: docPath(store),
-      content: JSON.stringify(data, null, 2),
+      content,
       encoding: 'utf-8',
       ...(options.app ? { app: options.app } : {}),
-    })) as { success?: boolean } | undefined;
-    return res?.success !== false;
+    };
+    const native =
+      echoClient.isNative() ||
+      (typeof location !== 'undefined' && location.protocol === 'pyxis:');
+    const res = (await (native
+      ? echoClient.callMethodStrict(FS_SERVICE, FS_IFACE, 'writeFile', params)
+      : echoClient.callMethod(FS_SERVICE, FS_IFACE, 'writeFile', params))) as
+      | { success?: boolean; error?: string }
+      | undefined;
+    if (!res || typeof res !== 'object') return false;
+    if (res.error) return false;
+    return res.success !== false;
   } catch {
     return false;
   }

@@ -212,7 +212,7 @@ describe('pyxis.Control DOM events', () => {
             onpointerenter: 'outerEnter',
             oncontextmenu: 'outerMenu',
             onwheel: 'outerWheel',
-            ondoubleclick: 'outerDouble',
+            ondblclick: 'outerDouble',
             onfocus: 'outerFocus',
             components: [
               {

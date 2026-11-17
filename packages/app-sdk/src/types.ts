@@ -124,6 +124,8 @@ export interface NovaAppInfo {
   entry: string;
   /** Size-keyed icon paths relative to the app root, e.g. { "128": "icon.png" }. */
   icons: Record<string, string>;
+  /** App identity accent color (`#rrggbb`), normalized to lowercase by Nova. */
+  accent?: string | null;
   category?: string | null;
   singleInstance: boolean;
   /** "windowed" | "fullscreen". */

@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
+import { ANIMATION_MODES, type AnimationMode } from './animations';
 import { useClock, useLocation } from './clock';
 import { SETTING_KEYS } from './settingsBus';
-import type { PyxisLocation, ThemePreference } from './settingsSchema';
+import { CURSOR_SIZES, type CursorSize, type PyxisLocation, type ThemePreference } from './settingsSchema';
 import { oneOf, useSetting } from './useSetting';
 import { daylightSun } from './wallpaper/daylight';
 
@@ -49,4 +51,54 @@ export function usePyxisTheme(defaultTheme: PyxisTheme = 'light'): PyxisTheme {
   const place = useLocation();
   const location = place && place.lat !== null && place.lon !== null ? { lat: place.lat, lon: place.lon } : null;
   return resolveTheme(preference, clock.epochMs, clock.utcOffsetMinutes, location);
+}
+
+const parseAnimationMode = oneOf<AnimationMode>(...ANIMATION_MODES);
+
+/**
+ * usePyxisAnimationMode
+ * ---------------------
+ * The user's `pyxis.animations` mode (`'full' | 'reduced' | 'off'`), read
+ * through `useSetting` and synced onto `document.documentElement.dataset.motion`
+ * (`data-motion="full|reduced|off"`).
+ */
+export function usePyxisAnimationMode(): AnimationMode {
+  const mode = useSetting<AnimationMode>(SETTING_KEYS.animations, 'full', parseAnimationMode);
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.motion = mode;
+    }
+  }, [mode]);
+  return mode;
+}
+
+const parseTextScale = (raw: unknown): number | undefined =>
+  typeof raw === 'number' && Number.isInteger(raw) && raw >= 75 && raw <= 150 ? raw : undefined;
+const parseBool = (raw: unknown): boolean | undefined => (typeof raw === 'boolean' ? raw : undefined);
+const parseCursorSize = oneOf<CursorSize>(...CURSOR_SIZES);
+
+/**
+ * Syncs `pyxis.accessibility.*` settings (`textScale`, `highContrast`,
+ * `reduceTransparency`, `cursorSize`) onto `document.documentElement`.
+ */
+export function usePyxisAccessibility() {
+  const textScale = useSetting<number>(SETTING_KEYS.textScale, 100, parseTextScale);
+  const highContrast = useSetting<boolean>(SETTING_KEYS.highContrast, false, parseBool);
+  const reduceTransparency = useSetting<boolean>(SETTING_KEYS.reduceTransparency, false, parseBool);
+  const cursorSize = useSetting<CursorSize>(SETTING_KEYS.cursorSize, 'default', parseCursorSize);
+
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    root.dataset.textScale = String(textScale);
+    root.style.fontSize = textScale === 100 ? '' : `${textScale}%`;
+    root.dataset.highContrast = String(highContrast);
+    root.dataset.reduceTransparency = String(reduceTransparency);
+    root.dataset.cursorSize = cursorSize;
+    if (document.body) {
+      document.body.dataset.cursorSize = cursorSize;
+    }
+  }, [textScale, highContrast, reduceTransparency, cursorSize]);
+
+  return { textScale, highContrast, reduceTransparency, cursorSize };
 }

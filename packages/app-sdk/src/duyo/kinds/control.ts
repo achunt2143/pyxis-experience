@@ -1,18 +1,15 @@
 import type { Component, KindDefinition } from '@duyojs/duyo';
 import type { BindingProps, RendererBinding } from '@duyojs/duyo/react';
-import { createElement, type ChangeEvent, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react';
+import { createElement, type ChangeEvent, type FocusEvent, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react';
 
 import { filterAttributes } from './attributes';
-import { domEventHandlers } from './events';
 
 /**
- * duyo.Control's set plus what the shell and apps draw: controls and media. `tag` is
- * redeclared in full because a subkind's bare value only changes the default; to widen
- * `allowed` it has to restate the declaration (registry.ts, `declare`).
+ * Tags `pyxis.Control` adds on top of `duyo.Control`'s layout/text tags
+ * (`extendAllowed` in `registry.ts` merges them with the base kind's list).
  */
-export const CONTROL_TAGS = [
-  'div', 'span', 'section', 'article', 'header', 'footer', 'nav', 'main', 'aside',
-  'p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'label',
+export const CONTROL_EXTRA_TAGS = [
+  'ul', 'ol', 'li', 'label',
   'button', 'a', 'img', 'input', 'form', 'canvas',
   'table', 'thead', 'tbody', 'tr', 'th', 'td', 'pre', 'code', 'kbd', 'strong', 'em', 'small',
   'hr', 'br', 'figure', 'figcaption', 'details', 'summary',
@@ -29,13 +26,7 @@ export const controlKind: KindDefinition = {
   name: 'pyxis.Control',
   kind: 'duyo.Control',
   published: {
-    /**
-     * Extra element attributes: `data-*`, `aria-*`, `role`, `tabIndex`, `id`, `title`,
-     * `draggable`. Anything else is dropped (see attributes.ts). Treat the object as
-     * immutable: set a new one to change it.
-     */
-    attributes: {},
-    tag: { default: 'div', allowed: CONTROL_TAGS },
+    tag: { default: 'div', extendAllowed: CONTROL_EXTRA_TAGS },
     /** `img`'s picture and `a`'s link; ignored by other tags. */
     src: '',
     alt: '',
@@ -58,7 +49,7 @@ const text = (node: Component, property: string): string | undefined => {
 };
 
 /** The element properties a tag needs beyond the shared host props. */
-function tagProps(node: Component, tag: string, bubble: BindingProps['bubble']): Extra {
+function tagProps(node: Component, tag: string, bubble: BindingProps['bubble'], hostProps: BindingProps['hostProps']): Extra {
   switch (tag) {
     case 'img':
       return { src: text(node, 'src'), alt: node.get('alt') ?? '' };
@@ -81,7 +72,6 @@ function tagProps(node: Component, tag: string, bubble: BindingProps['bubble']):
         },
       };
     case 'input': {
-      const handlers = domEventHandlers(node);
       const commit = () => bubble('onchange', { type: 'change', value: node.get('value') });
       return {
         type: text(node, 'type') ?? 'text',
@@ -93,12 +83,12 @@ function tagProps(node: Component, tag: string, bubble: BindingProps['bubble']):
           bubble('oninput', { type: 'input', value: event.target.value });
         },
         // Blur and Enter commit, as duyo.Input does, after the DOM-event mapping has run.
-        onBlur: (event: SyntheticEvent) => {
-          handlers.onBlur(event);
+        onBlur: (event: FocusEvent<HTMLInputElement>) => {
+          hostProps.onBlur?.(event);
           commit();
         },
         onKeyDown: (event: KeyboardEvent<HTMLInputElement>) => {
-          handlers.onKeyDown(event);
+          hostProps.onKeyDown?.(event);
           if (event.key === 'Enter') commit();
         },
       };
@@ -109,18 +99,17 @@ function tagProps(node: Component, tag: string, bubble: BindingProps['bubble']):
 }
 
 /**
- * Everything a pyxis element gets: attributes first, so the renderer's identity
- * (`data-duyo-kind`/`-id`, `className`, `style`, `onClick`) cannot be overridden by a spec,
- * then the DOM-event mapping, then what the tag needs.
+ * Everything a pyxis element gets: strict attribute filtering first, then the renderer's
+ * hostProps (`data-duyo-kind`/`-id`, `className`, `style`, `onClick`, upstream DOM events),
+ * then what the tag needs.
  */
 export function pyxisHostProps(props: BindingProps, tag: string): Extra {
   const { node, hostProps, bubble } = props;
   const attributes: Extra = { ...filterAttributes(node.get('attributes')) };
   return {
     ...attributes,
-    ...domEventHandlers(node),
     ...hostProps,
-    ...tagProps(node, tag, bubble),
+    ...tagProps(node, tag, bubble, hostProps),
   };
 }
 

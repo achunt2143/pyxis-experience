@@ -117,6 +117,70 @@ export async function setMinimizeTargets(targets: MinimizeTarget[]): Promise<boo
 }
 
 /**
+ * One app as Evo's title bars draw it: its name, its accent (`#rrggbb`, the
+ * tint of its title bar) and its icon, a PNG data URL about 40 px square
+ * (Evo scales it to 20). Evo looks a window up by its *trusted* app id (the
+ * one Nova launched it under), so an app can't take another's name.
+ */
+export interface AppIdentity {
+  appId: string;
+  name: string;
+  accent?: string;
+  icon?: string;
+}
+
+/** One entry as Evo's `SetAppIdentity` reads it (`accent` only when valid). */
+export function appIdentityPayload(a: AppIdentity): Record<string, unknown> {
+  const entry: Record<string, unknown> = { app_id: a.appId, name: a.name };
+  if (a.accent && HEX_COLOUR.test(a.accent)) entry.accent = a.accent.toLowerCase();
+  if (a.icon && a.icon.startsWith('data:image/png;base64,')) entry.icon = a.icon;
+  return entry;
+}
+
+/**
+ * The shell's material for each theme (`#rrggbb`), which Evo makes a title
+ * bar of when it has nothing to frost (`ShellTint.titleMaterial`).
+ */
+export interface IdentityMaterial {
+  light: string;
+  dark: string;
+}
+
+/** `SetAppIdentity`'s `material`: the colours that are valid, or nothing when neither is. */
+export function appIdentityMaterial(m: Partial<IdentityMaterial> | undefined): Record<string, string> | undefined {
+  if (!m) return undefined;
+  const out: Record<string, string> = {};
+  if (m.light && HEX_COLOUR.test(m.light)) out.light = m.light.toLowerCase();
+  if (m.dark && HEX_COLOUR.test(m.dark)) out.dark = m.dark.toLowerCase();
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * Tell Evo every app's name, accent and icon, and whether the shell is dark,
+ * for the window title bars (evo/src/shell/identity.rs). Replaces the
+ * previous table; send it whenever the app list or the theme changes. A bad
+ * icon or accent is dropped from its entry by Evo, never costing the name.
+ * `material`, when given, is the flat title bar's base colour per theme.
+ */
+export async function setAppIdentity(
+  apps: AppIdentity[],
+  dark: boolean,
+  material?: Partial<IdentityMaterial>
+): Promise<boolean> {
+  try {
+    const body: Record<string, unknown> = { apps: apps.map(appIdentityPayload), dark };
+    const sent = appIdentityMaterial(material);
+    if (sent) body.material = sent;
+    const res = (await echoClient.callMethod('evo', EVO_IFACE, 'SetAppIdentity', body)) as
+      | { ok?: boolean }
+      | undefined;
+    return res?.ok ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Ask Evo to give the overlay the keyboard (`true`), or take it back
  * (`false`, which hands it to the next app down the stack). A panel that
  * takes typing asks while it is open. Evo reports the outcome as
@@ -128,6 +192,55 @@ export async function setOverlayFocus(focused: boolean): Promise<boolean> {
       | { success?: boolean }
       | undefined;
     return res?.success ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Ask Evo to lock the screen (what Super+L does). Evo locks at once (it draws
+ * only the overlay over black), then tells Echo's session service so both
+ * agree; `LockChanged {locked: true}` follows. Needs `windows:manage`. Prefer
+ * `session.lock` from a page: it goes through Echo. This is Evo's own entry,
+ * for the shell and for tests.
+ */
+export async function evoLock(): Promise<boolean> {
+  try {
+    const res = (await echoClient.callMethodStrict('evo', EVO_IFACE, 'Lock', {})) as { ok?: boolean } | undefined;
+    return res?.ok ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Tell Evo how long the machine may sit without input before it locks, in
+ * seconds; 0 is never. Bloom sends it from `pyxis.lock.after` (minutes). Evo
+ * knows the last input, so the lock fires even when no page is looking.
+ */
+export async function setIdleLock(seconds: number): Promise<boolean> {
+  try {
+    const res = (await echoClient.callMethod('evo', EVO_IFACE, 'SetIdleLock', {
+      seconds: Math.max(0, Math.round(seconds)),
+    })) as { ok?: boolean } | undefined;
+    return res?.ok ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Where Clear (the unlock's reveal) focuses from: the lock screen's password
+ * field centre, in CSS pixels from the screen's origin (the output's logical
+ * pixels). Sent when the field appears; Evo draws the desktop coming into
+ * focus around it while the page opens its hole from the same point.
+ */
+export async function setLockOrigin(x: number, y: number): Promise<boolean> {
+  try {
+    const res = (await echoClient.callMethod('evo', EVO_IFACE, 'SetLockOrigin', { x, y })) as
+      | { ok?: boolean }
+      | undefined;
+    return res?.ok ?? false;
   } catch {
     return false;
   }

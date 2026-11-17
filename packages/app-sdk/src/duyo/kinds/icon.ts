@@ -2,9 +2,6 @@ import { adapt, type PackEntry } from '@duyojs/duyo/react';
 import type { LucideProps } from 'lucide-react';
 import { createElement, useEffect, type ComponentType } from 'react';
 
-import { filterAttributes } from './attributes';
-import { domEventHandlers } from './events';
-
 const warned = new Set<string>();
 
 const pascal = (name: string) =>
@@ -67,7 +64,5 @@ export const iconEntry: PackEntry = adapt({
     size: node.get('size'),
     color: node.get('color'),
     strokeWidth: node.get('strokeWidth'),
-    ...filterAttributes(node.get('attributes')),
-    ...domEventHandlers(node),
   }),
 });

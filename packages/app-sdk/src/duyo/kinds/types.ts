@@ -2,12 +2,16 @@
 // `@duyojs/duyo/lib/remochi/src/kinds.gen.ts`. Without them `Instance<'pyxis.Repeater'>` is
 // a bare `Component` (whose index signature types every member `any`), so `this.$.list
 // .setItems(...)` works but is unchecked. Nothing at runtime reads this. Keep it in step
-// with control.ts / repeater.ts / icon.ts.
+// with control.ts / repeater.ts / icon.ts / wallpaper.ts.
 import type { Component, ComponentEvent, ControlMembers } from '@duyojs/duyo';
+import type { AnimationMode } from '../../animations';
+import type { GeoPoint } from '../../wallpaper/daylight';
+import type { WallpaperMotion } from '../../wallpaper/engine';
+import type { WallpaperBackend } from '../../wallpaper/renderers/types';
 
 import type { Attributes } from './attributes';
 
-type Tag = (typeof import('./control'))['CONTROL_TAGS'][number];
+type Tag = ControlMembers['tag'] | (typeof import('./control'))['CONTROL_EXTRA_TAGS'][number];
 
 /** pyxis.Control */
 export interface PyxisControl extends Omit<ControlMembers, 'tag' | 'getTag' | 'setTag'> {
@@ -71,7 +75,7 @@ export interface PyxisRepeater extends PyxisControl {
   getItemProps: () => Record<string, unknown>;
   setItemProps: (value: Record<string, unknown>) => void;
   doSetupItem: (event?: ComponentEvent & { index: number; item: unknown; component: Component }) => boolean;
-  /** Rows in item order (`children` keeps creation order). */
+  /** Rows in item order (`children` also follows item order). */
   rows: () => Component[];
   rowFor: (key: unknown) => Component | undefined;
   refresh: () => void;
@@ -94,11 +98,52 @@ export interface PyxisIcon extends PyxisControl {
   setStrokeWidth: (value: number) => void;
 }
 
+/** pyxis.Wallpaper */
+export interface PyxisWallpaper extends PyxisControl {
+  wallpaper: string;
+  getWallpaper: () => string;
+  setWallpaper: (value: string) => void;
+  preview: boolean;
+  getPreview: () => boolean;
+  setPreview: (value: boolean) => void;
+  time: number | null | undefined;
+  getTime: () => number | null | undefined;
+  setTime: (value: number | null | undefined) => void;
+  motion: WallpaperMotion | undefined;
+  getMotion: () => WallpaperMotion | undefined;
+  setMotion: (value: WallpaperMotion | undefined) => void;
+  animationMode: AnimationMode | undefined;
+  getAnimationMode: () => AnimationMode | undefined;
+  setAnimationMode: (value: AnimationMode | undefined) => void;
+  paused: boolean;
+  getPaused: () => boolean;
+  setPaused: (value: boolean) => void;
+  backend: 'auto' | WallpaperBackend;
+  getBackend: () => 'auto' | WallpaperBackend;
+  setBackend: (value: 'auto' | WallpaperBackend) => void;
+  fps: number | undefined;
+  getFps: () => number | undefined;
+  setFps: (value: number | undefined) => void;
+  location: GeoPoint | null | undefined;
+  getLocation: () => GeoPoint | null | undefined;
+  setLocation: (value: GeoPoint | null | undefined) => void;
+  daySpeed: number;
+  getDaySpeed: () => number;
+  setDaySpeed: (value: number) => void;
+  flowSpeed: number;
+  getFlowSpeed: () => number;
+  setFlowSpeed: (value: number) => void;
+  logDetail: string;
+  getLogDetail: () => string;
+  setLogDetail: (value: string) => void;
+}
+
 declare module '@duyojs/duyo' {
   interface KindTypes {
     'pyxis.Control': PyxisControl;
     'pyxis.Row': PyxisRow;
     'pyxis.Repeater': PyxisRepeater;
     'pyxis.Icon': PyxisIcon;
+    'pyxis.Wallpaper': PyxisWallpaper;
   }
 }

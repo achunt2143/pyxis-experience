@@ -22,6 +22,12 @@ export interface SettingSpec {
 
 export type ThemePreference = 'light' | 'dark' | 'auto';
 export type WallpaperMotion = 'flow' | 'still';
+export type CursorSize = 'default' | 'large' | 'xlarge';
+export const CURSOR_SIZES: readonly CursorSize[] = ['default', 'large', 'xlarge'];
+/** `pyxis.launchBar.position`: the launch bar along the bottom edge, or as a rail down the left. */
+export type LaunchBarPosition = 'bottom' | 'left';
+/** `pyxis.launchBar.position`'s values, in the order the Settings app offers them. */
+export const LAUNCH_BAR_POSITIONS: readonly LaunchBarPosition[] = ['bottom', 'left'];
 
 /** `pyxis.location`: null means "from the time zone". */
 export interface PyxisLocation {
@@ -54,6 +60,14 @@ export const SETTING_SCHEMA: Readonly<Record<string, SettingSpec>> = {
   'pyxis.brightness': { kind: number(0, 100), default: 80 },
   'pyxis.dnd': { kind: { type: 'bool' }, default: false },
   'pyxis.animations': { kind: oneOf('full', 'reduced', 'off'), default: 'full' },
+  'pyxis.launchBar.position': { kind: oneOf('bottom', 'left'), default: 'bottom' },
+  'pyxis.lock.after': { kind: number(1, 120, true, true), default: 10 },
+  'pyxis.lock.onSleep': { kind: { type: 'bool' }, default: true },
+  'pyxis.lock.notifications': { kind: oneOf('hidden', 'count', 'full'), default: 'count' },
+  'pyxis.accessibility.textScale': { kind: number(75, 150, true), default: 100 },
+  'pyxis.accessibility.highContrast': { kind: { type: 'bool' }, default: false },
+  'pyxis.accessibility.reduceTransparency': { kind: { type: 'bool' }, default: false },
+  'pyxis.accessibility.cursorSize': { kind: oneOf('default', 'large', 'xlarge'), default: 'default' },
 };
 
 /** Every listed key's default, the same map Echo's `getAll` returns as `defaults`. */

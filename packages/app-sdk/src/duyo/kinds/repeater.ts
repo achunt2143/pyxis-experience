@@ -1,8 +1,4 @@
 import { kindName, type Component, type KindDefinition, type KindInput } from '@duyojs/duyo';
-import type { BindingProps, RendererBinding } from '@duyojs/duyo/react';
-import type { ReactNode } from 'react';
-
-import { renderControl } from './control';
 
 /**
  * pyxis.Repeater: one child component per item, as Enyo's Repeater, but keyed and reusing.
@@ -40,10 +36,8 @@ import { renderControl } from './control';
  * still constructing: its methods exist, but `this.$` is not complete. Defer `$` lookups to
  * `rendered()` or to a later `itemsChanged`.
  *
- * ORDER (a Duyo gap, see the report): Component's child list is private and append-only, so
- * `node.children` keeps creation order. The binding therefore draws the rows from `rows()`,
- * which is in item order, instead of from `children`. Code that walks `children` /
- * `waterfall`s sees creation order; use `rows()`.
+ * Rows are reordered in place via `this.moveChild()`, so `node.children`, DOM order,
+ * `waterfall`s, and `rows()` all agree (with any non-row static children kept ahead of rows).
  */
 export const repeaterKind: KindInput = {
   name: 'pyxis.Repeater',
@@ -170,6 +164,13 @@ export const repeaterKind: KindInput = {
     // Whatever was not claimed has left; destroy back to front, as destroyComponents does.
     for (const row of [...old.values()].reverse()) if (!claimed.has(row)) row.destroy();
 
+    const rowSet = new Set(order);
+    const prefix = this.children.filter((child) => !rowSet.has(child)).length;
+    order.forEach((row, index) => {
+      const target = prefix + index;
+      if (this.children[target] !== row) this.moveChild(row, target);
+    });
+
     this['_rows'] = rows;
     this['_order'] = order;
 
@@ -178,17 +179,6 @@ export const repeaterKind: KindInput = {
     });
   },
 };
-
-function RepeaterView(props: BindingProps): ReactNode {
-  const { node, childNodes, renderNode } = props;
-  const rows: readonly Component[] = typeof node['rows'] === 'function' ? node['rows']() : [];
-  const isRow = new Set(rows);
-  // Anything else written inside the Repeater stays ahead of the rows, in its own order.
-  const ordered = [...childNodes.filter((child) => !isRow.has(child)), ...rows];
-  return renderControl(props, ordered.map((child) => renderNode(child)));
-}
-
-export const repeaterBinding: RendererBinding = { component: RepeaterView };
 
 /**
  * A row base kind for Repeaters: a pyxis.Control that publishes what the Repeater sets.

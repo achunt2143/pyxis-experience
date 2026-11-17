@@ -31,6 +31,7 @@ import { safeGetItem, safeSetItem } from './safeStorage';
 import type { NovaAppInfo } from './types';
 import { SETTING_DEFAULTS, settingDefault, validateSetting } from './settingsSchema';
 import { mockTime } from './timeMock';
+import { mockAccounts, mockEvoLock, mockSession, verifyMockAccountPassword } from './sessionMock';
 
 export interface EchoHeader {
   id: string;
@@ -78,12 +79,15 @@ declare global {
  * host never connects) — callers treat a `false` result the same as "not
  * native" and fall back to the mock.
  */
-function waitForGeckoOSReady(timeoutMs = 3000): Promise<boolean> {
+function waitForGeckoOSReadyCancelable(timeoutMs = 3000): {
+  promise: Promise<boolean>;
+  cancel: () => void;
+} {
   if (typeof window === 'undefined') {
-    return Promise.resolve(false);
+    return { promise: Promise.resolve(false), cancel: () => {} };
   }
   if (window.geckoOS?.initialized) {
-    return Promise.resolve(true);
+    return { promise: Promise.resolve(true), cancel: () => {} };
   }
   // Only worth polling/waiting under pyxis:// -- that's the only context
   // where the compiled-in JSWindowActor bridge (PyxisBridgeChild/Parent,
@@ -93,9 +97,10 @@ function waitForGeckoOSReady(timeoutMs = 3000): Promise<boolean> {
   // full timeout here would only slow down every single mock call during
   // local development for no benefit.
   if (typeof location === 'undefined' || location.protocol !== 'pyxis:') {
-    return Promise.resolve(false);
+    return { promise: Promise.resolve(false), cancel: () => {} };
   }
-  return new Promise((resolve) => {
+  let finishRef: (result: boolean) => void = () => {};
+  const promise = new Promise<boolean>((resolve) => {
     let settled = false;
     const finish = (result: boolean) => {
       if (settled) return;
@@ -105,6 +110,7 @@ function waitForGeckoOSReady(timeoutMs = 3000): Promise<boolean> {
       clearTimeout(timer);
       resolve(result);
     };
+    finishRef = finish;
     const onReady = () => finish(true);
     window.addEventListener('geckoOSReady', onReady);
     // Poll too, not just listen for the event (real bug found via a real
@@ -117,10 +123,7 @@ function waitForGeckoOSReady(timeoutMs = 3000): Promise<boolean> {
     // behind React's effects running, so `window.geckoOS` was still
     // undefined at check time and every native call silently fell back to
     // the mock forever — even though the bridge itself was fully working
-    // and would have appeared a short moment later. This never reproduced
-    // under `-display egl-headless` (used for all of this session's
-    // automated VM testing), which is apparently fast enough to never
-    // lose this race. Polling for `window.geckoOS` to even come into
+    // and would have appeared a short moment later. Polling for `window.geckoOS` to even come into
     // existence (not just its `.initialized` flag) makes this resilient
     // to that timing difference instead of depending on it.
     const pollId = setInterval(() => {
@@ -132,6 +135,11 @@ function waitForGeckoOSReady(timeoutMs = 3000): Promise<boolean> {
       finish(!!window.geckoOS?.initialized);
     }, timeoutMs);
   });
+  return { promise, cancel: () => finishRef(false) };
+}
+
+function waitForGeckoOSReady(timeoutMs = 3000): Promise<boolean> {
+  return waitForGeckoOSReadyCancelable(timeoutMs).promise;
 }
 
 /** Derives the Echo service-name suffix (e.g. `'appHost'`) from an
@@ -158,9 +166,9 @@ function uuid(): string {
 
 const MOCK_APPS = [
   { id: 'terminal', name: 'Terminal', icon: '💻', running: false },
-  { id: 'files', name: 'Files', icon: '📁', running: false },
+  { id: 'files', name: 'File Manager', icon: '📁', running: false },
   { id: 'settings', name: 'Settings', icon: '⚙️', running: false },
-  { id: 'browser', name: 'Browser', icon: '🌐', running: false },
+  { id: 'browser', name: 'Vela', icon: '⛵', running: false },
   { id: 'notes', name: 'Notes', icon: '📝', running: false },
   { id: 'contacts', name: 'Contacts', icon: '👤', running: false },
   { id: 'tasks', name: 'Tasks', icon: '✅', running: false },
@@ -256,8 +264,32 @@ interface MockWindow {
   y: number;
   focused: boolean;
   visible: boolean;
+  busy: boolean;
+  title_label: string;
+  minimized: boolean;
+  maximized: boolean;
+  fullscreen: boolean;
 }
 const mockWindows = new Map<number, MockWindow>();
+
+const mockDisplayOutputs = [
+  {
+    name: 'eDP-1',
+    description: 'Built-in Display',
+    width: 1920,
+    height: 1080,
+    refresh_mhz: 60000,
+    scale: 1,
+    x: 0,
+    y: 0,
+    modes: [
+      { width: 1920, height: 1080, refresh_mhz: 60000 },
+      { width: 2560, height: 1440, refresh_mhz: 60000 },
+      { width: 3840, height: 2160, refresh_mhz: 60000 },
+      { width: 1280, height: 720, refresh_mhz: 60000 },
+    ],
+  },
+];
 
 const MOCK_EVO_METHODS = new Set([
   'ListWindows',
@@ -267,6 +299,8 @@ const MOCK_EVO_METHODS = new Set([
   'CloseWindow',
   'MaximizeWindow',
   'UnmaximizeWindow',
+  'GetOutputs',
+  'SetOutputConfig',
 ]);
 
 /**
@@ -332,6 +366,11 @@ function mapMockWindow(windowId: number, appId: string, fanOut?: MockFanOut) {
     y: 60 + n * 30,
     focused: false,
     visible: true,
+    busy: false,
+    title_label: appId,
+    minimized: false,
+    maximized: false,
+    fullscreen: false,
   };
   mockWindows.set(windowId, win);
   evoEmit(fanOut, 'WindowCreated', {
@@ -435,10 +474,12 @@ const MOCK_FS_WRITES = new Set([
   'chmod',
 ]);
 
-// Parent of a '~'-rooted path ('~/Documents/x' -> '~/Documents'; '~' -> null).
+// Parent of a path ('~/Documents/x' -> '~/Documents'; '/etc/x' -> '/etc'; '/etc' -> '/'; '~' or '/' -> null).
 function mockParentPath(p: string): string | null {
   const i = p.lastIndexOf('/');
-  return i <= 0 ? null : p.slice(0, i);
+  if (i < 0) return null;
+  if (i === 0) return p === '/' ? null : '/';
+  return p.slice(0, i);
 }
 function mockBaseName(p: string): string {
   const i = p.lastIndexOf('/');
@@ -491,6 +532,33 @@ function mockManifests() {
  */
 const MOCK_PIM_APPS = new Set(['notes', 'contacts', 'tasks']);
 
+const MOCK_APP_ACCENTS: Record<string, string> = {
+  terminal: '#34d399',
+  browser: '#0284c7',
+  files: '#d97706',
+  notes: '#eab308',
+  contacts: '#0d9488',
+  tasks: '#7c3aed',
+  settings: '#64748b',
+  installer: '#ea580c',
+};
+
+const MOCK_APP_CAPABILITIES: Record<string, string[]> = {
+  terminal: ['terminal'],
+  files: ['filesystem:read', 'filesystem:write', 'filesystem:user', 'filesystem:system'],
+  settings: ['power', 'audio', 'network:read', 'network:manage', 'settings:write'],
+  browser: ['network:read', 'browser'],
+  installer: ['appManager:install', 'appManager:manage'],
+};
+
+const mockRevokedPermissions = new Map<string, Set<string>>();
+
+function effectiveMockPermissions(appId: string, declared: string[]): string[] {
+  const revoked = mockRevokedPermissions.get(appId);
+  if (!revoked || revoked.size === 0) return [...declared];
+  return declared.filter((p) => !revoked.has(p));
+}
+
 function mockNovaRegistry(): NovaAppInfo[] {
   const byId = new Map<string, NovaAppInfo>();
 
@@ -502,11 +570,12 @@ function mockNovaRegistry(): NovaAppInfo[] {
       type: 'web',
       entry: 'index.html',
       icons: { '128': 'icon.png' },
+      accent: MOCK_APP_ACCENTS[a.id] ?? null,
       category: MOCK_PIM_APPS.has(a.id) ? 'pim' : 'system',
       singleInstance: true,
       display: 'windowed',
       background: false,
-      permissions: [],
+      permissions: effectiveMockPermissions(a.id, MOCK_APP_CAPABILITIES[a.id] ?? []),
       installed: true,
       source: 'manifest.webapp',
       tier: 'system',
@@ -524,6 +593,7 @@ function mockNovaRegistry(): NovaAppInfo[] {
       type: meta.appType,
       entry: meta.appType === 'native' ? '' : 'index.html',
       icons: { '128': 'icon.png' },
+      accent: MOCK_APP_ACCENTS[pkg] ?? null,
       category: meta.appType === 'native' ? 'utility' : 'pim',
       singleInstance: true,
       display: 'windowed',
@@ -561,6 +631,21 @@ function mockResponse(
   // and it is Nova, not the installer, that announces the new registry.
   fanOut?: (signal: string, data: unknown, ifaceOverride?: string) => void
 ): unknown {
+  // ---- The lock: Echo's session and accounts, Evo's Lock calls ----
+  if (iface === 'org.geckoOS.session') return mockSession(method, args, fanOut);
+  if (iface === 'org.geckoOS.accounts') return mockAccounts(method, args, fanOut);
+  if (
+    iface === 'org.geckoOS.Privilege' ||
+    iface === 'org.geckoOS.privilege' ||
+    iface.toLowerCase().endsWith('.privilege')
+  ) {
+    return mockPrivilege(method, args, fanOut, iface);
+  }
+  if (iface === 'org.geckoOS.evo') {
+    const lockAnswer = mockEvoLock(method, args, fanOut);
+    if (lockAnswer !== undefined) return lockAnswer;
+  }
+
   // ---- AppHost (new lifecycle interface) ----
   if (iface.endsWith('appHost') || iface.endsWith('AppHost')) {
     switch (method) {
@@ -796,6 +881,21 @@ function mockResponse(
     if (method === 'ListWindows') {
       return { windows: Array.from(mockWindows.values()).map((w) => ({ ...w })) };
     }
+    if (method === 'GetOutputs') {
+      return { outputs: mockDisplayOutputs.map((o) => ({ ...o, modes: o.modes.map((m) => ({ ...m })) })) };
+    }
+    if (method === 'SetOutputConfig') {
+      const targetName = typeof args.name === 'string' && args.name.trim() ? args.name.trim() : mockDisplayOutputs[0].name;
+      const out = mockDisplayOutputs.find((o) => o.name === targetName) ?? mockDisplayOutputs[0];
+      if (typeof args.width === 'number' && args.width > 0) out.width = args.width;
+      if (typeof args.height === 'number' && args.height > 0) out.height = args.height;
+      if (typeof args.scale === 'number' && args.scale >= 0.5 && args.scale <= 4) out.scale = args.scale;
+      if (typeof args.x === 'number') out.x = args.x;
+      if (typeof args.y === 'number') out.y = args.y;
+      const outputs = mockDisplayOutputs.map((o) => ({ ...o, modes: o.modes.map((m) => ({ ...m })) }));
+      evoEmit(fanOut, 'OutputsChanged', { outputs });
+      return { ok: true, output: { ...out }, outputs };
+    }
     const windowId = Number(args.window_id);
     const win = mockWindows.get(windowId);
     if (!win) return { error: `no window ${windowId}` };
@@ -805,6 +905,7 @@ function mockResponse(
         return { success: true, window_id: windowId };
       case 'MinimizeWindow': {
         win.visible = false;
+        win.minimized = true;
         evoEmit(fanOut, 'WindowMinimized', { window_id: windowId, minimized: true });
         // Lumen: the Droplet reaches the icon 90% of the way through its
         // ~480 ms, and Evo says so (the dock ripples).
@@ -820,6 +921,7 @@ function mockResponse(
       }
       case 'MaximizeWindow':
       case 'UnmaximizeWindow':
+        win.maximized = method === 'MaximizeWindow';
         evoEmit(fanOut, 'WindowMaximized', {
           window_id: windowId,
           maximized: method === 'MaximizeWindow',
@@ -827,6 +929,7 @@ function mockResponse(
         return { success: true, window_id: windowId };
       case 'RestoreWindow':
         win.visible = true;
+        win.minimized = false;
         evoEmit(fanOut, 'MinimizeLanded', { app_id: win.app_id, window_id: windowId, phase: 'rise' });
         evoEmit(fanOut, 'WindowMinimized', { window_id: windowId, minimized: false });
         return { success: true, window_id: windowId };
@@ -967,7 +1070,10 @@ function mockResponse(
           (s) => s.state === 'running' || s.state === 'starting'
         );
         if (existing) {
-          return { sessionId: existing.sessionId, appId, raised: true };
+          const windowId = existing.surfaces[0];
+          return windowId !== undefined
+            ? { sessionId: existing.sessionId, appId, raised: true, windowId }
+            : { sessionId: existing.sessionId, appId, raised: true };
         }
         const res = mockResponse('org.geckoOS.appHost', 'LaunchApp', { appId }, fanOut) as
           | { sessionId?: string }
@@ -1004,8 +1110,10 @@ function mockResponse(
         if (typeof window !== 'undefined') {
           window.open(url, '_blank', 'noopener,noreferrer');
         }
-        return { sessionId: uuid(), appId: 'browser-window', url };
+        return { sessionId: uuid(), appId: 'browser', url };
       }
+      case 'GetAppIcon':
+        return { icon: null };
       case 'List':
         // NOT appHost.ListApps — see mockNovaRegistry's comment. `List`
         // carries no `running`/`sessionId`; liveness comes from AppHost.
@@ -1021,6 +1129,65 @@ function mockResponse(
         return session
           ? { ...info, running: true, sessionId: session.sessionId }
           : { ...info, running: false };
+      }
+      case 'GetPermissions': {
+        const registry = mockNovaRegistry();
+        const buildEntry = (app: NovaAppInfo) => {
+          const declared =
+            app.source === 'manifest.webapp'
+              ? (MOCK_APP_CAPABILITIES[app.id] ?? [])
+              : app.permissions;
+          const revokedSet = mockRevokedPermissions.get(app.id);
+          const revoked = revokedSet ? declared.filter((p) => revokedSet.has(p)) : [];
+          return {
+            id: app.id,
+            name: app.name,
+            declared,
+            revoked,
+            effective: effectiveMockPermissions(app.id, declared),
+          };
+        };
+        const appId = typeof args.appId === 'string' && args.appId ? args.appId : null;
+        if (appId) {
+          const app = registry.find((x) => x.id === appId);
+          if (!app) return { error: `app '${appId}' is not installed` };
+          return buildEntry(app);
+        }
+        return { apps: registry.map(buildEntry) };
+      }
+      case 'SetPermission': {
+        const appId = String(args.appId ?? '');
+        const permission = String(args.permission ?? '');
+        const granted = Boolean(args.granted);
+        const app = mockNovaRegistry().find((x) => x.id === appId);
+        if (!app) return { error: `app '${appId}' is not installed` };
+        const declared =
+          app.source === 'manifest.webapp'
+            ? (MOCK_APP_CAPABILITIES[app.id] ?? [])
+            : app.permissions;
+        if (!declared.includes(permission)) {
+          return { error: `app '${appId}' does not declare capability '${permission}'` };
+        }
+        let revokedSet = mockRevokedPermissions.get(appId);
+        if (!revokedSet) {
+          revokedSet = new Set<string>();
+          mockRevokedPermissions.set(appId, revokedSet);
+        }
+        if (granted) {
+          revokedSet.delete(permission);
+        } else {
+          revokedSet.add(permission);
+        }
+        const effective = effectiveMockPermissions(appId, declared);
+        fanOut?.('PermissionsChanged', { appId, permission, granted, effective }, 'org.geckoOS.nova');
+        fanOut?.('RegistryChanged', { reason: 'permissions', appId }, 'org.geckoOS.nova');
+        return {
+          id: app.id,
+          name: app.name,
+          declared,
+          revoked: declared.filter((p) => revokedSet!.has(p)),
+          effective,
+        };
       }
       default:
         return { success: false, error: `unknown nova method ${method}` };
@@ -1093,7 +1260,7 @@ function mockResponse(
         const key = String(args.key ?? '');
         const value = args.value ?? null;
         const refusal = validateSetting(key, value);
-        if (refusal) throw new Error(refusal);
+        if (refusal) return Promise.reject(new Error(refusal));
         const previous = effective(key);
         if (!has(key) || JSON.stringify(settings[key]) !== JSON.stringify(value)) {
           settings[key] = value;
@@ -1144,7 +1311,7 @@ function mockResponse(
     const absolute = [args.path, args.source, args.destination].some(
       (p) => typeof p === 'string' && p.startsWith('/')
     );
-    if (absolute && MOCK_FS_WRITES.has(method)) {
+    if (absolute && MOCK_FS_WRITES.has(method) && !hasActiveMockPrivilege('files')) {
       return { error: `${method} refused: outside your home, files are read-only` };
     }
     switch (method) {
@@ -1359,6 +1526,11 @@ function mockResponse(
     const targets = Array.isArray(args.targets) ? args.targets : [];
     return { ok: true, targets: targets.length };
   }
+  if (iface === 'org.geckoOS.evo' && method === 'SetAppIdentity') {
+    // No title bars to draw; accept the table, as Evo does.
+    const apps = Array.isArray(args.apps) ? args.apps : [];
+    return { ok: true, apps: apps.length, icons: apps.filter((a) => a && typeof a === 'object' && 'icon' in a).length };
+  }
   if (iface === 'org.geckoOS.evo' && method === 'GetWindowThumbnails') {
     return mockThumbnails(args);
   }
@@ -1484,7 +1656,353 @@ function mockNotifications(
   }
 }
 
+// ---- Privilege (org.geckoOS.privilege / org.geckoOS.Privilege) ----
+// Stateful stand-in for Echo's privilege elevation service: manages 5-minute
+// per-app grants, pending overlay prompts, audit entries, and signals.
+
+const PRIVILEGE_SIGNAL_IFACE = 'org.geckoOS.privilege';
+const DEFAULT_PRIVILEGE_DURATION_SECS = 300;
+
+interface MockPrivilegeGrant {
+  appId: string;
+  reason: string;
+  grantedAt: number;
+  expiresAt: number;
+}
+
+interface MockPrivilegeRequest {
+  requestId: string;
+  appId: string;
+  reason: string;
+  requestedAt: number;
+  durationSecs: number;
+  action?: string;
+  details?: Record<string, string>;
+}
+
+interface MockPrivilegeAudit {
+  id: string;
+  appId: string;
+  action: string;
+  reason?: string;
+  timestamp: number;
+}
+
+const mockPrivilegeGrants = new Map<string, MockPrivilegeGrant>();
+const mockPrivilegePending: MockPrivilegeRequest[] = [];
+const mockPrivilegeAudit: MockPrivilegeAudit[] = [];
+
+export function resetMockPrivilege(): void {
+  mockPrivilegeGrants.clear();
+  mockPrivilegePending.length = 0;
+  mockPrivilegeAudit.length = 0;
+}
+
+function recordPrivilegeAudit(appId: string, action: string, reason?: string): void {
+  mockPrivilegeAudit.unshift({
+    id: uuid(),
+    appId,
+    action,
+    ...(reason ? { reason } : {}),
+    timestamp: Date.now(),
+  });
+  mockPrivilegeAudit.length = Math.min(mockPrivilegeAudit.length, 50);
+}
+
+function pruneExpiredMockPrivileges(now = Date.now()): boolean {
+  let expired = false;
+  for (const [appId, grant] of mockPrivilegeGrants.entries()) {
+    if (now >= grant.expiresAt) {
+      mockPrivilegeGrants.delete(appId);
+      recordPrivilegeAudit(appId, 'expired', grant.reason);
+      expired = true;
+    }
+  }
+  return expired;
+}
+
+function hasActiveMockPrivilege(appId?: string): boolean {
+  pruneExpiredMockPrivileges();
+  if (appId) return mockPrivilegeGrants.has(appId);
+  return mockPrivilegeGrants.size > 0;
+}
+
+function buildMockPrivilegeState(appId?: string, now = Date.now()) {
+  const allGrants = Array.from(mockPrivilegeGrants.values()).map((g) => ({
+    appId: g.appId,
+    reason: g.reason,
+    grantedAt: g.grantedAt,
+    grantedAtMs: g.grantedAt,
+    expiresAt: g.expiresAt,
+    expiresAtMs: g.expiresAt,
+    remainingSecs: Math.max(0, Math.ceil((g.expiresAt - now) / 1000)),
+  }));
+  const grants = appId ? allGrants.filter((g) => g.appId === appId) : allGrants;
+  const pending = (appId
+    ? mockPrivilegePending.filter((p) => p.appId === appId)
+    : mockPrivilegePending
+  ).map((p) => ({ ...p }));
+  return {
+    active: grants.length > 0,
+    grant: grants[0] ?? null,
+    grants,
+    pending,
+    audit: mockPrivilegeAudit.map((a) => ({ ...a })),
+  };
+}
+
+function emitPrivilegeSignal(
+  fanOut: MockFanOut | undefined,
+  iface: string,
+  signal: string,
+  payload: Record<string, unknown>
+) {
+  fanOut?.(signal, payload, PRIVILEGE_SIGNAL_IFACE);
+  if (iface !== PRIVILEGE_SIGNAL_IFACE) {
+    fanOut?.(signal, payload, iface);
+  }
+}
+
+/**
+ * Dev-server and test helper: raise an action request (as Echo's
+ * `PrivilegeRequested` would for `package.install`, `network.manage`, …)
+ * with `details`, so the shell's dialog can be seen without a device.
+ */
+export function emitMockPrivilegeAction(
+  action: string,
+  details: Record<string, string>,
+  appId = 'installer',
+  reason = 'An app-supplied reason that the dialog never shows'
+): string {
+  const now = Date.now();
+  const req: MockPrivilegeRequest = {
+    requestId: uuid(),
+    appId,
+    reason,
+    requestedAt: now,
+    durationSecs: DEFAULT_PRIVILEGE_DURATION_SECS,
+    action,
+    details,
+  };
+  mockPrivilegePending.push(req);
+  recordPrivilegeAudit(appId, 'requested', reason);
+  const fullState = buildMockPrivilegeState(undefined, now);
+  void echoClient.emitSignal(PRIVILEGE_SIGNAL_IFACE, 'PrivilegeRequested', {
+    request: { ...req },
+    state: fullState,
+  });
+  void echoClient.emitSignal(PRIVILEGE_SIGNAL_IFACE, 'PrivilegeChanged', fullState);
+  return req.requestId;
+}
+
+function mockPrivilege(
+  method: string,
+  args: Record<string, unknown>,
+  fanOut?: MockFanOut,
+  iface = PRIVILEGE_SIGNAL_IFACE
+): unknown {
+  const now = Date.now();
+  const expiredAny = pruneExpiredMockPrivileges(now);
+  if (expiredAny) {
+    emitPrivilegeSignal(fanOut, iface, 'PrivilegeChanged', buildMockPrivilegeState(undefined, now));
+  }
+
+  switch (method.toLowerCase()) {
+    case 'request': {
+      const appId = String(args.appId ?? args.app_id ?? 'files').trim() || 'files';
+      const reason =
+        typeof args.reason === 'string' && args.reason.trim()
+          ? args.reason.trim()
+          : 'Change system files';
+      const durationSecs =
+        typeof args.durationSecs === 'number' && args.durationSecs > 0
+          ? args.durationSecs
+          : DEFAULT_PRIVILEGE_DURATION_SECS;
+
+      const existing = mockPrivilegeGrants.get(appId);
+      if (existing && existing.expiresAt > now) {
+        const state = buildMockPrivilegeState(appId, now);
+        return { granted: true, pending: false, grant: state.grant, state };
+      }
+
+      let pendingReq = mockPrivilegePending.find((p) => p.appId === appId);
+      if (!pendingReq) {
+        pendingReq = {
+          requestId: uuid(),
+          appId,
+          reason,
+          requestedAt: now,
+          durationSecs,
+        };
+        mockPrivilegePending.push(pendingReq);
+        recordPrivilegeAudit(appId, 'requested', reason);
+        const fullState = buildMockPrivilegeState(undefined, now);
+        emitPrivilegeSignal(fanOut, iface, 'PrivilegeRequested', {
+          request: { ...pendingReq },
+          state: fullState,
+        });
+        emitPrivilegeSignal(fanOut, iface, 'PrivilegeChanged', fullState);
+      }
+
+      return {
+        granted: false,
+        pending: true,
+        requestId: pendingReq.requestId,
+        request: { ...pendingReq },
+        state: buildMockPrivilegeState(appId, now),
+      };
+    }
+
+    case 'getstate': {
+      const appId = typeof args.appId === 'string' && args.appId ? args.appId : undefined;
+      return buildMockPrivilegeState(appId, now);
+    }
+
+    case 'revoke': {
+      const appId = typeof args.appId === 'string' && args.appId ? args.appId : undefined;
+      let changed = false;
+      if (appId) {
+        const prev = mockPrivilegeGrants.get(appId);
+        if (prev) {
+          mockPrivilegeGrants.delete(appId);
+          recordPrivilegeAudit(appId, 'revoked', prev.reason);
+          changed = true;
+        }
+      } else if (mockPrivilegeGrants.size > 0) {
+        for (const [id, prev] of mockPrivilegeGrants.entries()) {
+          recordPrivilegeAudit(id, 'revoked', prev.reason);
+        }
+        mockPrivilegeGrants.clear();
+        changed = true;
+      }
+      const fullState = buildMockPrivilegeState(undefined, now);
+      if (changed) {
+        emitPrivilegeSignal(fanOut, iface, 'PrivilegeChanged', fullState);
+      }
+      return { ok: true, state: appId ? buildMockPrivilegeState(appId, now) : fullState };
+    }
+
+    case 'authenticate': {
+      const password = typeof args.password === 'string' ? args.password : '';
+      const requestId =
+        typeof args.requestId === 'string' && args.requestId
+          ? args.requestId
+          : typeof args.request_id === 'string' && args.request_id
+            ? args.request_id
+            : undefined;
+      const appIdArg =
+        typeof args.appId === 'string' && args.appId
+          ? args.appId
+          : typeof args.app_id === 'string' && args.app_id
+            ? args.app_id
+            : undefined;
+
+      const reqIdx = requestId
+        ? mockPrivilegePending.findIndex((p) => p.requestId === requestId)
+        : appIdArg
+          ? mockPrivilegePending.findIndex((p) => p.appId === appIdArg)
+          : mockPrivilegePending.length > 0
+            ? 0
+            : -1;
+      const req = reqIdx >= 0 ? mockPrivilegePending[reqIdx] : undefined;
+      const targetAppId = req?.appId ?? appIdArg ?? 'files';
+
+      if (!verifyMockAccountPassword(password)) {
+        recordPrivilegeAudit(targetAppId, 'denied', req?.reason);
+        return { ok: false, reason: 'wrong', error: 'Incorrect password' };
+      }
+
+      if (reqIdx >= 0) {
+        mockPrivilegePending.splice(reqIdx, 1);
+      } else if (appIdArg) {
+        for (let i = mockPrivilegePending.length - 1; i >= 0; i -= 1) {
+          if (mockPrivilegePending[i].appId === appIdArg) mockPrivilegePending.splice(i, 1);
+        }
+      }
+
+      const durationSecs =
+        typeof args.durationSecs === 'number' && args.durationSecs > 0
+          ? args.durationSecs
+          : req?.durationSecs ?? DEFAULT_PRIVILEGE_DURATION_SECS;
+      const reason = req?.reason ?? (typeof args.reason === 'string' ? args.reason : 'Change system files');
+      const grant: MockPrivilegeGrant = {
+        appId: targetAppId,
+        reason,
+        grantedAt: now,
+        expiresAt: now + durationSecs * 1000,
+      };
+      mockPrivilegeGrants.set(targetAppId, grant);
+      recordPrivilegeAudit(targetAppId, 'granted', reason);
+
+      const fullState = buildMockPrivilegeState(undefined, now);
+      emitPrivilegeSignal(fanOut, iface, 'PrivilegeChanged', fullState);
+
+      return {
+        ok: true,
+        grant: {
+          ...grant,
+          remainingSecs: durationSecs,
+        },
+        state: fullState,
+      };
+    }
+
+    case 'dismiss': {
+      const requestId =
+        typeof args.requestId === 'string' && args.requestId
+          ? args.requestId
+          : typeof args.request_id === 'string' && args.request_id
+            ? args.request_id
+            : undefined;
+      const appId =
+        typeof args.appId === 'string' && args.appId
+          ? args.appId
+          : typeof args.app_id === 'string' && args.app_id
+            ? args.app_id
+            : undefined;
+
+      let removed: MockPrivilegeRequest[] = [];
+      if (requestId) {
+        const idx = mockPrivilegePending.findIndex((p) => p.requestId === requestId);
+        if (idx >= 0) removed = mockPrivilegePending.splice(idx, 1);
+      } else if (appId) {
+        for (let i = mockPrivilegePending.length - 1; i >= 0; i -= 1) {
+          if (mockPrivilegePending[i].appId === appId) {
+            removed.push(...mockPrivilegePending.splice(i, 1));
+          }
+        }
+      } else if (mockPrivilegePending.length > 0) {
+        removed = [mockPrivilegePending.shift()!];
+      }
+
+      for (const r of removed) {
+        recordPrivilegeAudit(r.appId, 'dismissed', r.reason);
+      }
+      const fullState = buildMockPrivilegeState(undefined, now);
+      if (removed.length > 0) {
+        emitPrivilegeSignal(fanOut, iface, 'PrivilegeChanged', fullState);
+      }
+      return { ok: true, state: fullState };
+    }
+
+    default:
+      return { success: false, error: `mock privilege service has no '${method}'` };
+  }
+}
+
 // ---------- Client ----------
+/**
+ * Echo's refusals carry a machine-readable reason inside the error text
+ * (`{"reason":"denied",…}`): held root actions (`denied`, `timeout`,
+ * `no-password`) and package signing (`unsigned`, `bad-signature`).
+ */
+const POLICY_REFUSAL = /"reason"\s*:\s*"(denied|timeout|no-password|unsigned|bad-signature)"/;
+
+export function isPolicyRefusal(err: unknown): boolean {
+  const text = err instanceof Error ? err.message : typeof err === 'string' ? err : '';
+  return POLICY_REFUSAL.test(text);
+}
+
 export class EchoClient {
   private signalSubs = new Map<string, Set<SignalCallback>>();
 
@@ -1512,8 +2030,13 @@ export class EchoClient {
     const ready = await waitForGeckoOSReady();
     if (ready && window.geckoOS) {
       try {
-        return await window.geckoOS.callService(service, method, args);
+        const shortService = service.replace(/^org\.geckoOS\./, '');
+        return await window.geckoOS.callService(shortService, method, args);
       } catch (err) {
+        // A refusal the user or the device decided (a dismissed root-access
+        // dialog, no answer in time, an unsigned package) is an answer, not a
+        // transport failure: falling back to the mock would report it as done.
+        if (isPolicyRefusal(err)) throw err;
         console.warn('[EchoClient] native call failed, falling back to mock', err);
       }
     }
@@ -1522,6 +2045,29 @@ export class EchoClient {
     // always live on appHost's iface; a nova call that spawns/kills a session
     // delegates to appHost, so bind the fan-out there for nova calls too or
     // the shell's appHost subscription wouldn't receive them.
+    const fanOutIface = iface.endsWith('nova') ? 'org.geckoOS.appHost' : iface;
+    return Promise.resolve(mockResponse(iface, method, args, this.mockFanOut(fanOutIface)));
+  }
+
+  /**
+   * `callMethod` for calls where a mock answer would be a lie: with the real
+   * bridge attached, a refusal or an error rejects instead of falling back to
+   * the mock. The lock uses it: a refused `session.lock` must not leave the
+   * page drawing a lock screen over an unlocked machine, and a failed
+   * `session.unlock` must never read as success. Without a bridge (the dev
+   * server) it is `callMethod`, mock included.
+   */
+  async callMethodStrict(
+    service: string,
+    iface: string,
+    method: string,
+    args: Record<string, unknown> = {}
+  ): Promise<unknown> {
+    const ready = await waitForGeckoOSReady();
+    if (ready && window.geckoOS) {
+      const shortService = service.replace(/^org\.geckoOS\./, '');
+      return window.geckoOS.callService(shortService, method, args);
+    }
     const fanOutIface = iface.endsWith('nova') ? 'org.geckoOS.appHost' : iface;
     return Promise.resolve(mockResponse(iface, method, args, this.mockFanOut(fanOutIface)));
   }
@@ -1574,13 +2120,26 @@ export class EchoClient {
     }
     this.signalSubs.get(key)!.add(callback);
 
+    let unsubscribed = false;
     let nativeUnsub: (() => void) | undefined;
+    let cancelWait: (() => void) | undefined;
+
     if (this.isNative()) {
       const service = ifaceToService(iface);
       nativeUnsub = window.geckoOS!.addEventListener(service, signal, callback);
+    } else {
+      const wait = waitForGeckoOSReadyCancelable();
+      cancelWait = wait.cancel;
+      void wait.promise.then((ready) => {
+        if (unsubscribed || !ready || !window.geckoOS) return;
+        const service = ifaceToService(iface);
+        nativeUnsub = window.geckoOS.addEventListener(service, signal, callback);
+      });
     }
 
     return () => {
+      unsubscribed = true;
+      cancelWait?.();
       this.signalSubs.get(key)?.delete(callback);
       try {
         nativeUnsub?.();

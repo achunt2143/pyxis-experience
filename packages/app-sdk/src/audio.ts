@@ -18,6 +18,10 @@ export const AUDIO_SIGNALS = {
   volumeChanged: 'VolumeChanged',
   /** `{ outputs }` */
   outputChanged: 'OutputChanged',
+  /** `{ volume, muted }` */
+  inputVolumeChanged: 'InputVolumeChanged',
+  /** `{ inputs }` */
+  inputChanged: 'InputChanged',
 } as const;
 
 /** The sounds the image ships, by the names `playSystemSound` takes. */
@@ -36,6 +40,9 @@ export interface AudioOutput {
   description: string;
   isDefault: boolean;
 }
+
+/** Input (microphone) device reported by `org.geckoOS.audio.listInputs`. */
+export type AudioInput = AudioOutput;
 
 /** One audio-service call. On a machine with no audio stack, or one where
  *  PipeWire is not up yet, every call fails. The UI shows that as "no
@@ -88,6 +95,44 @@ export function onOutputChanged(callback: (outputs: AudioOutput[]) => void): () 
   return echoClient.onSignal(AUDIO_IFACE, AUDIO_SIGNALS.outputChanged, (data) => {
     const outputs = (data as { outputs?: AudioOutput[] } | undefined)?.outputs;
     if (outputs) callback(outputs);
+  });
+}
+
+export async function getInputVolume(): Promise<VolumeState | null> {
+  const res = await audioCall<VolumeState>('getInputVolume', {});
+  return isVolume(res) ? res : null;
+}
+
+export async function setInputVolume(volume: number): Promise<VolumeState | null> {
+  const clamped = Math.round(Math.min(100, Math.max(0, volume)));
+  const res = await audioCall<VolumeState>('setInputVolume', { volume: clamped });
+  return isVolume(res) ? res : null;
+}
+
+export async function setInputMuted(muted: boolean): Promise<VolumeState | null> {
+  const res = await audioCall<VolumeState>('setInputMute', { muted });
+  return isVolume(res) ? res : null;
+}
+
+export async function listInputs(): Promise<AudioInput[]> {
+  return (await audioCall<{ inputs?: AudioInput[] }>('listInputs', {}))?.inputs ?? [];
+}
+
+export async function setDefaultInput(id: number): Promise<AudioInput[]> {
+  return (await audioCall<{ inputs?: AudioInput[] }>('setDefaultInput', { id }))?.inputs ?? [];
+}
+
+export function onInputVolumeChanged(callback: (state: VolumeState) => void): () => void {
+  return echoClient.onSignal(AUDIO_IFACE, AUDIO_SIGNALS.inputVolumeChanged, (data) => {
+    const state = data as VolumeState | undefined;
+    if (state && typeof state.volume === 'number') callback(state);
+  });
+}
+
+export function onInputChanged(callback: (inputs: AudioInput[]) => void): () => void {
+  return echoClient.onSignal(AUDIO_IFACE, AUDIO_SIGNALS.inputChanged, (data) => {
+    const inputs = (data as { inputs?: AudioInput[] } | undefined)?.inputs;
+    if (inputs) callback(inputs);
   });
 }
 

@@ -20,6 +20,7 @@ import {
   type InstallResult,
   type InstallerState,
   type PackageInfo,
+  installErrorText,
 } from '../../useInstaller';
 import { createStore } from './store';
 
@@ -28,7 +29,7 @@ const IDLE: InstallProgress = { phase: 'idle', message: '', package: null };
 function errorOf(res: unknown): string | null {
   if (res && typeof res === 'object' && 'error' in res) {
     const e = (res as { error?: unknown }).error;
-    return typeof e === 'string' ? e : 'unknown error';
+    return typeof e === 'string' ? installErrorText(e) : 'unknown error';
   }
   return null;
 }
@@ -107,7 +108,7 @@ export const installerStore = createStore<InstallerState>(
         });
         return res;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = installErrorText(e instanceof Error ? e.message : String(e));
         terminal = true;
         patch({ installError: msg, progress: { phase: 'failed', message: msg, package: pkg.package } });
         return null;
@@ -115,18 +116,26 @@ export const installerStore = createStore<InstallerState>(
     }
 
     async function remove(packageName: string): Promise<boolean> {
+      patch({ error: null });
       try {
         const res = (await echoClient.callMethod(INSTALLER_SERVICE, INSTALLER_IFACE, 'Remove', {
           package: packageName,
         })) as { package?: string; error?: string } | undefined;
-        if (errorOf(res)) return false;
+        const err = errorOf(res);
+        if (err !== null || !res) {
+          patch({ error: err && err.trim() ? err : 'Failed to remove package' });
+          return false;
+        }
         patch({
+          error: null,
           packages: data.packages.map((p) =>
             p.package === packageName ? { ...p, installed: false, installedVersion: null } : p,
           ),
         });
         return true;
-      } catch {
+      } catch (e) {
+        const msg = e instanceof Error && e.message.trim() ? e.message : 'Failed to remove package';
+        patch({ error: msg });
         return false;
       }
     }
@@ -154,8 +163,10 @@ export const installerStore = createStore<InstallerState>(
         const d = (d0 ?? {}) as { error?: string; package?: string };
         if (terminal) return;
         terminal = true;
+        const msg = typeof d.error === 'string' && d.error.trim() ? d.error : 'Installation failed';
         patch({
-          progress: { phase: 'failed', message: d.error ?? 'Installation failed', package: d.package ?? null },
+          installError: data.installError ?? msg,
+          progress: { phase: 'failed', message: msg, package: d.package ?? null },
         });
       }),
     ];

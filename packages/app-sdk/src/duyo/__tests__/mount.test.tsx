@@ -139,11 +139,38 @@ describe('mountDuyoApp', () => {
     expect(close).toHaveBeenCalledOnce();
   });
 
-  it('does not close when a remochi widget raises its own onClose (a dismissed Dialog)', async () => {
+  it('does not close when a remochi Dialog dismisses itself (onClose stays local, onDismiss bubbles)', async () => {
     const close = vi.spyOn(window, 'close').mockImplementation(() => {});
-    const duyo = await mount('MountTest.App');
-    // A remochi Dialog dismissing itself does node.doClose({}); the event bubbles to the root.
-    duyo.root.$.closeButton!.bubble('onClose');
+    const events: string[] = [];
+    kind({
+      name: 'MountTest.WithDialog',
+      kind: 'duyo.Control',
+      components: [
+        {
+          kind: 'remochi.Dialog',
+          name: 'dialog',
+          open: true,
+          dialogType: 'confirm',
+          cancelText: 'Cancel',
+          onClose: 'dialogClosed',
+          onDismiss: 'dialogDismissed',
+        },
+      ],
+      dialogClosed() {
+        events.push('close');
+        return true;
+      },
+      dialogDismissed() {
+        events.push('dismiss');
+        return true;
+      },
+    });
+    await mount('MountTest.WithDialog');
+    const cancel = [...document.body.querySelectorAll('button')].find((b) => b.textContent?.includes('Cancel'))!;
+    act(() => {
+      fireEvent.click(cancel);
+    });
+    expect(events).toEqual(['close', 'dismiss']);
     expect(close).not.toHaveBeenCalled();
   });
 

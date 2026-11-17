@@ -1,19 +1,28 @@
 // @vitest-environment jsdom
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { act, render } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { KindRegistry } from '@duyojs/duyo';
-import { basePack } from '@duyojs/duyo/react';
+import { createRuntime, KindRegistry } from '@duyojs/duyo';
+import { basePack, type WrapperProps } from '@duyojs/duyo/react';
 
 // The theme the wrapper reads, driven by the test (as appShellTheme.test.tsx does for AppShell).
 let setTheme: (t: 'light' | 'dark') => void = () => {};
 const seenDefaults: unknown[] = [];
+let animationCalls = 0;
+let accessibilityCalls = 0;
 vi.mock('../../usePyxisTheme', () => ({
   usePyxisTheme: (defaultTheme: unknown) => {
     seenDefaults.push(defaultTheme);
     const [theme, set] = useState<'light' | 'dark'>('light');
     setTheme = set;
     return theme;
+  },
+  usePyxisAnimationMode: () => {
+    animationCalls += 1;
+    return 'full' as const;
+  },
+  usePyxisAccessibility: () => {
+    accessibilityCalls += 1;
   },
 }));
 
@@ -35,12 +44,22 @@ describe('createPyxisPacks', () => {
     expect(createPyxisPacks().find((p) => p.name === 'remochi')?.wrapper).toBeUndefined();
   });
 
+  const wrap = (Wrapper: React.ComponentType<WrapperProps>, children: ReactNode) => {
+    const runtime = createRuntime();
+    const root = runtime.create({ kind: 'duyo.Control' });
+    return (
+      <Wrapper runtime={runtime} root={root}>
+        {children}
+      </Wrapper>
+    );
+  };
+
   it('passes defaultTheme to usePyxisTheme, light when absent', () => {
     seenDefaults.length = 0;
     const Dark = createPyxisPacks({ defaultTheme: 'dark' })[0]!.wrapper!;
-    render(<Dark>x</Dark>).unmount();
+    render(wrap(Dark, 'x')).unmount();
     const Plain = createPyxisPacks()[0]!.wrapper!;
-    render(<Plain>x</Plain>).unmount();
+    render(wrap(Plain, 'x')).unmount();
     expect(seenDefaults[0]).toBe('dark');
     expect(seenDefaults[seenDefaults.length - 1]).toBe('light');
   });
@@ -52,11 +71,7 @@ describe('createPyxisPacks', () => {
       const [n] = useState(() => ++mounts);
       return <span data-testid="probe">{n}</span>;
     };
-    const { container } = render(
-      <Theme>
-        <Probe />
-      </Theme>
-    );
+    const { container } = render(wrap(Theme, <Probe />));
     expect(container.querySelector('.mochi-theme-light')).not.toBeNull();
 
     act(() => setTheme('dark'));
@@ -65,6 +80,15 @@ describe('createPyxisPacks', () => {
     act(() => setTheme('light'));
     expect(container.querySelector('.mochi-theme-light')).not.toBeNull();
     expect(mounts).toBe(1);
+  });
+
+  it('syncs animation mode and accessibility traits inside the theme wrapper', () => {
+    animationCalls = 0;
+    accessibilityCalls = 0;
+    const Theme = createPyxisPacks()[0]!.wrapper!;
+    render(wrap(Theme, 'x')).unmount();
+    expect(animationCalls).toBe(1);
+    expect(accessibilityCalls).toBe(1);
   });
 });
 

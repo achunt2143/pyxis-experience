@@ -138,4 +138,12 @@ export const SETTING_KEYS = {
   brightness: 'pyxis.brightness', // number 0..100
   dnd: 'pyxis.dnd', // boolean
   animations: 'pyxis.animations', // 'full' | 'reduced' | 'off', see animations.ts
+  launchBarPosition: 'pyxis.launchBar.position', // 'bottom' | 'left' (the rail), see Bloom's LaunchBar
+  lockAfter: 'pyxis.lock.after', // null (never) | idle minutes 1..120, default 10
+  lockOnSleep: 'pyxis.lock.onSleep', // boolean, lock before the device sleeps
+  lockNotifications: 'pyxis.lock.notifications', // 'hidden' | 'count' | 'full', what the lock screen shows
+  textScale: 'pyxis.accessibility.textScale', // integer 75..150 (%), default 100
+  highContrast: 'pyxis.accessibility.highContrast', // boolean
+  reduceTransparency: 'pyxis.accessibility.reduceTransparency', // boolean
+  cursorSize: 'pyxis.accessibility.cursorSize', // 'default' | 'large' | 'xlarge'
 } as const;

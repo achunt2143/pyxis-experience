@@ -50,6 +50,10 @@ export interface EvoWindowInfo {
   minimized?: boolean;
   maximized?: boolean;
   fullscreen?: boolean;
+  /** The app has stopped answering Evo's pings: its title bar shows the spinner. */
+  busy?: boolean;
+  /** What the window's title bar says: the app's name, then the document's title. */
+  title_label?: string;
 }
 
 export interface EvoWindowCreatedPayload {

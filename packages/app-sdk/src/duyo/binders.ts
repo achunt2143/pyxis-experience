@@ -35,50 +35,12 @@ import type { Store } from './stores/store';
 // ---------------------------------------------------------------------------
 // Cleanup on destroy
 
-const cleanups = new WeakMap<Component, Set<() => void>>();
-
 /**
  * Run `fn` once when `component` is destroyed, after its own `destroy` chain
- * (a kind's override, `inherited`, children) has run. Returns a function that
- * cancels it. Duyo has no public on-destroy hook, so the first call wraps the
- * instance's `destroy` property once: the wrapper calls the previous `destroy`
- * (the kind's installed closure, or the prototype's) with the component as
- * `this`, so `this.inherited(arguments)` inside a kind's destroy is untouched
- * (its frame stack lives in the closure the wrapper calls).
+ * has run. Returns a function that cancels it.
  */
 export function onDestroy(component: Component, fn: () => void): () => void {
-  let list = cleanups.get(component);
-  if (!list) {
-    const set = (list = new Set<() => void>());
-    cleanups.set(component, set);
-    const previous = component.destroy as (...args: unknown[]) => unknown;
-    Object.defineProperty(component, 'destroy', {
-      value: function destroyWithCleanup(...args: unknown[]) {
-        try {
-          return previous.apply(component, args);
-        } finally {
-          if (component.destroyed) {
-            const pending = [...set];
-            set.clear();
-            for (const f of pending) {
-              try {
-                f();
-              } catch (err) {
-                console.error('[binders] cleanup threw', err);
-              }
-            }
-          }
-        }
-      },
-      writable: true,
-      configurable: true,
-    });
-  }
-  const set = list;
-  set.add(fn);
-  return () => {
-    set.delete(fn);
-  };
+  return component.onDestroy(fn);
 }
 
 // ---------------------------------------------------------------------------

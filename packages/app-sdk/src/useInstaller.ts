@@ -45,6 +45,8 @@ export interface PackageInfo {
   requiredPermissions: string[];
   installed: boolean;
   installedVersion: string | null;
+  /** Detached signature: verified, absent, or present but wrong (advisory: the install re-checks a private copy). */
+  signed?: boolean | 'bad';
 }
 
 export interface InstallResult {
@@ -87,10 +89,27 @@ export interface InstallerState {
 
 const IDLE: InstallProgress = { phase: 'idle', message: '', package: null };
 
+/**
+ * The installer's refusal in words. A refused install comes back as JSON text
+ * (`{"reason":"unsigned"|"bad-signature","error":…}`) inside the call's error,
+ * because the service's errors carry no structured field.
+ */
+export function installErrorText(raw: string): string {
+  const reason = /"reason"\s*:\s*"([a-z-]+)"/.exec(raw)?.[1];
+  if (reason === 'unsigned') return 'This package is not signed by a trusted publisher, so it was not installed.';
+  if (reason === 'bad-signature') return 'This package’s signature does not match. It may have been altered, so it was not installed.';
+  // Held calls (installer, nova, network, accounts) wait for the root-access
+  // dialog; these are the three ways that wait can end without a change.
+  if (reason === 'denied') return 'Cancelled.';
+  if (reason === 'timeout') return 'No answer in time, so nothing was changed.';
+  if (reason === 'no-password') return 'Set a password in Settings → Users & Lock first.';
+  return raw;
+}
+
 function errorOf(res: unknown): string | null {
   if (res && typeof res === 'object' && 'error' in res) {
     const e = (res as { error?: unknown }).error;
-    return typeof e === 'string' ? e : 'unknown error';
+    return typeof e === 'string' ? installErrorText(e) : 'unknown error';
   }
   return null;
 }
@@ -169,9 +188,11 @@ export function useInstaller(): InstallerState {
         const d = (data ?? {}) as { error?: string; package?: string };
         if (!alive.current || terminal.current) return;
         terminal.current = true;
+        const msg = typeof d.error === 'string' && d.error.trim() ? d.error : 'Installation failed';
+        setInstallError((prev) => prev ?? msg);
         setProgress({
           phase: 'failed',
-          message: d.error ?? 'Installation failed',
+          message: msg,
           package: d.package ?? null,
         });
       }),
@@ -225,7 +246,7 @@ export function useInstaller(): InstallerState {
         }
         return res;
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
+        const msg = installErrorText(e instanceof Error ? e.message : String(e));
         terminal.current = true;
         if (alive.current) {
           setInstallError(msg);
@@ -238,6 +259,7 @@ export function useInstaller(): InstallerState {
   );
 
   const remove = useCallback(async (packageName: string): Promise<boolean> => {
+    if (alive.current) setError(null);
     try {
       const res = (await echoClient.callMethod(
         INSTALLER_SERVICE,
@@ -245,8 +267,13 @@ export function useInstaller(): InstallerState {
         'Remove',
         { package: packageName }
       )) as { package?: string; error?: string } | undefined;
-      if (errorOf(res)) return false;
+      const err = errorOf(res);
+      if (err !== null || !res) {
+        if (alive.current) setError(err && err.trim() ? err : 'Failed to remove package');
+        return false;
+      }
       if (alive.current) {
+        setError(null);
         setPackages((prev) =>
           prev.map((p) =>
             p.package === packageName
@@ -256,7 +283,9 @@ export function useInstaller(): InstallerState {
         );
       }
       return true;
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error && e.message.trim() ? e.message : 'Failed to remove package';
+      if (alive.current) setError(msg);
       return false;
     }
   }, []);
