@@ -1,10 +1,18 @@
 import 'remochi/css';
 import { ThemeWrapper } from 'remochi';
-import { AppHostProvider, usePyxisTheme } from '@pyxis/app-sdk';
+import {
+  AppHostProvider,
+  usePyxisAccessibility,
+  usePyxisTheme,
+  useSessionState,
+  useShellTint,
+} from '@pyxis/app-sdk';
 import { CompositorWindowsProvider } from '../hooks/CompositorWindowsProvider';
 import { useWindows } from '../hooks/useWindows';
+import { PrivilegeLockContext } from '../components/PrivilegePromptDialog';
 import ShellLayer from '../components/ShellLayer';
 import { MotionProvider } from '../MotionProvider';
+import { useAppIdentity } from './useAppIdentity';
 
 /**
  * Bloom's overlay: the shell UI that has to be seen over app windows.
@@ -28,14 +36,22 @@ import { MotionProvider } from '../MotionProvider';
  */
 function OverlayApp() {
   const theme = usePyxisTheme('light');
+  // The shell's --px-* tint variables, from the wallpaper (@pyxis/app-sdk/identity.css).
+  useShellTint();
+  usePyxisAccessibility();
+  // Each app's name, accent and icon, for Evo's title bars.
+  useAppIdentity(theme === 'dark');
   // In the compositor the store stays empty (real apps are Evo's windows).
   const windowStore = useWindows();
+  const { locked } = useSessionState();
   return (
-    <ThemeWrapper key={theme} defaultTheme={theme}>
+    <ThemeWrapper theme={theme}>
       <AppHostProvider>
         <CompositorWindowsProvider>
           <MotionProvider syncEvo>
-            <ShellLayer windowStore={windowStore} reporting />
+            <PrivilegeLockContext.Provider value={locked}>
+              <ShellLayer windowStore={windowStore} reporting />
+            </PrivilegeLockContext.Provider>
           </MotionProvider>
         </CompositorWindowsProvider>
       </AppHostProvider>

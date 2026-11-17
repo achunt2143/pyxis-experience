@@ -23,6 +23,10 @@ export interface CompositorWindow {
   minimized: boolean;
   maximized: boolean;
   fullscreen: boolean;
+  /** The app has stopped answering (Evo's title bar shows the spinner). */
+  busy: boolean;
+  /** What Evo's title bar says: the app's name, then the document's title. */
+  titleLabel: string;
 }
 
 export interface WindowsState {
@@ -65,6 +69,8 @@ function fromInfo(w: EvoWindowInfo): CompositorWindow {
     minimized: w.minimized ?? w.visible === false,
     maximized: w.maximized ?? false,
     fullscreen: w.fullscreen ?? false,
+    busy: w.busy ?? false,
+    titleLabel: w.title_label ?? '',
   };
 }
 
@@ -82,6 +88,15 @@ export function windowsReducer(state: WindowsState, action: WindowsAction): Wind
       for (const id of action.keep ?? []) {
         if (!(id in byId) && !drop.has(id) && state.byId[id]) byId[id] = state.byId[id];
       }
+      if (
+        focusedId === null &&
+        state.focusedId !== null &&
+        (action.keep ?? []).includes(state.focusedId) &&
+        byId[state.focusedId] &&
+        !byId[state.focusedId].minimized
+      ) {
+        focusedId = state.focusedId;
+      }
       return { byId, focusedId, ready: true };
     }
     case 'created': {
@@ -97,6 +112,8 @@ export function windowsReducer(state: WindowsState, action: WindowsAction): Wind
         minimized: false,
         maximized: false,
         fullscreen: false,
+        busy: false,
+        titleLabel: '',
       };
       return {
         ...state,

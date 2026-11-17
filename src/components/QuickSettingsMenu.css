@@ -1,0 +1,60 @@
+/* Quick settings' sliders keep remochi's own circular thumb and drag bubble;
+   only the inactive track blends with the panel material and keeps compact row
+   spacing (remochi leaves 42 px above and 36 below by default for the value
+   bubble shown while dragging, which draws over whatever is above). */
+.px-qs-sliders {
+  overflow: visible;
+}
+
+.px-qs-sliders [role='slider'] > div {
+  background: color-mix(in srgb, var(--px-material-ink) 16%, transparent) !important;
+  margin: 10px 0 8px !important;
+}
+
+/* Toggle tiles: quiet ink when off; on, the Pyxis accent deepened toward
+   the dark base so white text reads (>= 4.5:1 for the light theme's accent,
+   which is mid blue, and the dark theme's, which is light). */
+.px-qs-tile {
+  background: color-mix(in srgb, var(--px-material-ink) 7%, transparent);
+  --px-qs-switch-off: color-mix(in srgb, var(--px-material-ink) 58%, transparent);
+}
+
+[data-px-tint='dark'] .px-qs-tile,
+[data-mochi-theme='dark']:not([data-px-tint]) .px-qs-tile {
+  --px-qs-switch-off: color-mix(in srgb, var(--px-material-ink) 32%, transparent);
+}
+
+.px-qs-tile .mochi-toggle-button {
+  --mochi-toggle-knob: #ffffff;
+}
+
+.px-qs-tile .mochi-toggle-content-on {
+  color: #ffffff;
+}
+
+.px-qs-tile[data-on='true'] {
+  background: color-mix(in srgb, var(--color-primary, #21808d) 85%, #10132a);
+}
+
+[data-px-tint='dark'] .px-qs-tile[data-on='true'],
+[data-mochi-theme='dark'] .px-qs-tile[data-on='true'] {
+  background: color-mix(in srgb, var(--color-primary, #21808d) 62%, #10132a);
+}
+
+.px-qs-mute {
+  color: var(--px-material-ink-quiet);
+}
+
+.px-qs-mute[data-muted='true'] {
+  color: color-mix(in srgb, var(--px-spinner-red) 45%, var(--px-spinner-red-outline));
+}
+
+[data-px-tint='dark'] .px-qs-mute[data-muted='true'],
+[data-mochi-theme='dark']:not([data-px-tint]) .px-qs-mute[data-muted='true'] {
+  color: var(--px-spinner-red);
+}
+
+.px-qs-power:focus-visible {
+  outline: 2px solid var(--color-primary, #4a8bc2);
+  outline-offset: 2px;
+}

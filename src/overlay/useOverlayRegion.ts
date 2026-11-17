@@ -60,6 +60,53 @@ function boxesOf(element: Element, popups: boolean): OverlayRect[] {
  */
 const SETTLE_MS = [60, 200, 500, 1200];
 
+export interface OverlayRegionOptions {
+  /** Filter `MutationObserver` batches before scheduling `settle()`. */
+  shouldSettle?: (records: MutationRecord[]) => boolean;
+  /** Debounce window (ms) for `MutationObserver`-triggered `settle()` calls. */
+  mutationDebounceMs?: number;
+  /** `MutationObserverInit` options (defaults to `{ childList: true, subtree: true }`). */
+  mutationOptions?: MutationObserverInit;
+  /** Extra elements to track with `ResizeObserver` (synced on mount & relevant mutations). */
+  observeResizeTargets?: () => Element[];
+}
+
+function isShellRegionElement(node: Node): boolean {
+  return (
+    node instanceof Element &&
+    (node.matches('[data-shell-region], [data-shell-popup]') ||
+      node.querySelector('[data-shell-region], [data-shell-popup]') !== null)
+  );
+}
+
+/** True only when a DOM mutation touches a `[data-shell-region]` or `[data-shell-popup]` subtree. */
+export function isShellRegionMutation(records: MutationRecord[]): boolean {
+  for (const record of records) {
+    if (record.type === 'attributes') {
+      if (
+        record.attributeName === 'data-shell-region' ||
+        record.attributeName === 'data-shell-popup'
+      ) {
+        return true;
+      }
+      continue;
+    }
+    if (
+      record.target instanceof Element &&
+      record.target.closest('[data-shell-region], [data-shell-popup]') !== null
+    ) {
+      return true;
+    }
+    for (const node of record.addedNodes) {
+      if (isShellRegionElement(node)) return true;
+    }
+    for (const node of record.removedNodes) {
+      if (isShellRegionElement(node)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Register `measure` as one of the region's pieces while `enabled`. It is
  * measured when the page resizes, when `watch` (an element, or the document)
@@ -69,13 +116,15 @@ const SETTLE_MS = [60, 200, 500, 1200];
 export function useOverlayRegionRects(
   measure: Measure,
   enabled: boolean,
-  watch: () => Element | null = () => null
+  watch: () => Element | null = () => null,
+  options?: OverlayRegionOptions
 ) {
   useEffect(() => {
     if (!enabled) return;
     const key = Symbol('region');
     sources.set(key, measure);
     const timers: number[] = [];
+    let mutationDebounce: number | undefined;
     const settle = () => {
       flush();
       timers.forEach((t) => window.clearTimeout(t));
@@ -83,16 +132,52 @@ export function useOverlayRegionRects(
       for (const ms of SETTLE_MS) timers.push(window.setTimeout(flush, ms));
     };
     const element = watch();
+    const observedResize = new Set<Element>();
     const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(settle);
+    const syncResizeTargets = () => {
+      if (!resize) return;
+      const desired = new Set<Element>();
+      if (element) desired.add(element);
+      if (options?.observeResizeTargets) {
+        for (const el of options.observeResizeTargets()) desired.add(el);
+      }
+      for (const el of observedResize) {
+        if (!desired.has(el)) {
+          resize.unobserve?.(el);
+          observedResize.delete(el);
+        }
+      }
+      for (const el of desired) {
+        if (!observedResize.has(el)) {
+          resize.observe(el);
+          observedResize.add(el);
+        }
+      }
+    };
+    const onMutations = (records: MutationRecord[]) => {
+      if (options?.shouldSettle && !options.shouldSettle(records)) return;
+      syncResizeTargets();
+      const delay = options?.mutationDebounceMs ?? 0;
+      if (delay > 0) {
+        window.clearTimeout(mutationDebounce);
+        mutationDebounce = window.setTimeout(settle, delay);
+      } else {
+        settle();
+      }
+    };
     const mutations =
-      element && typeof MutationObserver !== 'undefined' ? new MutationObserver(settle) : null;
+      element && typeof MutationObserver !== 'undefined' ? new MutationObserver(onMutations) : null;
     if (element) {
-      resize?.observe(element);
-      mutations?.observe(element, { childList: true, subtree: true });
+      syncResizeTargets();
+      mutations?.observe(
+        element,
+        options?.mutationOptions ?? { childList: true, subtree: true }
+      );
     }
     window.addEventListener('resize', settle);
     settle();
     return () => {
+      window.clearTimeout(mutationDebounce);
       timers.forEach((t) => window.clearTimeout(t));
       resize?.disconnect();
       mutations?.disconnect();
@@ -124,7 +209,18 @@ export function useShellRegion(enabled: boolean) {
   useOverlayRegionRects(
     () => [...document.querySelectorAll('[data-shell-region]')].flatMap((el) => boxesOf(el, true)),
     enabled,
-    () => document.body
+    () => document.body,
+    {
+      shouldSettle: isShellRegionMutation,
+      mutationDebounceMs: 16,
+      mutationOptions: {
+        childList: true,
+        subtree: true,
+        attributes: true,
+        attributeFilter: ['data-shell-region', 'data-shell-popup'],
+      },
+      observeResizeTargets: () => [...document.querySelectorAll('[data-shell-region]')],
+    }
   );
 }
 

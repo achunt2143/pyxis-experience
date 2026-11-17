@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Input, PopupPanel } from 'remochi';
 import { motion } from 'framer-motion';
 import { useMotion } from '../useMotion';
 import { TRANSITION } from '../motion';
@@ -14,9 +13,10 @@ import {
   CornerDownLeft,
 } from 'lucide-react';
 import { useApps } from '../hooks/useApps';
-import { AppIcon } from './AppIcon';
+import { AppDropIcon } from './AppDropIcon';
 import { useEcho, loadAppData, saveAppData } from '@pyxis/app-sdk';
 import { CLOSE_SEARCH_EVENT, FOCUS_SEARCH_EVENT } from '../hooks/useGlobalShortcuts';
+import { getActiveLockPhase } from '../lock/lockUi';
 
 interface DesktopSearchProps {
   onLaunch: (appId: string, name: string) => void;
@@ -53,6 +53,26 @@ interface StoredTask {
 
 export type SearchResultType = 'app' | 'action' | 'contact' | 'note' | 'task';
 
+function buildQuickNote(title: string): StoredNote {
+  return {
+    id: Math.random().toString(36).slice(2, 11),
+    title,
+    body: '',
+    category: 'General',
+    updatedAt: Date.now(),
+  };
+}
+
+function buildQuickTask(text: string): StoredTask {
+  return {
+    id: Math.random().toString(36).slice(2, 11),
+    text,
+    done: false,
+    priority: 'medium',
+    createdAt: Date.now(),
+  };
+}
+
 export interface SearchResultItem {
   id: string;
   type: SearchResultType;
@@ -79,7 +99,7 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const [anchor, setAnchor] = useState<{ left: number; top: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const resultsListRef = useRef<HTMLDivElement>(null);
 
@@ -91,10 +111,12 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
   const [notes, setNotes] = useState<StoredNote[]>([]);
   const [tasks, setTasks] = useState<StoredTask[]>([]);
 
-  // Refresh PIM data whenever search is opened or query typed. Each app's
-  // documents are its own on a device, so the shell names whose it reads
-  // (and writes, below); that takes filesystem:apps, which only it holds.
+  // Re-read the PIM data each time the box opens, so what was written in
+  // Notes a moment ago is found. Each app's documents are its own on a
+  // device, so the shell names whose it reads (and writes, below); that
+  // takes filesystem:apps, which only it holds.
   useEffect(() => {
+    if (!open) return;
     let mounted = true;
     Promise.all([
       loadAppData<{ contacts: StoredContact[] }>('contacts', { contacts: [] }, { app: 'contacts' }),
@@ -154,8 +176,8 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
       title: app.name,
       subtitle: app.category ? `${app.category.toUpperCase()} · ${app.id}` : app.id,
       badge: 'App',
-      badgeColor: 'var(--color-primary, #3b82f6)',
-      icon: <AppIcon app={app} size={20} />,
+      badgeColor: 'var(--px-material-ink-quiet)',
+      icon: <AppDropIcon appId={app.id} size={24} />,
       onSelect: () => {
         onLaunch(app.id, app.name);
         closeSearch();
@@ -175,13 +197,7 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
         badgeColor: '#f59e0b',
         icon: <FileText size={18} style={{ color: '#f59e0b' }} />,
         onSelect: async () => {
-          const newN: StoredNote = {
-            id: Math.random().toString(36).slice(2, 11),
-            title: rawQ,
-            body: '',
-            category: 'General',
-            updatedAt: Date.now(),
-          };
+          const newN = buildQuickNote(rawQ);
           await saveAppData('notes', { notes: [newN, ...notes] }, { app: 'notes' });
           onLaunch('notes', 'Notes');
           closeSearch();
@@ -197,13 +213,7 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
         badgeColor: '#10b981',
         icon: <CheckSquare size={18} style={{ color: '#10b981' }} />,
         onSelect: async () => {
-          const newT: StoredTask = {
-            id: Math.random().toString(36).slice(2, 11),
-            text: rawQ,
-            done: false,
-            priority: 'medium',
-            createdAt: Date.now(),
-          };
+          const newT = buildQuickTask(rawQ);
           await saveAppData('tasks', { tasks: [newT, ...tasks] }, { app: 'tasks' });
           onLaunch('tasks', 'Tasks');
           closeSearch();
@@ -213,13 +223,15 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
         id: 'action-web',
         type: 'action',
         section: 'actions',
-        title: `Search Web for "${rawQ}"`,
-        subtitle: 'Search DuckDuckGo in Browser',
+        title: /^https?:\/\//i.test(rawQ) ? `Open "${rawQ}" in Browser` : `Search Web for "${rawQ}"`,
+        subtitle: /^https?:\/\//i.test(rawQ) ? 'Open URL in Vela' : 'Search DuckDuckGo in Browser',
         badge: 'Web',
         badgeColor: '#0ea5e9',
         icon: <Globe size={18} style={{ color: '#0ea5e9' }} />,
         onSelect: () => {
-          const url = `https://duckduckgo.com/?q=${encodeURIComponent(rawQ)}`;
+          const url = /^https?:\/\//i.test(rawQ)
+            ? rawQ
+            : `https://duckduckgo.com/?q=${encodeURIComponent(rawQ)}`;
           echo.openExternalBrowser(url).catch(() => {});
           closeSearch();
         },
@@ -351,8 +363,9 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
         return;
       }
 
-      // Ignore if a modal dialog is currently open
-      if (document.querySelector('.mochi-dialog, [role="dialog"]')) {
+      // Ignore if a modal dialog is currently open, or the lock screen is up
+      // (it takes the typing: that is the password).
+      if (document.querySelector('.mochi-dialog, [role="dialog"]') || getActiveLockPhase() !== 'off') {
         return;
       }
 
@@ -395,6 +408,7 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
     const handleFocusRequest = (event: Event) => {
       // "Just type" from the desktop beneath arrives with the key that
       // started it: the query begins with it.
+      if (getActiveLockPhase() !== 'off') return;
       const text = (event as CustomEvent<{ text?: string } | undefined>).detail?.text;
       if (text) setQuery((current) => (current ? current : text));
       containerRef.current?.querySelector('input')?.focus();
@@ -418,30 +432,23 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
   useEffect(() => {
     activeChange.current?.(open);
   }, [open]);
+  // Unmounted while open (the bar hidden under a fullscreen app): it is closed now.
+  useEffect(() => () => activeChange.current?.(false), []);
 
-  // Measure anchor rect for PopupPanel
+  // Where the panel drops from: the box's bottom-left corner, in the page.
   useEffect(() => {
     if (!showDropdown) return;
 
-    const computeRect = () => {
+    const computeAnchor = () => {
       const el = containerRef.current;
       if (!el) return;
       const rect = el.getBoundingClientRect();
-      setAnchorRect({
-        top: rect.top,
-        left: rect.left,
-        width: rect.width,
-        height: rect.height,
-        bottom: rect.bottom,
-        right: window.innerWidth,
-      } as DOMRect);
+      setAnchor({ left: rect.left, top: rect.bottom });
     };
-    computeRect();
-    window.addEventListener('resize', computeRect);
-    return () => window.removeEventListener('resize', computeRect);
+    computeAnchor();
+    window.addEventListener('resize', computeAnchor);
+    return () => window.removeEventListener('resize', computeAnchor);
   }, [showDropdown]);
-
-  const effectiveAnchorRect = showDropdown ? anchorRect : null;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape') {
@@ -474,9 +481,9 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
   return (
     <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
       {/* While open, a click anywhere else closes the box. Portalled to the
-          page: the top bar's backdrop-filter would make it the containing
-          block of a fixed child, shrinking this to the bar. Above the dock
-          (1100), beneath the bar (1200) that holds the input. */}
+          page so no ancestor's transform or filter can become the containing
+          block of a fixed child and shrink this to the strip. Above the
+          launch bar (1100), beneath the strip (1200) that holds the input. */}
       {open &&
         createPortal(
           <div
@@ -487,41 +494,55 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
           />,
           document.body
         )}
+      {/* The box: a quiet underline on the wallpaper, in the strip's ink
+          (StatusStrip.css draws the line and its focus). */}
       <div
+        className="px-strip-search"
+        data-search-box=""
+        data-open={open ? 'true' : 'false'}
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '8px',
+          gap: 8,
           width: '100%',
-          background: 'var(--color-surface-hover, rgba(0, 0, 0, 0.04))',
-          borderRadius: '20px',
-          padding: '2px 10px',
-          border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
-          transition: 'all 0.18s ease',
+          height: 26,
+          boxSizing: 'border-box',
+          paddingBottom: 3,
+          color: 'var(--px-ink)',
         }}
       >
-        <Search size={16} style={{ opacity: 0.6, flexShrink: 0 }} />
-        <Input
-          placeholder="Just type..."
+        <Search size={15} aria-hidden="true" style={{ flexShrink: 0, filter: 'drop-shadow(0 1px 3px var(--px-ink-shadow))' }} />
+        <input
+          type="text"
+          aria-label="Search"
+          placeholder="Just type"
+          autoComplete="off"
+          spellCheck={false}
           value={query}
-          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+          onChange={(e) => {
             updateQuery(e.target.value);
             setOpen(true);
           }}
           onFocus={() => setOpen(true)}
           onKeyDown={handleKeyDown}
-          onBlur={(e: React.FocusEvent<HTMLInputElement>) => {
+          onBlur={(e) => {
             const next = e.relatedTarget as HTMLElement | null;
-            if (next?.closest('.mochi-contextual-popup')) {
+            if (next?.closest('[data-search-panel]')) {
               e.target.focus();
             }
           }}
           style={{
-            width: '100%',
+            flex: 1,
+            minWidth: 0,
+            padding: 0,
             background: 'transparent',
             border: 'none',
-            fontSize: '12px',
             outline: 'none',
+            color: 'var(--px-ink)',
+            caretColor: 'var(--px-ink)',
+            textShadow: 'inherit',
+            fontFamily: 'var(--px-font-ui)',
+            fontSize: 13,
           }}
         />
         {query ? (
@@ -532,57 +553,74 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
               border: 'none',
               background: 'transparent',
               cursor: 'pointer',
-              padding: '2px',
+              padding: 2,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--color-text-secondary)',
-              opacity: 0.7,
+              color: 'var(--px-ink-quiet)',
             }}
             title="Clear search"
+            aria-label="Clear search"
           >
             <X size={14} />
           </button>
         ) : null}
       </div>
 
-      <PopupPanel isOpen={showDropdown} onClose={() => setOpen(false)} anchorRect={effectiveAnchorRect}>
-        <motion.div
-          ref={resultsListRef}
-          initial={to({ opacity: 0, scale: 0.97 })}
-          animate={{ ...to({ opacity: 1, scale: 1 }), transition: tr(TRANSITION.popupIn) }}
-          style={{
-            transformOrigin: 'top center',
-            width: 380,
-            maxHeight: 440,
-            overflowY: 'auto',
-            padding: '4px 0',
-            fontFamily: 'inherit',
-          }}
-        >
-          {flatResults.length === 0 ? (
-            <div
-              style={{
-                padding: '16px',
-                textAlign: 'center',
-                fontSize: '0.85rem',
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              No matching results
-            </div>
-          ) : (
-            <>
-              {sections.map((section) => (
-                <div key={section.id} style={{ marginBottom: '6px' }}>
+      {showDropdown &&
+        anchor &&
+        createPortal(
+          <motion.div
+            ref={resultsListRef}
+            data-search-panel=""
+            role="listbox"
+            aria-label="Search results"
+            initial={to({ opacity: 0, y: -6, scale: 0.98 })}
+            animate={{ ...to({ opacity: 1, y: 0, scale: 1 }), transition: tr(TRANSITION.popupIn) }}
+            style={{
+              position: 'fixed',
+              left: Math.max(8, anchor.left - 6),
+              top: anchor.top + 10,
+              zIndex: 1210,
+              transformOrigin: 'top left',
+              width: 400,
+              maxWidth: 'calc(100vw - 16px)',
+              maxHeight: 'min(460px, calc(100vh - 160px))',
+              overflowY: 'auto',
+              boxSizing: 'border-box',
+              padding: '10px 0 8px',
+              borderRadius: 'var(--px-corner)',
+              background: 'var(--px-material-strong)',
+              color: 'var(--px-material-ink)',
+              fontFamily: 'var(--px-font-ui)',
+              boxShadow:
+                '0 20px 50px rgba(0, 0, 0, 0.28), inset 0 0 0 1px color-mix(in srgb, var(--px-material-ink) 10%, transparent)',
+            }}
+          >
+            {flatResults.length === 0 ? (
+              <div
+                style={{
+                  padding: 16,
+                  textAlign: 'center',
+                  fontSize: 13,
+                  color: 'var(--px-material-ink-quiet)',
+                }}
+              >
+                No matching results
+              </div>
+            ) : (
+              sections.map((section) => (
+                <div key={section.id} style={{ marginBottom: 6 }}>
                   <div
+                    data-search-head=""
                     style={{
-                      fontSize: '10px',
-                      fontWeight: 700,
+                      fontFamily: 'var(--px-font-display)',
+                      fontWeight: 300,
+                      fontSize: 11,
                       textTransform: 'uppercase',
-                      letterSpacing: '0.06em',
-                      color: 'var(--color-text-secondary, #6b7280)',
-                      padding: '6px 14px 4px 14px',
+                      letterSpacing: 'var(--px-font-display-tracking)',
+                      color: 'var(--px-material-ink-quiet)',
+                      padding: '6px 16px 4px',
                     }}
                   >
                     {section.label}
@@ -594,6 +632,10 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
                     return (
                       <div
                         key={item.id}
+                        className="px-search-row"
+                        role="option"
+                        aria-selected={isActive}
+                        data-active={isActive ? 'true' : 'false'}
                         data-item-index={itemIndex}
                         onMouseEnter={() => setActiveIndex(itemIndex)}
                         onMouseDown={(e) => {
@@ -603,14 +645,11 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
                         style={{
                           display: 'flex',
                           alignItems: 'center',
-                          gap: '10px',
+                          gap: 10,
                           padding: '7px 12px',
-                          margin: '1px 6px',
-                          borderRadius: '8px',
+                          margin: '1px 8px',
+                          borderRadius: 'var(--px-corner-40)',
                           cursor: 'pointer',
-                          background: isActive
-                            ? 'var(--color-primary-light, rgba(59, 130, 246, 0.12))'
-                            : 'transparent',
                           transition: 'background 0.12s ease',
                         }}
                       >
@@ -629,9 +668,8 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
                         <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                           <div
                             style={{
-                              fontSize: '13px',
-                              fontWeight: isActive ? 600 : 500,
-                              color: 'var(--color-text)',
+                              fontSize: 13,
+                              fontWeight: isActive ? 700 : 400,
                               whiteSpace: 'nowrap',
                               overflow: 'hidden',
                               textOverflow: 'ellipsis',
@@ -642,8 +680,8 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
                           {item.subtitle && (
                             <div
                               style={{
-                                fontSize: '11px',
-                                color: 'var(--color-text-secondary, #6b7280)',
+                                fontSize: 11,
+                                color: 'var(--px-material-ink-quiet)',
                                 whiteSpace: 'nowrap',
                                 overflow: 'hidden',
                                 textOverflow: 'ellipsis',
@@ -659,13 +697,12 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
                             style={{
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '3px',
-                              fontSize: '10px',
-                              fontWeight: 600,
-                              color: 'var(--color-primary, #3b82f6)',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              background: 'rgba(59, 130, 246, 0.15)',
+                              gap: 3,
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '2px 7px',
+                              borderRadius: 'var(--px-corner-20)',
+                              background: 'color-mix(in srgb, var(--px-material-ink) 10%, transparent)',
                               flexShrink: 0,
                             }}
                           >
@@ -675,13 +712,16 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
                         ) : item.badge ? (
                           <span
                             style={{
-                              fontSize: '9px',
-                              fontWeight: 600,
+                              fontSize: 9,
+                              fontWeight: 700,
                               textTransform: 'uppercase',
-                              padding: '2px 5px',
-                              borderRadius: '4px',
-                              background: 'var(--color-surface-hover, rgba(0, 0, 0, 0.05))',
-                              color: item.badgeColor ?? 'var(--color-text-secondary)',
+                              letterSpacing: '0.06em',
+                              padding: '2px 6px',
+                              borderRadius: 'var(--px-corner-20)',
+                              background: 'color-mix(in srgb, var(--px-material-ink) 6%, transparent)',
+                              color: item.badgeColor
+                                ? `color-mix(in srgb, ${item.badgeColor} 55%, var(--px-material-ink))`
+                                : 'var(--px-material-ink-quiet)',
                               flexShrink: 0,
                             }}
                           >
@@ -692,13 +732,11 @@ export const DesktopSearch: React.FC<DesktopSearchProps> = ({ onLaunch, onActive
                     );
                   })}
                 </div>
-              ))}
-
-              {/* End of results */}
-            </>
-          )}
-        </motion.div>
-      </PopupPanel>
+              ))
+            )}
+          </motion.div>,
+          document.body
+        )}
     </div>
   );
 };

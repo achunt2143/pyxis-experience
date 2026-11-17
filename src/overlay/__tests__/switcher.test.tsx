@@ -124,9 +124,14 @@ describe('useSwitcher follows Evo, and never asks for the keyboard', () => {
 describe('ShellLayer wires it without taking the keyboard', () => {
   const source = readFileSync(SHELL_LAYER_TSX, 'utf8');
 
-  it('the screen is covered for clicks, the keyboard is asked for by panels only', () => {
-    expect(source).toMatch(/useFullScreenRegion\(reporting && \(panelOpen \|\| switcher !== null\)\)/);
-    expect(source).toMatch(/useOverlayKeyboard\(reporting && panelOpen, closePanels\)/);
+  it('the screen is covered for clicks, the keyboard is asked for by panels, dialogs, the privilege prompt and the lock screen only', () => {
+    expect(source).toMatch(/useFullScreenRegion\(reporting && \(panelOpen \|\| switcher !== null \|\| lockOn\)\)/);
+    // The switcher is not in it (Alt is held in the app); the Launch Error
+    // dialog and the privilege prompt are, since Escape, Enter and password
+    // typing must reach them with no panel open, and so is the lock screen.
+    expect(source).toMatch(
+      /useOverlayKeyboard\(reporting && \(panelOpen \|\| launchError !== null \|\| lockOn \|\| privilegePending\), closePanels\)/
+    );
     expect(source).not.toMatch(/setOverlayFocus/);
   });
 
@@ -137,13 +142,17 @@ describe('ShellLayer wires it without taking the keyboard', () => {
 });
 
 // The overview itself, in switcher mode, with its data sources stubbed.
-const { views } = vi.hoisted(() => ({
-  views: [
+const { views, defaultViews } = vi.hoisted(() => {
+  const initial = [
     { appId: 'a', sessionId: 's-a', state: 'running', windows: [{ windowId: 1 }], windowId: 1, focused: true, minimized: false, starting: false, crashed: false },
     { appId: 'b', sessionId: 's-b', state: 'running', windows: [{ windowId: 2 }], windowId: 2, focused: false, minimized: false, starting: false, crashed: false },
     { appId: 'c', sessionId: 's-c', state: 'running', windows: [{ windowId: 3 }], windowId: 3, focused: false, minimized: true, starting: false, crashed: false },
-  ],
-}));
+  ];
+  return {
+    defaultViews: initial,
+    views: [...initial],
+  };
+});
 vi.mock('../../utils/environment', () => ({ IN_COMPOSITOR: true }));
 vi.mock('../../hooks/useAppWindows', () => ({ useAppWindows: () => ({ views }) }));
 vi.mock('../../hooks/useApps', () => ({
@@ -152,7 +161,10 @@ vi.mock('../../hooks/useApps', () => ({
 vi.mock('../../components/AppIcon', () => ({ AppIcon: () => null }));
 
 describe('CardOverview in switcher mode', () => {
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    views.splice(0, views.length, ...defaultViews);
+  });
 
   async function draw(switcher: SwitcherState, onActivateApp = vi.fn(), onClose = vi.fn()) {
     const { default: CardOverview } = await import('../../components/CardOverview');
@@ -188,11 +200,43 @@ describe('CardOverview in switcher mode', () => {
     expect(cards(container).map((c) => c.dataset.committed)).toEqual([undefined, undefined, 'true']);
   });
 
-  it('a card click focuses that app and leaves closing to Evo', async () => {
+  it('a card click focuses that app and windowId and leaves closing to Evo', async () => {
     const { container, onActivateApp, onClose } = await draw({ order: [3, 1, 2], selected: 1, committed: null });
     act(() => cards(container)[2].click());
-    expect(onActivateApp).toHaveBeenCalledWith('b');
+    expect(onActivateApp).toHaveBeenCalledWith('b', 2);
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('matches per-window title, dimensions and windowId for multi-window Alt+Tab / Alt+Grave', async () => {
+    views.splice(0, views.length, {
+      appId: 'browser',
+      sessionId: 's-br',
+      state: 'running',
+      windows: [
+        { windowId: 10, width: 900, height: 600, titleLabel: 'Vela · Docs', minimized: false },
+        { windowId: 11, width: 400, height: 800, titleLabel: 'Vela · Sidebar', minimized: true },
+      ] as unknown as (typeof defaultViews)[number]['windows'],
+      windowId: 10,
+      focused: true,
+      minimized: false,
+      starting: false,
+      crashed: false,
+    });
+
+    const { container, onActivateApp } = await draw({ order: [10, 11], selected: 11, committed: null });
+    const allCards = cards(container);
+    expect(allCards).toHaveLength(2);
+    expect(allCards[0].dataset.windowId).toBe('10');
+    expect(allCards[0].dataset.selected).toBe('false');
+    expect(allCards[0].querySelector('[data-card-strip]')?.textContent).toContain('Vela · Docs');
+    expect(allCards[1].dataset.windowId).toBe('11');
+    expect(allCards[1].dataset.selected).toBe('true');
+    expect(allCards[1].dataset.minimized).toBe('true');
+    expect(allCards[1].querySelector('[data-card-strip]')?.textContent).toContain('Vela · Sidebar');
+    expect(allCards[0].style.width).not.toBe(allCards[1].style.width);
+
+    act(() => allCards[1].click());
+    expect(onActivateApp).toHaveBeenCalledWith('browser', 11);
   });
 
   it('never listens for keys: Evo has them', async () => {

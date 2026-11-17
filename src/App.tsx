@@ -1,7 +1,7 @@
 import 'remochi/css';
 import { ThemeWrapper } from 'remochi';
 import Desktop from './components/Desktop';
-import { AppHostProvider, usePyxisTheme } from '@pyxis/app-sdk';
+import { AppHostProvider, usePyxisAccessibility, usePyxisTheme, useShellTint } from '@pyxis/app-sdk';
 import { CompositorWindowsProvider } from './hooks/CompositorWindowsProvider';
 import { MotionProvider } from './MotionProvider';
 
@@ -12,8 +12,11 @@ import { MotionProvider } from './MotionProvider';
  */
 function App() {
   const theme = usePyxisTheme('light');
+  // The shell's --px-* tint variables, from the wallpaper (@pyxis/app-sdk/identity.css).
+  useShellTint();
+  usePyxisAccessibility();
   return (
-    <ThemeWrapper key={theme} defaultTheme={theme}>
+    <ThemeWrapper theme={theme}>
       {/* One AppHost subscription set and one Evo window store for the whole
           shell; the dock, overview and launchers all read these. */}
       <AppHostProvider>

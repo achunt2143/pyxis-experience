@@ -7,6 +7,13 @@ import { useAppHost } from '@pyxis/app-sdk';
 import { IN_COMPOSITOR } from '../utils/environment';
 import { useMotion } from '../useMotion';
 import { PULSE, TRANSITION } from '../motion';
+import { STATUS_STRIP_HEIGHT } from './TopSystemBar';
+import {
+  LAUNCH_BAR_HEIGHT,
+  LAUNCH_RAIL_WIDTH,
+  useLaunchBarPosition,
+} from './launchBarState';
+import type { LaunchBarPosition } from '@pyxis/app-sdk';
 
 // Visual map for lifecycle dots in the title bar.
 const STATE_COLOR: Record<AppLifecycleState, string> = {
@@ -98,6 +105,7 @@ const CrashOverlay: React.FC<{ appId: string; pid: number }> = ({
           type="warning"
           disabled={busy}
           onClick={onRelaunch}
+          style={{ '--mochi-error': '#ff6b6b' } as React.CSSProperties}
         >
           <RotateCcw size={16} style={{ marginRight: '6px', verticalAlign: 'middle' }} />
           {busy ? 'Relaunching…' : 'Relaunch app'}
@@ -173,7 +181,7 @@ const WindowContent: React.FC<{
           textAlign: 'center',
           color: 'var(--color-text-secondary)',
           background:
-            'repeating-linear-gradient(45deg, rgba(255,255,255,0.02) 0 12px, rgba(255,255,255,0.05) 12px 24px)',
+            'repeating-linear-gradient(45deg, color-mix(in srgb, var(--color-text, #181a1f) 3%, transparent) 0 12px, color-mix(in srgb, var(--color-text, #181a1f) 7%, transparent) 12px 24px)',
           borderRadius: '8px',
         }}
       >
@@ -183,7 +191,7 @@ const WindowContent: React.FC<{
         <div style={{ fontSize: '0.875rem' }}>
           No app component is registered for <code>{win.appId}</code>.
         </div>
-        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-muted)' }}>
+        <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
           Register one in <code>src/hooks/useWindows.ts</code>.
         </div>
       </div>
@@ -250,10 +258,45 @@ const SurfaceIndicator: React.FC<{ appId: string }> = ({ appId }) => {
 };
 
 // UI boundaries
-const TOP_BAR_HEIGHT = 48;
-const BOTTOM_DOCK_HEIGHT = 80; // Normal
-const BOTTOM_DOCK_HEIGHT_COMPACT = 56; // Compact: 48px + 8px margin
 const TITLE_BAR_HEIGHT = 40;
+
+interface ShellInsets {
+  top: number;
+  bottom: number;
+  left: number;
+}
+
+function fallbackShellInsets(position: LaunchBarPosition): ShellInsets {
+  return {
+    top: STATUS_STRIP_HEIGHT,
+    bottom: position === 'left' ? 0 : LAUNCH_BAR_HEIGHT,
+    left: position === 'left' ? LAUNCH_RAIL_WIDTH : 0,
+  };
+}
+
+function readShellInsets(position: LaunchBarPosition): ShellInsets {
+  const fallback = fallbackShellInsets(position);
+  if (typeof document === 'undefined') return fallback;
+
+  const topEl = document.querySelector<HTMLElement>('[data-shell-edge="top"]');
+  const leftEl = document.querySelector<HTMLElement>('[data-shell-edge="left"]');
+  const bottomEl = document.querySelector<HTMLElement>('[data-shell-edge="bottom"]');
+
+  const top = topEl && topEl.offsetHeight > 0 ? Math.ceil(topEl.offsetHeight) : fallback.top;
+
+  if (leftEl && (position === 'left' || !bottomEl)) {
+    const offset = parseFloat(getComputedStyle(leftEl).left) || 0;
+    const left = leftEl.offsetWidth > 0 ? Math.ceil(leftEl.offsetWidth + offset) : LAUNCH_RAIL_WIDTH;
+    return { top, bottom: 0, left };
+  }
+  if (bottomEl && (position === 'bottom' || !leftEl)) {
+    const offset = parseFloat(getComputedStyle(bottomEl).bottom) || 0;
+    const bottom =
+      bottomEl.offsetHeight > 0 ? Math.ceil(bottomEl.offsetHeight + offset) : LAUNCH_BAR_HEIGHT;
+    return { top, bottom, left: 0 };
+  }
+  return fallback;
+}
 
 export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps>(({
   window,
@@ -266,6 +309,46 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
   children,
 }, ref) => {
   const { tr, to } = useMotion();
+  const [hoveredControl, setHoveredControl] = React.useState<'minimize' | 'maximize' | 'close' | null>(null);
+  const launchBarPosition = useLaunchBarPosition();
+  const [domInsets, setDomInsets] = React.useState<{
+    position: LaunchBarPosition;
+    insets: ShellInsets;
+  }>(() => ({
+    position: launchBarPosition,
+    insets: readShellInsets(launchBarPosition),
+  }));
+
+  React.useEffect(() => {
+    if (IN_COMPOSITOR || typeof document === 'undefined') return;
+    const sync = () => {
+      const next = readShellInsets(launchBarPosition);
+      setDomInsets((prev) =>
+        prev.position === launchBarPosition &&
+        prev.insets.top === next.top &&
+        prev.insets.bottom === next.bottom &&
+        prev.insets.left === next.left
+          ? prev
+          : { position: launchBarPosition, insets: next }
+      );
+    };
+    const raf = globalThis.window?.requestAnimationFrame(sync);
+    const observer =
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(sync);
+    observer?.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['data-shell-edge'],
+    });
+    globalThis.window?.addEventListener('resize', sync);
+    return () => {
+      if (raf !== undefined) globalThis.window?.cancelAnimationFrame(raf);
+      observer?.disconnect();
+      globalThis.window?.removeEventListener('resize', sync);
+    };
+  }, [launchBarPosition]);
+
   // Belt-and-suspenders: Desktop.tsx is the real gate (it doesn't mount this
   // component at all in compositor mode), but guard here too so a future
   // caller mounting DesktopWindow directly in production can't reintroduce
@@ -273,36 +356,41 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
   // already compositing and decorating as its own real xdg-toplevel).
   if (IN_COMPOSITOR) return null;
 
-  // Calculate maximized dimensions
+  const insets =
+    domInsets.position === launchBarPosition
+      ? domInsets.insets
+      : fallbackShellInsets(launchBarPosition);
+
+  // Calculate maximized dimensions from live shell edge bounds
   const isMaximized = window.state === 'maximized';
-  const bottomOffset = isMaximized ? BOTTOM_DOCK_HEIGHT_COMPACT : BOTTOM_DOCK_HEIGHT;
 
   const maxWidth = isMaximized
-    ? window.innerWidth
+    ? Math.max(0, window.innerWidth - insets.left)
     : window.size.width;
 
   const maxHeight = isMaximized
-    ? window.innerHeight - TOP_BAR_HEIGHT - bottomOffset
+    ? Math.max(0, window.innerHeight - insets.top - insets.bottom)
     : window.size.height;
 
   const maxX = isMaximized
-    ? 0
+    ? insets.left
     : window.position.x;
 
-  const maxY = window.state === 'maximized'
-    ? TOP_BAR_HEIGHT
+  const maxY = isMaximized
+    ? insets.top
     : window.position.y;
 
   const handleDragEnd = (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
     let newX = window.position.x + info.offset.x;
     let newY = window.position.y + info.offset.y;
 
-    // Constrain to boundaries
-    const minY = TOP_BAR_HEIGHT;
-    const maxXConstraint = Math.max(0, window.innerWidth - window.size.width);
-    const maxYConstraint = Math.max(minY, window.innerHeight - bottomOffset - TITLE_BAR_HEIGHT);
+    // Constrain to work-area boundaries
+    const minX = insets.left;
+    const minY = insets.top;
+    const maxXConstraint = Math.max(minX, window.innerWidth - window.size.width);
+    const maxYConstraint = Math.max(minY, window.innerHeight - insets.bottom - TITLE_BAR_HEIGHT);
 
-    newX = Math.max(0, Math.min(newX, maxXConstraint));
+    newX = Math.max(minX, Math.min(newX, maxXConstraint));
     newY = Math.max(minY, Math.min(newY, maxYConstraint));
 
     onPositionChange?.(window.id, newX, newY);
@@ -355,10 +443,10 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
       dragMomentum={false}
       dragElastic={0}
       dragConstraints={{
-        left: -window.position.x,
-        top: TOP_BAR_HEIGHT - window.position.y,
+        left: insets.left - window.position.x,
+        top: insets.top - window.position.y,
         right: Math.max(0, window.innerWidth - window.size.width - window.position.x),
-        bottom: Math.max(0, window.innerHeight - bottomOffset - TITLE_BAR_HEIGHT - window.position.y),
+        bottom: Math.max(0, window.innerHeight - insets.bottom - TITLE_BAR_HEIGHT - window.position.y),
       }}
       onDragEnd={handleDragEnd}
       onClick={() => onFocus?.(window.id)}
@@ -373,14 +461,14 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
         zIndex: window.zIndex,
         display: 'flex',
         flexDirection: 'column',
-        borderRadius: '12px',
+        borderRadius: isMaximized ? '0px' : 'var(--px-corner, 16px 4px 16px 16px)',
         overflow: 'hidden',
         border: isActive
-          ? '1px solid var(--color-primary)'
+          ? '1px solid color-mix(in srgb, var(--color-text, #181a1f) 24%, transparent)'
           : '1px solid var(--color-border)',
         boxShadow: isActive
-          ? '0px 8px 32px rgba(0, 0, 0, 0.3), 0 0 0 2px var(--mochi-primary-soft)'
-          : '0px 2px 4px -1px rgba(0,0,0,0.2), 0px 4px 5px 0px rgba(0,0,0,0.14)',
+          ? '0px 10px 30px rgba(0, 0, 0, 0.22), 0 0 0 1px color-mix(in srgb, var(--mochi-primary, #2f6fed) 16%, transparent)'
+          : '0px 2px 6px rgba(0, 0, 0, 0.14)',
         transition: 'box-shadow 0.2s ease, border-color 0.2s ease',
         cursor: window.state === 'maximized' ? 'default' : 'move',
       }}
@@ -393,7 +481,7 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
               alignItems: 'center',
               justifyContent: 'space-between',
               paddingLeft: '16px',
-              paddingRight: '16px',
+              paddingRight: '12px',
               background: 'var(--color-surface)',
               borderBottom: '1px solid var(--color-border-light)',
               cursor: window.state === 'maximized' ? 'default' : 'move',
@@ -406,7 +494,7 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
                   fontWeight: 700,
                   fontSize: '0.875rem',
                   userSelect: 'none',
-                  color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  color: isActive ? 'var(--color-text)' : 'var(--color-text-secondary)',
                 }}
               >
                 {window.title}
@@ -414,33 +502,41 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
               <SurfaceIndicator appId={window.appId} />
             </div>
 
-            {/* Custom Window Controls */}
+            {/* Custom Window Controls (monochrome at rest, Mochi spinner color on hover) */}
             <div
               data-no-drag
               style={{
                 display: 'flex',
-                gap: '8px',
+                alignItems: 'center',
+                gap: '6px',
                 cursor: 'default',
               }}
             >
-              {/* Warm-yellow Mochi pill - Minimize */}
+              {/* Downward Triangle - Minimize */}
               <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.94 }}
+                onMouseEnter={() => setHoveredControl('minimize')}
+                onMouseLeave={() => setHoveredControl((c) => (c === 'minimize' ? null : c))}
                 onClick={(e) => {
                   e.stopPropagation();
                   onMinimize?.(window.id);
                 }}
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: '9px',
-                  background: 'linear-gradient(135deg, #ffd479 0%, #ffb300 100%)',
+                  width: 26,
+                  height: 26,
+                  borderRadius: '8px 2px 8px 8px',
+                  background: hoveredControl === 'minimize' ? 'var(--px-spinner-yellow)' : 'transparent',
+                  border:
+                    hoveredControl === 'minimize'
+                      ? '1px solid var(--px-spinner-yellow-outline)'
+                      : '1px solid transparent',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'box-shadow 0.2s ease',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                  boxSizing: 'border-box',
                 }}
                 title="Minimize"
               >
@@ -448,68 +544,103 @@ export const DesktopWindow = React.forwardRef<HTMLDivElement, DesktopWindowProps
                   style={{
                     width: 0,
                     height: 0,
-                    borderLeft: '6px solid transparent',
-                    borderRight: '6px solid transparent',
-                    borderTop: '8px solid rgba(0, 0, 0, 0.6)',
+                    borderLeft: '5px solid transparent',
+                    borderRight: '5px solid transparent',
+                    borderTop:
+                      hoveredControl === 'minimize'
+                        ? '7px solid rgba(0, 0, 0, 0.72)'
+                        : isActive
+                          ? '7px solid var(--color-text, rgba(0, 0, 0, 0.78))'
+                          : '7px solid var(--color-text-secondary, rgba(0, 0, 0, 0.55))',
                   }}
                 />
               </motion.div>
 
-              {/* Blue Square - Maximize */}
+              {/* Rounded Square - Maximize */}
               <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.94 }}
+                onMouseEnter={() => setHoveredControl('maximize')}
+                onMouseLeave={() => setHoveredControl((c) => (c === 'maximize' ? null : c))}
                 onClick={(e) => {
                   e.stopPropagation();
                   onMaximize?.(window.id);
                 }}
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: '9px',
-                  background:
-                    'linear-gradient(135deg, var(--color-secondary, #6aaedb) 0%, var(--color-primary, #4a8bc2) 100%)',
+                  width: 26,
+                  height: 26,
+                  borderRadius: '8px 2px 8px 8px',
+                  background: hoveredControl === 'maximize' ? 'var(--px-spinner-blue)' : 'transparent',
+                  border:
+                    hoveredControl === 'maximize'
+                      ? '1px solid var(--px-spinner-blue-outline)'
+                      : '1px solid transparent',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'box-shadow 0.2s ease',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                  boxSizing: 'border-box',
                 }}
                 title="Maximize"
               >
                 <div
                   style={{
-                    width: 12,
-                    height: 12,
-                    border: '2px solid rgba(255, 255, 255, 0.8)',
+                    width: 11,
+                    height: 11,
+                    border:
+                      hoveredControl === 'maximize'
+                        ? '1.5px solid #ffffff'
+                        : isActive
+                          ? '1.5px solid var(--color-text, rgba(0, 0, 0, 0.78))'
+                          : '1.5px solid var(--color-text-secondary, rgba(0, 0, 0, 0.55))',
                     borderRadius: '2px',
+                    boxSizing: 'border-box',
                   }}
                 />
               </motion.div>
 
-              {/* Red Circle - Close */}
+              {/* Circle - Close */}
               <motion.div
-                whileHover={{ scale: 1.1 }}
-                whileTap={{ scale: 0.95 }}
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.94 }}
+                onMouseEnter={() => setHoveredControl('close')}
+                onMouseLeave={() => setHoveredControl((c) => (c === 'close' ? null : c))}
                 onClick={(e) => {
                   e.stopPropagation();
                   onClose?.(window.id);
                 }}
                 style={{
-                  width: 28,
-                  height: 28,
+                  width: 26,
+                  height: 26,
                   borderRadius: '50%',
-                  background:
-                    'linear-gradient(135deg, var(--color-error, #c62828) 0%, #a02020 100%)',
+                  background: hoveredControl === 'close' ? 'var(--px-spinner-red)' : 'transparent',
+                  border:
+                    hoveredControl === 'close'
+                      ? '1px solid var(--px-spinner-red-outline)'
+                      : isActive
+                        ? '1.5px solid var(--color-text, rgba(0, 0, 0, 0.78))'
+                        : '1.5px solid var(--color-text-secondary, rgba(0, 0, 0, 0.55))',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   cursor: 'pointer',
-                  transition: 'box-shadow 0.2s ease',
+                  transition: 'background-color 0.15s ease, border-color 0.15s ease',
+                  boxSizing: 'border-box',
                 }}
                 title="Close"
               >
-                <X size={14} color="rgba(255, 255, 255, 0.9)" strokeWidth={3} />
+                <X
+                  size={12}
+                  color={
+                    hoveredControl === 'close'
+                      ? '#ffffff'
+                      : isActive
+                        ? 'var(--color-text, rgba(0, 0, 0, 0.78))'
+                        : 'var(--color-text-secondary, rgba(0, 0, 0, 0.55))'
+                  }
+                  strokeWidth={2.5}
+                />
               </motion.div>
             </div>
           </div>

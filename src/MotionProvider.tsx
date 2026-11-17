@@ -21,6 +21,12 @@ export const MotionProvider: React.FC<{ children: React.ReactNode; syncEvo?: boo
   const mode = useAnimationMode();
 
   useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.dataset.motion = mode;
+    }
+  }, [mode]);
+
+  useEffect(() => {
     if (syncEvo) void setAnimationSettings({ mode });
   }, [syncEvo, mode]);
 

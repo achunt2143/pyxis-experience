@@ -29,7 +29,7 @@ vi.mock('@pyxis/app-sdk', async (orig) => {
   };
 });
 
-import { CompositorWindowsProvider, LIST_SAMPLE_AGE_MS } from '../CompositorWindowsProvider';
+import { CompositorWindowsProvider, ID_RETRY_MS, LIST_SAMPLE_AGE_MS } from '../CompositorWindowsProvider';
 import { useCompositorWindows } from '../useAppWindows';
 
 const info = (id: number, app: string, over: Partial<EvoWindowInfo> = {}): EvoWindowInfo => ({
@@ -45,10 +45,12 @@ const info = (id: number, app: string, over: Partial<EvoWindowInfo> = {}): EvoWi
 });
 
 let seen: number[] = [];
+let appIds: Record<number, string> = {};
 const Probe: React.FC = () => {
   const state = useCompositorWindows();
   useEffect(() => {
     seen = Object.keys(state.byId).map(Number).sort((a, b) => a - b);
+    appIds = Object.fromEntries(Object.values(state.byId).map((w) => [w.windowId, w.waylandAppId]));
   }, [state]);
   return null;
 };
@@ -123,5 +125,67 @@ describe('CompositorWindowsProvider', () => {
     expect(seen).toEqual([3]);
     await answer([info(3, 'files'), info(4, 'notes')]); // sampled before the close
     expect(seen).toEqual([3]);
+  });
+
+  it("drops a window created without an app id that Evo never lists (its overlay)", async () => {
+    render(
+      <CompositorWindowsProvider>
+        <Probe />
+      </CompositorWindowsProvider>
+    );
+    await answer([info(1, 'bloom', { height: 800, y: 0 })]);
+    // The overlay maps after the desktop is up: created as "unknown", and
+    // ListWindows leaves it out. Nothing else is signalled.
+    emit('WindowCreated', { window_id: 2, app_id: 'unknown', width: 1280, height: 800 });
+    expect(seen).toEqual([1, 2]);
+    await answer([info(1, 'bloom', { height: 800, y: 0 })]); // asked for at once, kept (too new)
+    await act(async () => {
+      vi.advanceTimersByTime(LIST_SAMPLE_AGE_MS + 60);
+    });
+    await answer([info(1, 'bloom', { height: 800, y: 0 })]);
+    expect(seen).toEqual([1]); // the old code kept it for good
+  });
+
+  it('re-lists until a new window has its app id', async () => {
+    render(
+      <CompositorWindowsProvider>
+        <Probe />
+      </CompositorWindowsProvider>
+    );
+    await answer([]);
+    emit('WindowCreated', { window_id: 5, app_id: 'unknown', width: 0, height: 0 });
+    await answer([info(5, 'unknown')]);
+    await act(async () => {
+      vi.advanceTimersByTime(LIST_SAMPLE_AGE_MS + 60);
+    });
+    await answer([info(5, 'unknown')]); // the follow-up: still none
+    expect(appIds[5]).toBe('unknown');
+    await act(async () => {
+      vi.advanceTimersByTime(ID_RETRY_MS + 10);
+    });
+    await answer([info(5, 'notes')]); // the client has set it now
+    expect(appIds[5]).toBe('notes');
+    // Resolved: no more lists.
+    const calls = listCalls.mock.calls.length;
+    await act(async () => {
+      vi.advanceTimersByTime(ID_RETRY_MS * 10);
+    });
+    expect(listCalls.mock.calls.length).toBe(calls);
+  });
+
+  it("re-lists when the first list predates the shell's own app id", async () => {
+    render(
+      <CompositorWindowsProvider>
+        <Probe />
+      </CompositorWindowsProvider>
+    );
+    // A sample from before vela ran its PYXIS block: the shell claims vela-default.
+    await answer([info(1, 'vela-default', { height: 800, y: 0 })]);
+    expect(appIds[1]).toBe('vela-default');
+    await act(async () => {
+      vi.advanceTimersByTime(ID_RETRY_MS + 10);
+    });
+    await answer([info(1, 'bloom', { height: 800, y: 0 })]);
+    expect(appIds[1]).toBe('bloom');
   });
 });

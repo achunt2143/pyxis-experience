@@ -52,7 +52,15 @@ function emittedSignals(source: string): Record<string, string[]> {
 function listWindowsKeys(source: string): string[] {
   const at = source.indexOf('"ListWindows" =>');
   if (at < 0) throw new Error('ListWindows handler not found');
-  const open = source.indexOf('json!({', at);
+  const handlerSlice = source.slice(at, at + 600);
+  let searchFrom = at;
+  if (handlerSlice.includes('format_list_windows_json')) {
+    const fnAt = source.indexOf('fn format_list_windows_json');
+    if (fnAt < 0) throw new Error('format_list_windows_json helper not found');
+    searchFrom = fnAt;
+  }
+  const open = source.indexOf('json!({', searchFrom);
+  if (open < 0) throw new Error('ListWindows row object literal not found');
   return keysOfObjectAt(source, open + 'json!('.length);
 }
 
@@ -68,6 +76,9 @@ describe.runIf(existsSync(ECHO_IPC_RS))('evo window signals', () => {
   it('extracts something (the parser is not vacuous)', () => {
     expect(Object.keys(emitted)).toContain('WindowCreated');
     expect(emitted.WindowCreated).toContain('window_id');
+    expect(listWindowsKeys(rust)).toEqual(
+      expect.arrayContaining(['window_id', 'app_id', 'minimized', 'maximized', 'fullscreen'])
+    );
   });
 
   it('ShortcutTriggered is emitted with an action the shell handles', () => {

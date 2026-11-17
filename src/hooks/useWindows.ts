@@ -27,7 +27,7 @@ export function useWindows() {
       title,
       appId,
       state: 'normal',
-      position: { x: Math.random() * 200 + 50, y: Math.random() * 200 + 50 },
+      position: { x: Math.random() * 200 + 72, y: Math.random() * 200 + 48 },
       size: app?.defaultSize ?? DEFAULT_APP_SIZE,
       zIndex: 1,
       innerWidth: window.innerWidth,
@@ -71,7 +71,22 @@ export function useWindows() {
       }
     };
     window.addEventListener('message', onMessage);
-    return () => window.removeEventListener('message', onMessage);
+    const onResize = () => {
+      setWindows((prev) =>
+        prev.length === 0
+          ? prev
+          : prev.map((w) =>
+              w.innerWidth === window.innerWidth && w.innerHeight === window.innerHeight
+                ? w
+                : { ...w, innerWidth: window.innerWidth, innerHeight: window.innerHeight }
+            )
+      );
+    };
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('message', onMessage);
+      window.removeEventListener('resize', onResize);
+    };
   }, [closeWindow]);
 
   const minimizeWindow = useCallback((windowId: string) => {

@@ -1,10 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, animate, motion, usePresence } from 'framer-motion';
-import { Header } from 'remochi';
+import { AnimatePresence, animate, motion, useIsPresent, usePresence } from 'framer-motion';
 import { X, Layers, Trash2, Grid3x3 } from 'lucide-react';
-import { usePyxisTheme, type WindowThumbnail } from '@pyxis/app-sdk';
-import { getAppAccent } from '../apps/registry';
-import { useApps } from '../hooks/useApps';
+import { CORNER, waterdrop, type WindowThumbnail } from '@pyxis/app-sdk';
+import { appHue, getAppAccent } from '../apps/registry';
+import { useApps, type DesktopApp } from '../hooks/useApps';
 import { useAppWindows } from '../hooks/useAppWindows';
 import { AppIcon } from './AppIcon';
 import type { DesktopWindowType } from '../types';
@@ -25,6 +24,7 @@ import {
   type Rect,
 } from '../overview/flight';
 import { refreshThumbnails, useThumbnails } from '../overview/thumbnailStore';
+import './CardOverview.css';
 
 /** What a card is doing while the switcher commits (see `useCardFlight`). */
 type Role = 'idle' | 'chosen' | 'faded';
@@ -52,10 +52,10 @@ export interface CardOverviewProps {
   activeWindowId?: string;
   onSelectWindow: (windowId: string) => void;
   onCloseWindow: (windowId: string) => void;
-  /** Compositor mode: bring an app's window forward (relaunch if crashed). */
-  onActivateApp?: (appId: string) => void;
-  /** Compositor mode: close an app's window gracefully. */
-  onCloseApp?: (appId: string) => void;
+  /** Compositor mode: bring an app (or specific window) forward (relaunch if crashed). */
+  onActivateApp?: (appId: string, windowId?: number) => void;
+  /** Compositor mode: close an app (or specific window) gracefully. */
+  onCloseApp?: (appId: string, windowId?: number) => void;
   onOpenAppDrawer?: () => void;
 }
 
@@ -82,26 +82,18 @@ interface OverviewItem {
 
 function statusOf(item: OverviewItem) {
   if (item.state === 'crashed') {
-    return { label: 'Crashed', bg: 'rgba(244, 67, 54, 0.15)', color: '#F44336' };
+    return { kind: 'crashed', label: 'Crashed' };
   }
   if (item.state === 'starting') {
-    return { label: 'Starting', bg: 'rgba(255, 183, 77, 0.18)', color: '#E69100' };
+    return { kind: 'starting', label: 'Starting' };
   }
   if (item.isMinimized) {
-    return {
-      label: 'Minimized',
-      bg: 'rgba(156, 163, 175, 0.15)',
-      color: 'var(--color-text-secondary)',
-    };
+    return { kind: 'minimized', label: 'Minimized' };
   }
   if (item.isActive) {
-    return {
-      label: 'Active',
-      bg: 'var(--mochi-primary-soft, rgba(59, 130, 246, 0.15))',
-      color: 'var(--color-primary, #3b82f6)',
-    };
+    return { kind: 'active', label: 'Active' };
   }
-  return { label: 'Running', bg: 'rgba(76, 175, 80, 0.15)', color: 'var(--color-success, #4caf50)' };
+  return { kind: 'running', label: 'Running' };
 }
 
 // ---------------------------------------------------------------------------
@@ -127,10 +119,13 @@ function restBoxes(el: HTMLElement): { card: Rect; preview: Rect } | null {
   return restRects(toRect(el.getBoundingClientRect()), toRect(preview.getBoundingClientRect()), currentFlight(el));
 }
 
-/** The dock icon a minimized window goes to and comes from, else the bottom centre. */
+/**
+ * The launch bar icon a minimized window goes to and comes from (on the
+ * bottom bar or the left rail), else the bottom centre.
+ */
 function dockIconRect(appId: string): Rect {
   const id = typeof CSS !== 'undefined' && CSS.escape ? CSS.escape(appId) : appId;
-  const icon = document.querySelector<HTMLElement>(`[data-shell-edge="bottom"] [data-app="${id}"]`);
+  const icon = document.querySelector<HTMLElement>(`[data-shell-edge] [data-app="${id}"]`);
   const r = icon?.getBoundingClientRect();
   if (r && r.width > 0) return toRect(r);
   return { x: window.innerWidth / 2 - 24, y: window.innerHeight - 72, width: 48, height: 48 };
@@ -291,36 +286,86 @@ function useCardFlight(
 
 interface OverviewCardProps {
   item: OverviewItem;
+  app?: DesktopApp;
   index: number;
   isSelected: boolean;
+  switcherOpen: boolean;
   role: Role;
   roleAtExit: () => Role;
   thumb?: WindowThumbnail;
   arrived: boolean;
   staggerEntrance: boolean;
-  dark: boolean;
   nodeRef: (node: HTMLElement | null) => void;
+  buttonRef: (node: HTMLButtonElement | null) => void;
+  onFocusCard: () => void;
   onChoose: () => void;
 }
+
+/** The ring and strip colour of an app with no accent of its own. */
+const NEUTRAL_ACCENT = 'var(--color-primary, #21808d)';
+
+/** Height of a card's title strip, px. */
+const STRIP_HEIGHT = 32;
+
+/**
+ * The preview's corners. Evo's picture is the window's frame, black outside
+ * its waterdrop corners, shrunk to the preview; the top two corners are that
+ * frame's own, shrunk the same way (a hair larger, so no black fringe is
+ * left), which also makes them the frame's exact corners when the card lands
+ * on the window. The bottom two are the card's.
+ */
+function previewCorners(box: { width: number }, size?: { width: number }): string {
+  const s = size && size.width > box.width ? size.width / box.width : 1;
+  const px = (r: number) => `${Math.round(((r + 1) / s) * 100) / 100}px`;
+  return `${px(CORNER.tl)} ${px(CORNER.tr)} var(--px-corner-br) var(--px-corner-bl)`;
+}
+
+/** The app's waterdrop icon, small: its accent tile with the glyph on it. */
+const AppDrop: React.FC<{
+  appId: string;
+  app?: React.ComponentProps<typeof AppIcon>['app'] & { accent?: string };
+  size: number;
+}> = ({ appId, app, size }) => {
+  const accent = getAppAccent(appId, app?.accent);
+  return (
+    <span
+      style={{
+        width: size,
+        height: size,
+        flex: 'none',
+        borderRadius: waterdrop(size),
+        background: accent.bg,
+        color: accent.iconColor,
+        display: 'grid',
+        placeItems: 'center',
+        boxShadow: `0 1px 3px ${accent.shadow}`,
+      }}
+    >
+      <AppIcon app={app} size={Math.round(size * 0.6)} />
+    </span>
+  );
+};
 
 /** One window's card: chrome around a preview that is the window itself. */
 const OverviewCard: React.FC<OverviewCardProps> = ({
   item,
+  app,
   index,
   isSelected,
+  switcherOpen,
   role,
   roleAtExit,
   thumb,
   arrived,
   staggerEntrance,
-  dark,
   nodeRef,
+  buttonRef,
+  onFocusCard,
   onChoose,
 }) => {
-  const { appsById } = useAppsById();
   const { tr, to, mode } = useMotion();
-  const app = appsById(item.appId);
-  const accent = getAppAccent(item.appId);
+  const accent = getAppAccent(item.appId, app?.accent);
+  const hue = appHue(item.appId, app?.accent) ?? NEUTRAL_ACCENT;
   const status = statusOf(item);
   const wrapRef = useRef<HTMLDivElement>(null);
   const willFly = flies(mode) && (item.frame !== undefined || item.isMinimized === true);
@@ -332,7 +377,7 @@ const OverviewCard: React.FC<OverviewCardProps> = ({
   const [landed, setLanded] = useState(!willFly);
   useEffect(() => {
     if (landed) return;
-    const timer = window.setTimeout(() => setLanded(true), (DURATION.open + 0.5) * 1000);
+    const timer = window.setTimeout(() => setLanded(true), DURATION.geometry * 1000);
     return () => window.clearTimeout(timer);
   }, [landed]);
   const [loaded, setLoaded] = useState<string | null>(null);
@@ -350,6 +395,7 @@ const OverviewCard: React.FC<OverviewCardProps> = ({
       <motion.div
         key={item.key}
         data-app={item.appId}
+        data-window-id={item.primaryId}
         data-active={item.isActive ? 'true' : 'false'}
         data-minimized={item.isMinimized ? 'true' : 'false'}
         data-state={item.state}
@@ -370,87 +416,120 @@ const OverviewCard: React.FC<OverviewCardProps> = ({
         }}
         transition={{ layout: tr(TRANSITION.geometry) }}
         whileHover={to({ y: -10, scale: 1.03 })}
-        onClick={onChoose}
+        onClick={(e) => {
+          e.stopPropagation();
+          onChoose();
+        }}
         style={{
-          width: box.width + 16,
-          borderRadius: 20,
+          width: box.width,
+          borderRadius: 'var(--px-corner)',
           display: 'flex',
           flexDirection: 'column',
           cursor: 'pointer',
           position: 'relative',
         }}
       >
-        {/* The glass plate behind the card: everything but the preview */}
+        {/* The plate behind the card, in the waterdrop corner: the material,
+            the shadow and, when chosen, the ring in the app's accent. */}
         <div
           data-chrome
+          data-card-plate
           style={{
             position: 'absolute',
             inset: 0,
-            borderRadius: 20,
-            background: dark ? 'rgba(28, 32, 42, 0.85)' : 'rgba(255, 255, 255, 0.85)',
-            border: isSelected ? '2px solid var(--color-primary, #3b82f6)' : '1px solid rgba(255, 255, 255, 0.2)',
-            boxShadow: isSelected
-              ? '0 24px 48px rgba(0, 0, 0, 0.4), 0 0 20px rgba(59, 130, 246, 0.35)'
-              : '0 16px 36px rgba(0, 0, 0, 0.3)',
-            transition: 'box-shadow 0.18s ease, border-color 0.18s ease',
+            pointerEvents: 'none',
+            borderRadius: 'var(--px-corner)',
+            background: 'var(--px-material-strong)',
+            boxShadow: isSelected ? '0 30px 60px rgba(0, 0, 0, 0.45)' : '0 18px 40px rgba(0, 0, 0, 0.35)',
+            outline: `3px solid ${isSelected ? hue : 'transparent'}`,
+            outlineOffset: 4,
+            transition: 'box-shadow 0.18s ease, outline-color 0.18s ease',
           }}
         />
 
-        {/* Card Chrome Bar */}
+        {/* Genuine keyboard-focusable trigger covering the card, kept as a
+            sibling of the close button so buttons are never nested. */}
+        <button
+          type="button"
+          className="px-card-button"
+          ref={buttonRef}
+          tabIndex={switcherOpen ? -1 : 0}
+          aria-label={`Switch to ${item.title}${status.kind !== 'running' ? ` (${status.label})` : ''}`}
+          aria-current={isSelected ? 'true' : undefined}
+          onFocus={onFocusCard}
+          onClick={(e) => {
+            e.stopPropagation();
+            onChoose();
+          }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            border: 'none',
+            background: 'transparent',
+            padding: 0,
+            margin: 0,
+            borderRadius: 'var(--px-corner)',
+            cursor: 'pointer',
+          }}
+        />
+
+        {/* Title strip: the app's accent over the material, its icon and name */}
         <div
           data-chrome
+          data-card-strip
           style={{
             position: 'relative',
-            padding: '9px 12px 7px 14px',
+            zIndex: 2,
+            pointerEvents: 'none',
+            height: STRIP_HEIGHT,
+            padding: '0 4px 0 8px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'space-between',
             gap: 8,
+            borderRadius: 'var(--px-corner-tl) var(--px-corner-tr) 0 0',
+            background: `color-mix(in srgb, ${hue} 20%, transparent)`,
+            borderBottom: `1px solid color-mix(in srgb, ${hue} 30%, transparent)`,
+            color: 'var(--px-material-ink)',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-            {app && <AppIcon app={app} size={18} />}
-            <span
-              style={{
-                fontSize: '0.82rem',
-                fontWeight: 700,
-                color: 'var(--color-text)',
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {item.title}
-            </span>
-          </div>
+          <AppDrop appId={item.appId} app={app} size={20} />
+          <span
+            className="px-ui"
+            style={{
+              flex: 1,
+              minWidth: 0,
+              fontSize: 13,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {item.title}
+          </span>
 
           {/* Fling / Close Button */}
           <button
             type="button"
+            className="px-card-close"
+            tabIndex={switcherOpen ? -1 : 0}
+            aria-label={`Close ${item.title}`}
             onClick={(e) => {
               e.stopPropagation();
               item.onClose();
             }}
             title="Close card"
             style={{
-              background: 'transparent',
               border: 'none',
               cursor: 'pointer',
-              padding: 4,
-              borderRadius: '50%',
+              width: 24,
+              height: 24,
+              padding: 0,
+              borderRadius: waterdrop(24),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: 'var(--color-text-secondary)',
-              transition: 'background 0.12s ease, color 0.12s ease',
-            }}
-            onMouseEnter={(e) => {
-              (e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.15)';
-              (e.currentTarget as HTMLElement).style.color = '#ef4444';
-            }}
-            onMouseLeave={(e) => {
-              (e.currentTarget as HTMLElement).style.background = 'transparent';
-              (e.currentTarget as HTMLElement).style.color = 'var(--color-text-secondary)';
+              pointerEvents: 'auto',
             }}
           >
             <X size={14} />
@@ -463,12 +542,12 @@ const OverviewCard: React.FC<OverviewCardProps> = ({
           data-preview
           style={{
             position: 'relative',
-            margin: '0 8px 8px',
+            pointerEvents: 'none',
             width: box.width,
             height: box.height,
-            borderRadius: 10,
+            borderRadius: previewCorners(box, item.size),
             overflow: 'hidden',
-            background: `radial-gradient(circle at 50% 40%, ${accent.bg}, rgba(20, 24, 34, 0.35) 80%)`,
+            background: `radial-gradient(circle at 50% 40%, color-mix(in srgb, ${hue} 22%, transparent), color-mix(in srgb, ${hue} 6%, transparent) 80%)`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -478,7 +557,7 @@ const OverviewCard: React.FC<OverviewCardProps> = ({
             style={{
               width: 68,
               height: 68,
-              borderRadius: '32px 6px 32px 32px',
+              borderRadius: waterdrop(68),
               background: accent.bg,
               border: `2px solid ${accent.border}`,
               boxShadow: `0 8px 24px ${accent.shadow}`,
@@ -510,19 +589,17 @@ const OverviewCard: React.FC<OverviewCardProps> = ({
           )}
           {!quiet && (
             <div
+              className="px-ui px-card-status"
+              data-status={status.kind}
               style={{
                 position: 'absolute',
                 left: 8,
                 bottom: 8,
-                fontSize: '0.68rem',
-                fontWeight: 700,
+                fontSize: 11,
                 textTransform: 'uppercase',
-                letterSpacing: '0.04em',
+                letterSpacing: '0.08em',
                 padding: '3px 8px',
-                borderRadius: 10,
-                background: status.bg,
-                color: status.color,
-                backdropFilter: 'blur(8px)',
+                borderRadius: 'var(--px-corner-20)',
               }}
             >
               {status.label}
@@ -534,24 +611,17 @@ const OverviewCard: React.FC<OverviewCardProps> = ({
   );
 };
 
-/** `useApps` as the card wants it, in one place so the card stays a plain component. */
-function useAppsById() {
-  const { byId } = useApps();
-  return { appsById: byId };
+function getFocusableElements(root: HTMLElement): HTMLElement[] {
+  return [
+    ...root.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    ),
+  ].filter((el) => el.tabIndex >= 0);
 }
 
-
-/**
- * CardOverview — Iconic Palm webOS Card Deck & Overview Mode.
- *
- * Implements Palm webOS's hallmark multitasking paradigm:
- * - Zoomed out carousel / deck of all active application cards
- * - Tactile lift-on-hover physics with elevation shadows
- * - One-tap fling/dismiss to close sessions
- * - Smooth keyboard navigation (Arrow keys, Enter, Esc, Delete)
- */
-export const CardOverview: React.FC<CardOverviewProps> = ({
-  isOpen,
+const CardOverviewOverlay: React.FC<
+  CardOverviewProps & { switcherOpen: boolean; committing: boolean }
+> = ({
   onClose,
   windows,
   activeWindowId,
@@ -562,25 +632,26 @@ export const CardOverview: React.FC<CardOverviewProps> = ({
   onOpenAppDrawer,
   staggerEntrance: staggerProp = true,
   switcher,
+  switcherOpen,
+  committing,
 }) => {
+  const isPresent = useIsPresent();
   const staggerEntrance = staggerProp && !switcher;
   const { tr } = useMotion();
   // True once the entrance stagger has played, so later changes (selection,
   // a card closing) are not delayed by a card's place in the row.
   const [arrived, setArrived] = useState(false);
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isPresent) return;
     const timer = window.setTimeout(() => setArrived(true), (DURATION.open + 8 * STAGGER) * 1000);
     return () => {
       window.clearTimeout(timer);
       setArrived(false);
     };
-  }, [isOpen]);
-  const theme = usePyxisTheme('light');
+  }, [isPresent]);
   const { byId: appsById } = useApps();
   const { views } = useAppWindows();
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const switcherOpen = switcher !== undefined;
   const switcherOrder = switcher?.order;
 
   // Compile open items across dev windows and compositor sessions
@@ -611,33 +682,65 @@ export const CardOverview: React.FC<CardOverviewProps> = ({
       });
     }
 
-    // In compositor mode: every live app, from AppHost sessions joined to
-    // Evo's windows. A minimized app is still running and stays here (it is
-    // the only way back to it besides the dock); the focused one is marked.
-    return views.map((v) => {
+    // In compositor mode: one card per live window (or one card for a
+    // starting/crashed session with no mapped window yet), so multi-window
+    // apps and Alt+Tab / Alt+Grave per-window selection match the exact window.
+    return views.flatMap<OverviewItem>((v) => {
       const app = appsById(v.appId);
-      const primary = v.windows.find((w) => w.windowId === v.windowId) ?? v.windows[0];
-      return {
-        id: v.sessionId,
-        key: `session-${v.sessionId}`,
-        appId: v.appId,
-        title: app?.name || v.appId,
-        state: v.state,
-        isMinimized: v.minimized,
-        isActive: v.focused,
-        windowIds: v.windows.map((w) => w.windowId),
-        primaryId: primary?.windowId,
-        frame: visibleFrame(primary),
-        size: primary?.width && primary.height ? { width: primary.width, height: primary.height } : undefined,
-        onSelect: () => {
-          onActivateApp?.(v.appId);
-          // In the switcher, Evo's `commit` (a reply to the focus) closes it.
-          if (!switcherOpen) onClose();
-        },
-        onClose: () => {
-          onCloseApp?.(v.appId);
-        },
-      };
+      if (v.windows.length === 0) {
+        return [
+          {
+            id: v.sessionId,
+            key: `session-${v.sessionId}`,
+            appId: v.appId,
+            title: app?.name || v.appId,
+            state: v.state,
+            isMinimized: v.minimized,
+            isActive: v.focused,
+            windowIds: [],
+            primaryId: undefined,
+            frame: undefined,
+            size: undefined,
+            onSelect: () => {
+              onActivateApp?.(v.appId);
+              // In the switcher, Evo's `commit` (a reply to the focus) closes it.
+              if (!switcherOpen) onClose();
+            },
+            onClose: () => {
+              onCloseApp?.(v.appId);
+            },
+          },
+        ];
+      }
+
+      return v.windows.map((w) => {
+        const isMinimized = w.minimized ?? v.minimized;
+        const isActive =
+          v.focused &&
+          (v.windowId === null || w.windowId === v.windowId) &&
+          !isMinimized;
+        return {
+          id: `${v.sessionId}-${w.windowId}`,
+          key: `window-${v.sessionId}-${w.windowId}`,
+          appId: v.appId,
+          title: w.titleLabel || app?.name || v.appId,
+          state: v.state,
+          isMinimized,
+          isActive,
+          windowIds: [w.windowId],
+          primaryId: w.windowId,
+          frame: isMinimized ? undefined : visibleFrame(w),
+          size: w.width && w.height ? { width: w.width, height: w.height } : undefined,
+          onSelect: () => {
+            onActivateApp?.(v.appId, w.windowId);
+            // In the switcher, Evo's `commit` (a reply to the focus) closes it.
+            if (!switcherOpen) onClose();
+          },
+          onClose: () => {
+            onCloseApp?.(v.appId, w.windowId);
+          },
+        };
+      });
     });
   }, [windows, activeWindowId, views, appsById, onSelectWindow, onCloseWindow, onActivateApp, onCloseApp, onClose, switcherOpen]);
 
@@ -660,7 +763,6 @@ export const CardOverview: React.FC<CardOverviewProps> = ({
       : items.length === 0
         ? 0
         : Math.min(selectedIndex, items.length - 1);
-  const committing = switcher?.committed != null;
 
   // The card a click or Enter picked, so that as the overview closes it zooms
   // onto its window and the rest fade; null means the overview was dismissed
@@ -668,8 +770,8 @@ export const CardOverview: React.FC<CardOverviewProps> = ({
   // `switcher.committed`, which plays while the overview is still up.)
   const chosenKey = useRef<string | null>(null);
   useEffect(() => {
-    if (isOpen) chosenKey.current = null;
-  }, [isOpen]);
+    if (isPresent) chosenKey.current = null;
+  }, [isPresent]);
   const choose = useCallback((item: OverviewItem) => {
     chosenKey.current = item.key;
     item.onSelect();
@@ -682,20 +784,54 @@ export const CardOverview: React.FC<CardOverviewProps> = ({
   const liveWindowIds = useMemo(() => items.flatMap((item) => item.windowIds), [items]);
   const liveKey = liveWindowIds.join(',');
   useEffect(() => {
-    if (isOpen && liveKey) void refreshThumbnails(liveKey.split(',').map(Number));
-  }, [isOpen, liveKey]);
+    if (isPresent && liveKey) void refreshThumbnails(liveKey.split(',').map(Number));
+  }, [isPresent, liveKey]);
 
-  // Keep the highlighted card in view when there are more than fit.
+  const overlayRef = useRef<HTMLDivElement>(null);
+  const closeOverviewButtonRef = useRef<HTMLButtonElement>(null);
+  const emptyDrawerButtonRef = useRef<HTMLButtonElement>(null);
   const cardNodes = useRef(new Map<string, HTMLElement>());
-  const selectedKey = switcher ? items[safeIndex]?.key : undefined;
-  useEffect(() => {
-    if (selectedKey) cardNodes.current.get(selectedKey)?.scrollIntoView?.({ inline: 'center', block: 'nearest' });
-  }, [selectedKey]);
+  const cardButtonNodes = useRef(new Map<string, HTMLButtonElement>());
 
-  // Keyboard navigation across cards. Not in the switcher: it is a view of
-  // what Evo is doing and never holds the keyboard.
+  // Keep the highlighted card in view in both Overview and Switcher modes.
+  const selectedKey = items[safeIndex]?.key;
   useEffect(() => {
-    if (!isOpen || switcherOpen) return;
+    if (!isPresent || !selectedKey) return;
+    cardNodes.current.get(selectedKey)?.scrollIntoView?.({
+      inline: switcherOpen ? 'center' : 'nearest',
+      block: 'nearest',
+    });
+  }, [isPresent, selectedKey, switcherOpen]);
+
+  // Capture focus before Overview moves it, and restore on close.
+  useEffect(() => {
+    if (!isPresent || switcherOpen) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      if (previous && previous.isConnected) previous.focus?.();
+    };
+  }, [isPresent, switcherOpen]);
+
+  // Initial focus and re-focus if the focused card is closed while open.
+  useEffect(() => {
+    if (!isPresent || switcherOpen) return;
+    const root = overlayRef.current;
+    if (!root) return;
+    const active = document.activeElement;
+    if (active && root.contains(active)) return;
+    const key = items[safeIndex]?.key;
+    const target =
+      (key ? cardButtonNodes.current.get(key) : undefined) ??
+      emptyDrawerButtonRef.current ??
+      closeOverviewButtonRef.current ??
+      root;
+    target?.focus?.({ preventScroll: true });
+  }, [isPresent, switcherOpen, items, safeIndex]);
+
+  // Keyboard navigation across cards and Tab focus trap. Not in the switcher:
+  // it is a view of what Evo is doing and never holds the keyboard.
+  useEffect(() => {
+    if (!isPresent || switcherOpen) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -704,19 +840,65 @@ export const CardOverview: React.FC<CardOverviewProps> = ({
         return;
       }
 
+      if (e.key === 'Tab') {
+        const root = overlayRef.current;
+        if (!root) return;
+        const focusables = getFocusableElements(root);
+        if (focusables.length === 0) {
+          e.preventDefault();
+          root.focus();
+          return;
+        }
+        const at = focusables.indexOf(document.activeElement as HTMLElement);
+        const next = e.shiftKey
+          ? at <= 0
+            ? focusables.length - 1
+            : at - 1
+          : at === focusables.length - 1
+            ? 0
+            : at + 1;
+        e.preventDefault();
+        e.stopPropagation();
+        focusables[next].focus();
+        return;
+      }
+
       if (items.length === 0) return;
 
       if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev + 1) % items.length);
+        const next = (safeIndex + 1) % items.length;
+        setSelectedIndex(next);
+        const nextItem = items[next];
+        if (nextItem) cardButtonNodes.current.get(nextItem.key)?.focus?.();
       } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
         e.preventDefault();
-        setSelectedIndex((prev) => (prev - 1 < 0 ? items.length - 1 : prev - 1));
+        const next = safeIndex - 1 < 0 ? items.length - 1 : safeIndex - 1;
+        setSelectedIndex(next);
+        const nextItem = items[next];
+        if (nextItem) cardButtonNodes.current.get(nextItem.key)?.focus?.();
       } else if (e.key === 'Enter') {
+        const targetEl = e.target;
+        // Never hijack Enter when a focused button/control is active (Close All,
+        // Exit Overview, card close X, card button, Open App Drawer).
+        if (
+          targetEl instanceof HTMLElement &&
+          targetEl.closest('button, a, input, select, textarea, [role="button"]')
+        ) {
+          return;
+        }
         e.preventDefault();
         const target = items[safeIndex];
         if (target) choose(target);
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        const targetEl = e.target;
+        if (
+          targetEl instanceof HTMLElement &&
+          (targetEl.closest('input, textarea, select') ||
+            targetEl.closest('.px-overview-action'))
+        ) {
+          return;
+        }
         e.preventDefault();
         const target = items[safeIndex];
         target?.onClose();
@@ -725,250 +907,314 @@ export const CardOverview: React.FC<CardOverviewProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, switcherOpen, items, safeIndex, onClose, choose]);
+  }, [isPresent, switcherOpen, items, safeIndex, onClose, choose]);
 
   const handleCloseAll = () => {
     items.forEach((item) => item.onClose());
   };
 
   return (
-    <AnimatePresence>
-      {isOpen && (
-        <motion.div
-          data-switcher={switcherOpen ? (committing ? 'committing' : 'open') : undefined}
+    <motion.div
+      ref={overlayRef}
+      tabIndex={-1}
+      role={switcherOpen ? undefined : 'dialog'}
+      aria-modal={switcherOpen ? undefined : true}
+      aria-label={switcherOpen ? undefined : 'Cards overview'}
+      data-switcher={switcherOpen ? (committing ? 'committing' : 'open') : undefined}
+      onClick={onClose}
+      style={{
+        pointerEvents: committing || !isPresent ? 'none' : undefined,
+        position: 'fixed',
+        inset: 0,
+        zIndex: 1280,
+        color: '#ffffff',
+        display: 'flex',
+        flexDirection: 'column',
+        userSelect: 'none',
+        outline: 'none',
+        ...({ '--mochi-text': '#ffffff' } as React.CSSProperties),
+      }}
+    >
+      {/* The scrim fades on its own, so the cards can stay opaque while
+          they fly to their windows and the overview is still dimming. */}
+      <motion.div
+        data-overview-scrim
+        initial={{ opacity: 0 }}
+        animate={
+          committing
+            ? { opacity: 0, transition: tr(TRANSITION.close) }
+            : { opacity: 1, transition: tr(TRANSITION.open) }
+        }
+        exit={{ opacity: 0, transition: tr(TRANSITION.close) }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          // No blur: the overlay is its own surface, there is nothing
+          // behind it to blur.
+          background: 'rgba(8, 10, 24, 0.58)',
+        }}
+      />
+
+      {/* The heading, in display type over the scrim, and the two actions */}
+      <motion.div
+        data-overview-header
+        initial={{ opacity: 0 }}
+        animate={
+          committing
+            ? { opacity: 0, transition: tr(TRANSITION.close) }
+            : { opacity: 1, transition: tr(TRANSITION.open) }
+        }
+        exit={{ opacity: 0, transition: tr(TRANSITION.close) }}
+        style={{
+          position: 'relative',
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
+          alignItems: 'center',
+          padding: '64px 24px 0',
+        }}
+      >
+        <span />
+        <h2
+          data-overview-heading
+          className="px-display"
           style={{
-            pointerEvents: committing ? 'none' : undefined,
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1280,
+            margin: 0,
+            fontSize: 26,
+            letterSpacing: '0.3em',
+            // Tracking trails the last letter: pull it back so the word is centred.
+            marginRight: '-0.3em',
             color: '#ffffff',
-            display: 'flex',
-            flexDirection: 'column',
-            userSelect: 'none',
-            ...({ '--mochi-text': '#ffffff' } as React.CSSProperties),
+            textShadow: '0 1px 12px rgba(0, 0, 0, 0.35)',
           }}
         >
-          {/* The scrim fades on its own, so the cards can stay opaque while
-              they fly to their windows and the overview is still dimming. */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={
-              committing
-                ? { opacity: 0, transition: tr(TRANSITION.close) }
-                : { opacity: 1, transition: tr(TRANSITION.open) }
-            }
-            exit={{ opacity: 0, transition: tr(TRANSITION.close) }}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'rgba(10, 15, 25, 0.72)',
-              backdropFilter: 'blur(20px)',
-            }}
-          />
+          Cards
+        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, justifySelf: 'end' }}>
+          {items.length > 1 && (
+            <button
+              type="button"
+              className="px-ui px-overview-action"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloseAll();
+              }}
+              style={{
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: '1px solid rgba(255, 255, 255, 0.16)',
+                borderRadius: waterdrop(32),
+                height: 32,
+                padding: '0 12px',
+                color: 'rgba(255, 255, 255, 0.88)',
+                fontSize: 12.5,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                transition: 'all 0.14s ease',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255, 74, 74, 0.22)';
+                (e.currentTarget as HTMLElement).style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
+                (e.currentTarget as HTMLElement).style.color = 'rgba(255, 255, 255, 0.88)';
+              }}
+            >
+              <Trash2 size={13} />
+              <span>Close All</span>
+            </button>
+          )}
 
-          {/* Remochi Header in Overview */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={
-              committing
-                ? { opacity: 0, transition: tr(TRANSITION.close) }
-                : { opacity: 1, transition: tr(TRANSITION.open) }
-            }
-            exit={{ opacity: 0, transition: tr(TRANSITION.close) }}
-            style={{
-              position: 'relative',
-              padding: '6px 20px',
-              borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-              background: 'rgba(0, 0, 0, 0.18)',
-            }}
-          >
-            <Header content="Overview">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={handleCloseAll}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      borderRadius: 10,
-                      padding: '6px 12px',
-                      color: 'rgba(255, 255, 255, 0.85)',
-                      fontSize: '0.76rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 6,
-                      transition: 'all 0.14s ease',
-                    }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = 'rgba(239, 68, 68, 0.2)';
-                      (e.currentTarget as HTMLElement).style.color = '#ef4444';
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
-                      (e.currentTarget as HTMLElement).style.color = 'rgba(255, 255, 255, 0.85)';
-                    }}
-                  >
-                    <Trash2 size={13} />
-                    <span>Close All</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={onClose}
-                  title="Exit Overview (Esc)"
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
-                    borderRadius: '50%',
-                    width: 34,
-                    height: 34,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: '#ffffff',
-                    cursor: 'pointer',
-                    transition: 'background 0.14s ease',
-                  }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.18)';
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.08)';
-                  }}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            </Header>
-          </motion.div>
-
-          {/* Cards Carousel Area */}
-          <div
+          <button
+            ref={closeOverviewButtonRef}
+            type="button"
+            className="px-overview-action"
+            aria-label="Exit overview"
             onClick={(e) => {
-              if (e.target === e.currentTarget) onClose();
+              e.stopPropagation();
+              onClose();
             }}
+            title="Exit Overview (Esc)"
             style={{
-              position: 'relative',
-              flex: 1,
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.16)',
+              borderRadius: waterdrop(32),
+              width: 32,
+              height: 32,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              padding: '30px 40px',
-              overflowX: 'auto',
-              overflowY: 'hidden',
+              color: '#ffffff',
+              cursor: 'pointer',
+              transition: 'background 0.14s ease',
+            }}
+            onMouseEnter={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.2)';
+            }}
+            onMouseLeave={(e) => {
+              (e.currentTarget as HTMLElement).style.background = 'rgba(255, 255, 255, 0.1)';
             }}
           >
-            {items.length === 0 ? (
-              /* Empty State */
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 14,
-                  color: 'rgba(255, 255, 255, 0.75)',
-                  textAlign: 'center',
-                }}
-              >
-                <div
-                  style={{
-                    width: 64,
-                    height: 64,
-                    borderRadius: '26px 5px 26px 26px',
-                    background: 'rgba(255, 255, 255, 0.06)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'rgba(255, 255, 255, 0.45)',
-                  }}
-                >
-                  <Layers size={32} />
-                </div>
-                <div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 600, color: '#ffffff' }}>
-                    No Active Cards
-                  </div>
-                  <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.5)', marginTop: 4 }}>
-                    Running applications will appear as cards here.
-                  </div>
-                </div>
+            <X size={16} />
+          </button>
+        </div>
+      </motion.div>
 
-                {onOpenAppDrawer && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClose();
-                      onOpenAppDrawer();
-                    }}
-                    style={{
-                      marginTop: 8,
-                      background: 'var(--color-primary, #3b82f6)',
-                      color: '#ffffff',
-                      border: 'none',
-                      borderRadius: 12,
-                      padding: '10px 18px',
-                      fontSize: '0.85rem',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      boxShadow: '0 4px 14px rgba(59, 130, 246, 0.4)',
-                    }}
-                  >
-                    <Grid3x3 size={15} />
-                    <span>Open App Drawer</span>
-                  </button>
-                )}
-              </motion.div>
-            ) : (
-              /* Interactive Cards Flow */
-              <div
+      {/* Cards Carousel Area — margin-inline: auto on the inner track centres
+          when cards fit and keeps leftmost cards scrollable when they overflow. */}
+      <div
+        data-overview-carousel
+        style={{
+          position: 'relative',
+          flex: 1,
+          display: 'flex',
+          alignItems: 'center',
+          padding: '30px 40px',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+        }}
+      >
+        {items.length === 0 ? (
+          /* Empty State */
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 14,
+              marginInline: 'auto',
+              color: 'rgba(255, 255, 255, 0.75)',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: waterdrop(64),
+                background: 'rgba(255, 255, 255, 0.08)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'rgba(255, 255, 255, 0.45)',
+              }}
+            >
+              <Layers size={32} />
+            </div>
+            <div className="px-ui">
+              <div style={{ fontSize: '1.1rem', color: '#ffffff' }}>No Active Cards</div>
+              <div style={{ fontSize: '0.85rem', color: 'rgba(255, 255, 255, 0.6)', marginTop: 4 }}>
+                Running applications will appear as cards here.
+              </div>
+            </div>
+
+            {onOpenAppDrawer && (
+              <button
+                ref={emptyDrawerButtonRef}
+                type="button"
+                className="px-ui px-overview-action"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onClose();
+                  onOpenAppDrawer();
+                }}
                 style={{
+                  marginTop: 8,
+                  background: 'var(--color-primary, #21808d)',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: waterdrop(40),
+                  padding: '10px 18px',
+                  fontSize: '0.85rem',
+                  cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '24px',
-                  padding: '20px 10px',
-                  maxWidth: '100%',
+                  gap: 8,
+                  boxShadow: '0 4px 14px rgba(0, 0, 0, 0.3)',
                 }}
               >
-                {items.map((item, index) => {
-                  const isSelected = index === safeIndex;
-                  // Alt released: the selected card grows onto its window
-                  // while the rest fade (the scrim fades on its own).
-                  const role: Role = committing ? (isSelected ? 'chosen' : 'faded') : 'idle';
-                  return (
-                    <OverviewCard
-                      key={item.key}
-                      item={item}
-                      index={index}
-                      isSelected={isSelected}
-                      role={role}
-                      roleAtExit={() =>
-                        chosenKey.current === null ? 'idle' : chosenKey.current === item.key ? 'chosen' : 'faded'
-                      }
-                      thumb={item.primaryId !== undefined ? thumbnails.get(item.primaryId) : undefined}
-                      arrived={arrived}
-                      staggerEntrance={staggerEntrance}
-                      dark={theme === 'dark'}
-                      nodeRef={(node) => {
-                        if (node) cardNodes.current.set(item.key, node);
-                        else cardNodes.current.delete(item.key);
-                      }}
-                      onChoose={() => choose(item)}
-                    />
-                  );
-                })}
-              </div>
+                <Grid3x3 size={15} />
+                <span>Open App Drawer</span>
+              </button>
             )}
+          </motion.div>
+        ) : (
+          /* Interactive Cards Flow */
+          <div
+            data-overview-track
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '24px',
+              padding: '20px 10px',
+              marginInline: 'auto',
+              flexShrink: 0,
+            }}
+          >
+            {items.map((item, index) => {
+              const isSelected = index === safeIndex;
+              // Alt released: the selected card grows onto its window
+              // while the rest fade (the scrim fades on its own).
+              const role: Role = committing ? (isSelected ? 'chosen' : 'faded') : 'idle';
+              return (
+                <OverviewCard
+                  key={item.key}
+                  item={item}
+                  app={appsById(item.appId)}
+                  index={index}
+                  isSelected={isSelected}
+                  switcherOpen={switcherOpen}
+                  role={role}
+                  roleAtExit={() =>
+                    chosenKey.current === null ? 'idle' : chosenKey.current === item.key ? 'chosen' : 'faded'
+                  }
+                  thumb={item.primaryId !== undefined ? thumbnails.get(item.primaryId) : undefined}
+                  arrived={arrived}
+                  staggerEntrance={staggerEntrance}
+                  nodeRef={(node) => {
+                    if (node) cardNodes.current.set(item.key, node);
+                    else cardNodes.current.delete(item.key);
+                  }}
+                  buttonRef={(node) => {
+                    if (node) cardButtonNodes.current.set(item.key, node);
+                    else cardButtonNodes.current.delete(item.key);
+                  }}
+                  onFocusCard={() => setSelectedIndex(index)}
+                  onChoose={() => choose(item)}
+                />
+              );
+            })}
           </div>
-        </motion.div>
+        )}
+      </div>
+    </motion.div>
+  );
+};
+
+/**
+ * CardOverview — Iconic Palm webOS Card Deck & Overview Mode.
+ *
+ * Implements Palm webOS's hallmark multitasking paradigm:
+ * - Zoomed out carousel / deck of all active application cards
+ * - Tactile lift-on-hover physics with elevation shadows
+ * - One-tap fling/dismiss to close sessions
+ * - Smooth keyboard navigation (Arrow keys, Tab, Enter, Esc, Delete)
+ */
+export const CardOverview: React.FC<CardOverviewProps> = (props) => {
+  const switcherOpen = props.switcher !== undefined;
+  const committing = props.switcher?.committed != null;
+  return (
+    <AnimatePresence>
+      {props.isOpen && (
+        <CardOverviewOverlay
+          key="card-overview"
+          {...props}
+          switcherOpen={switcherOpen}
+          committing={committing}
+        />
       )}
     </AnimatePresence>
   );

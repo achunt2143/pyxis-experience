@@ -154,14 +154,42 @@ describe.skipIf(!haveBridge)('the bridge stamps every filesystem call with its s
     expect(sent).toEqual([]);
   });
 
-  it('gives Files the home with ~ and the rest of the system, read-only, with /', async () => {
+  it('gives Files the home with ~ and the rest of the system, read-only until privileged, with /', async () => {
     const { call, sent } = await bridgeFor('files', FILES);
     await call('readDirectory', { path: '~' });
     await call('readFile', { path: '/etc/os-release' });
     await expect(call('writeFile', { path: '/etc/os-release', content: 'x' })).rejects.toThrow(/read-only/);
     await expect(call('copy', { source: '~/a', destination: '/tmp/a' })).rejects.toThrow(/read-only/);
     await expect(call('move', { source: '/etc/a', destination: '~/a' })).rejects.toThrow(/read-only/);
-    expect(sent.map((s) => s.params.scope)).toEqual(['user', 'system']);
+    const fsCalls = sent.filter((s) => s.service === 'filesystem');
+    expect(fsCalls.map((s) => s.params.scope)).toEqual(['user', 'system']);
+    const privCalls = sent.filter((s) => s.service === 'privilege');
+    expect(privCalls.length).toBe(3);
+    expect(privCalls.every((s) => s.method === 'GetState' && s.params.appId === 'files')).toBe(true);
+  });
+
+  it('allows Files to write outside ~ with scope system + appId when privilege grant is active', async () => {
+    const PyxisBridgeParent = loadBridge();
+    const bridge = new PyxisBridgeParent();
+    const sent: Sent[] = [];
+    bridge._appIdForThisActor = () => 'files';
+    bridge._getDeclaredPermissions = async () => FILES;
+    bridge._echoRequest = async (service, method, params) => {
+      sent.push({ service, method, params });
+      if (service === 'privilege' && method === 'GetState') {
+        return { ok: true, granted: true };
+      }
+      return {};
+    };
+    await bridge._handleCallService({
+      service: 'filesystem',
+      method: 'writeFile',
+      params: { path: '/etc/test-file', content: 'hello' },
+    });
+    const fsCalls = sent.filter((s) => s.service === 'filesystem');
+    expect(fsCalls).toHaveLength(1);
+    expect(fsCalls[0].params.scope).toBe('system');
+    expect(fsCalls[0].params.appId).toBe('files');
   });
 
   it("lets only an app holding filesystem:apps name another app's data, and strips the name", async () => {

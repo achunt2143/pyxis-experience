@@ -1,0 +1,20 @@
+/* ShellDialog's and the privilege prompt's buttons are remochi Buttons
+   (caps, ShellPill in ShellDialog.tsx): they take remochi's theme. */
+
+.px-privilege-error {
+  color: color-mix(in srgb, var(--px-spinner-red, #ff4a4a) 45%, var(--px-spinner-red-outline, #a12c2c));
+}
+
+[data-px-tint='dark'] .px-privilege-error,
+[data-mochi-theme='dark']:not([data-px-tint]) .px-privilege-error {
+  color: var(--px-spinner-red, #ff4a4a);
+}
+
+.px-privilege-caps {
+  color: #b45309;
+}
+
+[data-px-tint='dark'] .px-privilege-caps,
+[data-mochi-theme='dark']:not([data-px-tint]) .px-privilege-caps {
+  color: #fbbf24;
+}

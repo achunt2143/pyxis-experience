@@ -44,9 +44,40 @@ describe('windowsReducer', () => {
     expect(s.byId[2].minimized).toBe(true);
   });
 
-  it('an explicit minimized field beats visible', () => {
-    const s = run([{ type: 'list', windows: [info(1, { visible: false, minimized: false })] }]);
-    expect(s.byId[1].minimized).toBe(false);
+  it('an explicit minimized field beats visible and list reads maximized, fullscreen, busy and title_label', () => {
+    const s = run([
+      {
+        type: 'list',
+        windows: [
+          info(1, {
+            visible: false,
+            minimized: false,
+            maximized: true,
+            fullscreen: true,
+            busy: true,
+            title_label: 'Files · Documents',
+          }),
+        ],
+      },
+    ]);
+    expect(s.byId[1]).toMatchObject({
+      minimized: false,
+      maximized: true,
+      fullscreen: true,
+      busy: true,
+      titleLabel: 'Files · Documents',
+    });
+  });
+
+  it('a racing list preserves focus on a window kept via keep', () => {
+    const s = run([
+      { type: 'list', windows: [info(1)] },
+      { type: 'created', windowId: 2, appId: 'notes', width: 800, height: 600 },
+      { type: 'focus', windowId: 2 },
+      { type: 'list', windows: [info(1)], keep: [2] },
+    ]);
+    expect(s.focusedId).toBe(2);
+    expect(s.byId[2]).toBeDefined();
   });
 
   it('minimizing the focused window drops focus; restoring does not return it', () => {

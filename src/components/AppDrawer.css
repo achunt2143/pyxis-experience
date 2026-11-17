@@ -1,0 +1,67 @@
+/* The app drawer's search pill and category chips, in the identity's type
+   (geckos/docs/internal/pyxis-visual-identity-plan.md, lane C). */
+.px-drawer-search {
+  width: 100%;
+  height: 34px;
+  margin: 0;
+  padding: 0 14px;
+  border-radius: 17px;
+  border: 1.5px solid color-mix(in srgb, var(--px-material-ink) 22%, transparent);
+  background: color-mix(in srgb, var(--px-material-ink) 4%, transparent);
+  color: var(--px-material-ink);
+  font-family: var(--px-font-ui);
+  font-weight: var(--px-font-ui-weight);
+  font-size: 15px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.px-drawer-search::placeholder {
+  font-style: italic;
+  color: var(--px-material-ink-quiet);
+}
+
+.px-drawer-search:focus {
+  border-color: color-mix(in srgb, var(--color-primary, #21808d) 70%, transparent);
+}
+
+.px-drawer-chip {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 13px;
+  border: 1px solid color-mix(in srgb, var(--px-material-ink) 16%, transparent);
+  background: transparent;
+  color: var(--px-material-ink);
+  font-family: var(--px-font-ui);
+  font-weight: var(--px-font-ui-weight);
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.px-drawer-chip:hover {
+  background: color-mix(in srgb, var(--px-material-ink) 6%, transparent);
+}
+
+.px-drawer-app {
+  min-width: 0;
+}
+
+.px-drawer-chip:focus-visible,
+.px-drawer-app:focus-visible {
+  outline: 2px solid var(--color-primary, #4a8bc2);
+  outline-offset: 2px;
+}
+
+.px-drawer-chip[aria-selected='true'] {
+  border-color: color-mix(in srgb, var(--color-primary, #21808d) 55%, #10132a);
+  color: color-mix(in srgb, var(--color-primary, #21808d) 55%, #10132a);
+  background: color-mix(in srgb, var(--color-primary, #21808d) 12%, transparent);
+}
+
+[data-px-tint='dark'] .px-drawer-chip[aria-selected='true'],
+[data-mochi-theme='dark']:not([data-px-tint]) .px-drawer-chip[aria-selected='true'] {
+  border-color: color-mix(in srgb, var(--color-primary, #5ab8f5) 82%, #ffffff);
+  color: color-mix(in srgb, var(--color-primary, #5ab8f5) 82%, #ffffff);
+  background: color-mix(in srgb, var(--color-primary, #5ab8f5) 18%, transparent);
+}

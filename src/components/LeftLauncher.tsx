@@ -71,6 +71,7 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
           content wrapper carries the same flip again to cancel it back
           out so icons/tooltips render upright. */}
       <motion.div
+        data-left-launcher=""
         animate={{ height }}
         transition={tr(TRANSITION.geometry)}
         style={{
@@ -84,14 +85,18 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
       >
         <Repanel style={panelStyle}>
           <div
+            data-launcher-content=""
             style={{
+              boxSizing: 'border-box',
               height: '100%',
               display: 'flex',
               flexDirection: 'row',
               alignItems: 'center',
               gap: '8px',
               paddingLeft: '16px',
-              paddingRight: '16px',
+              // Keep the rightmost item and its top-right badge clear of Repanel's
+              // flipped 45px scalloped corner inside .mochi-panel-body's overflow clip.
+              paddingRight: isCompact ? '32px' : '24px',
               paddingTop: isCompact ? '4px' : '8px',
               paddingBottom: isCompact ? '4px' : '8px',
               transform: 'scaleX(-1)',
@@ -139,6 +144,7 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
           return (
             <div
               key={id}
+              data-launcher-app={id}
               style={{ position: 'relative' }}
               onMouseEnter={() => setHoveredApp(id)}
               onMouseLeave={() => setHoveredApp(null)}
@@ -175,12 +181,13 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
               {/* Crashed warning badge */}
               {lifecycleState === 'crashed' && (
                 <motion.div
+                  data-crashed-badge=""
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   style={{
                     position: 'absolute',
-                    top: -4,
-                    right: -4,
+                    top: 0,
+                    right: 0,
                     width: 16,
                     height: 16,
                     borderRadius: '50%',
@@ -200,12 +207,15 @@ export const LeftLauncher: React.FC<LeftLauncherProps> = ({
               <AnimatePresence>
                 {isActive && (
                   <motion.div
+                    data-active-indicator=""
                     initial={to({ scaleX: 0, opacity: 0 })}
                     animate={{ ...to({ scaleX: 1, opacity: 1 }), transition: tr(TRANSITION.open) }}
                     exit={{ ...to({ scaleX: 0, opacity: 0 }), transition: tr(TRANSITION.close) }}
                     style={{
                       position: 'absolute',
-                      bottom: -8,
+                      // Compact mode leaves 2px below the 34px item inside Repanel's
+                      // 38px .mochi-panel-body, so -2px sits flush without clipping.
+                      bottom: isCompact ? -2 : -6,
                       left: 0,
                       width: '100%',
                       height: '2px',

@@ -1,73 +1,48 @@
-# React + TypeScript + Vite
+# Pyxis Experience
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+The desktop shell (`bloom`), shared Echo IPC SDK (`@pyxis/app-sdk`), and built-in Duyo system applications for **Pyxis OS**.
 
-Currently, two official plugins are available:
+## Workspace layout
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **`src/` — Bloom (Desktop Shell, Lock Screen & Overlay)**
+  - `src/components/`: Launch bar, app drawer, quick settings, notification centre, desktop search, `TopSystemBar` (status strip & active privileged-access indicator), and `PrivilegePromptDialog` (shell overlay password prompt).
+  - `src/lock/`: `LockScreen` with Daylight/waterdrop styling, multi-user account picker, and rate-limited unlock.
+  - `src/overlay/`: `Alt+Tab` window switcher, card overview, and workspace overlay.
+  - `src/hooks/`: Live bindings for `useApps`, `useWindows`, `useSettings`, `useNotifications`, `useSession`, and `useTheme`.
+- **`packages/app-sdk/` — `@pyxis/app-sdk`**
+  - Typed `EchoClient` over `window.geckoOS` (`org.geckoOS.*` services) with stateful browser-dev mocks when running outside Gecko.
+  - Service helpers for `session`, `accounts`, `privilege` (`org.geckoOS.privilege`), `filesystem`, `settings`, `time`, `nova`, `appHost`, `notifications`, `audio`, and `wallpaper`.
+  - Shared design tokens, Daylight dynamic wallpaper engine, Mochi/Duyo helpers (`@pyxis/app-sdk/duyo`), and `VelaIcon` / `AppDropIcon` components.
+- **`packages/apps/` — Built-in Duyo System Applications**
+  - `browser` — **Pyxis Vela** web browser
+  - `files` — File manager (home scope + read-only/unlockable system scope)
+  - `terminal` — Terminal emulator over `org.geckoOS.terminal`
+  - `settings` — System settings (Appearance, Sound, Accessibility, Network, Date & Time, Users & Lock, System & Privileged Access, About)
+  - `installer` — `.ipk` package installer with declared-permission review
+  - `notes`, `contacts`, `tasks` — PIM suite
 
-## React Compiler
+## Scripts
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```sh
+# Install workspace dependencies
+npm install
 
-## Expanding the ESLint configuration
+# Run Bloom + all built-in app dev servers in parallel (with browser Echo mocks)
+npm run dev:all
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+# Regenerate Duyo .view.gen.ts bindings from .view.json specs
+npm run views
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# Build SDK, all apps, and Bloom (checks .view.gen.ts freshness and TypeScript)
+npm run build:all
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+# Run ESLint across the workspace
+npm run lint
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Run all Vitest unit and contract suites
+npm test
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Echo IPC & Native Bridge
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+When running inside Gecko on Pyxis OS, `@pyxis/app-sdk` talks to `window.geckoOS`, which is backed by `PyxisBridgeParent.sys.mjs` and `echo-daemon` over Unix-domain sockets. Sensitive actions (`privilege.Authenticate`, `session.lock`/`unlock`, window management, cross-app notifications) are capability-gated at the bridge so only trusted shell components can invoke them. Outside Gecko (`npm run dev` / Vitest), `EchoClient` automatically uses deterministic in-memory mocks.

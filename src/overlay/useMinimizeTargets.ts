@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { setMinimizeTargets, type MinimizeTarget } from '@pyxis/app-sdk';
 import { appHue } from '../apps/registry';
+import { useApps } from '../hooks/useApps';
 
 /**
  * A box measured by layout: its offset up the `offsetParent` chain. A
@@ -19,8 +20,11 @@ export function layoutBox(el: HTMLElement): { x: number; y: number; width: numbe
 }
 
 /**
- * Every app icon on the dock, as Evo's minimize targets, each with the app's
- * accent when Bloom knows one (`hueFor`), for Evo's Lumen Droplet.
+ * Every app icon on the launch bar, as Evo's minimize targets, each with the
+ * app's accent when Bloom knows one (`hueFor`), for Evo's Lumen Droplet. The
+ * bar is whichever shell edge it is on (`data-shell-edge="bottom"`, or
+ * `"left"` for the rail; `pyxis.launchBar.position`); only the bar holds
+ * `data-app` buttons among the edges.
  */
 export function measureDockIcons(
   root: ParentNode = document,
@@ -28,7 +32,7 @@ export function measureDockIcons(
 ): MinimizeTarget[] {
   const targets = new Map<string, MinimizeTarget>();
   root
-    .querySelectorAll<HTMLElement>('[data-shell-edge="bottom"] [data-app]')
+    .querySelectorAll<HTMLElement>('[data-shell-edge] [data-app]')
     .forEach((el) => {
       const appId = el.getAttribute('data-app');
       if (!appId) return;
@@ -48,12 +52,23 @@ export function measureDockIcons(
  * and nothing observable says when it has stopped.
  */
 export function useMinimizeTargets(enabled: boolean) {
+  const { byId } = useApps();
+  const byIdRef = useRef(byId);
+  const measureRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    byIdRef.current = byId;
+    if (enabled) measureRef.current?.();
+  }, [enabled, byId]);
+
   useEffect(() => {
     if (!enabled) return;
     let sent = '';
 
     const measure = () => {
-      const targets = measureDockIcons();
+      const targets = measureDockIcons(document, (appId) =>
+        appHue(appId, byIdRef.current(appId)?.accent)
+      );
       // A dock that is not on the page (a fullscreen app hides it) keeps the
       // last table: the windows under that app still minimize into it.
       if (targets.length === 0) return;
@@ -62,6 +77,7 @@ export function useMinimizeTargets(enabled: boolean) {
       sent = key;
       void setMinimizeTargets(targets);
     };
+    measureRef.current = measure;
 
     const timers: number[] = [];
     const settle = () => {
@@ -78,6 +94,7 @@ export function useMinimizeTargets(enabled: boolean) {
     settle();
 
     return () => {
+      measureRef.current = null;
       timers.forEach((t) => window.clearTimeout(t));
       resize?.disconnect();
       mutations?.disconnect();

@@ -7,9 +7,7 @@ import { resolve } from 'path'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [duyoViews(), react()],
-  // Duyo ships TS source, and its remochi/css entry is a .ts that imports
-  // remochi's CSS, whose fonts the dependency pre-bundler can't load. Serve
-  // it through Vite's own pipeline instead.
+  // Duyo ships TS source. Serve it through Vite's own pipeline rather than pre-bundling.
   optimizeDeps: { exclude: ['@duyojs/duyo'] },
   server: {
     port: 5173,
@@ -18,7 +16,8 @@ export default defineConfig({
   build: {
     target: 'ES2020',
     outDir: 'dist',
-    sourcemap: true,
+    // Keep production rootfs free of multi-MB .js.map files.
+    sourcemap: false,
     rollupOptions: {
       // Bloom's own shell — every built-in app is now its own independent
       // package under packages/apps/*, each with its own build (see

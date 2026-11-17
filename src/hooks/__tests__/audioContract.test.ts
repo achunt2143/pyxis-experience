@@ -54,11 +54,24 @@ describe('audio mock matches the Rust service', () => {
     const rust = readFileSync(AUDIO_RS, 'utf8');
     const registered = [...daemon.matchAll(/AUDIO_IFACE,\s*"(\w+)"/g)].map((m) => m[1]);
     expect(registered.sort()).toEqual(
-      ['getVolume', 'listOutputs', 'setDefaultOutput', 'setMute', 'setVolume'].sort()
+      [
+        'getVolume',
+        'listOutputs',
+        'setDefaultOutput',
+        'setMute',
+        'setVolume',
+        'getInputVolume',
+        'listInputs',
+        'setDefaultInput',
+        'setInputMute',
+        'setInputVolume',
+      ].sort()
     );
     const signal = (constant: string) => rust.match(new RegExp(`pub const ${constant}: &str = "([^"]+)";`))?.[1];
     expect(AUDIO_SIGNALS.volumeChanged).toBe(signal('SIGNAL_VOLUME_CHANGED'));
     expect(AUDIO_SIGNALS.outputChanged).toBe(signal('SIGNAL_OUTPUT_CHANGED'));
+    expect(AUDIO_SIGNALS.inputVolumeChanged).toBe(signal('SIGNAL_INPUT_VOLUME_CHANGED'));
+    expect(AUDIO_SIGNALS.inputChanged).toBe(signal('SIGNAL_INPUT_CHANGED'));
   });
 });
 

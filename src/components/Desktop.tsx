@@ -21,6 +21,7 @@ import {
   SETTING_KEYS,
   asNumber,
   oneOf,
+  useSessionState,
   useSetting,
   useWallpaperExposure,
   type DynamicWallpaperProps,
@@ -63,10 +64,11 @@ const DEV_OVERRIDES = devOverrides();
 /** How often the frames are re-read while an app window is on screen (a resize sends no signal). */
 const FRAMES_POLL_MS = 10_000;
 
-type ListedWindow = ExposureWindow & { id: number };
+type ListedWindow = ExposureWindow & { id: number; appId: string };
 
 const toExposure = (w: EvoWindowInfo): ListedWindow => ({
   id: w.window_id,
+  appId: w.app_id,
   x: w.x,
   y: w.y,
   width: w.width,
@@ -89,6 +91,36 @@ function useExposureWindows(compositor: WindowsState): ExposureWindow[] | null {
   const anyOnScreen = Object.values(compositor.byId).some(
     (w) => !SHELL_APP_IDS.has(w.waylandAppId) && !w.minimized
   );
+  const anyOnScreenRef = useRef(anyOnScreen);
+  useEffect(() => {
+    anyOnScreenRef.current = anyOnScreen;
+  }, [anyOnScreen]);
+
+  // Steady 10s poll while an app window is on screen; kept in its own effect
+  // so focus/move updates never tear down and reset the interval.
+  useEffect(() => {
+    if (!IN_COMPOSITOR) return;
+    let cancelled = false;
+    const poll = setInterval(() => {
+      if (!anyOnScreenRef.current) return;
+      void (async () => {
+        try {
+          const res = (await echoClient.callMethod(EVO_SERVICE, EVO_IFACE, 'ListWindows', {})) as
+            | { windows?: EvoWindowInfo[] }
+            | undefined;
+          if (!cancelled && res?.windows) {
+            setListed(res.windows.map(toExposure));
+          }
+        } catch {
+          /* keep the last list */
+        }
+      })();
+    }, FRAMES_POLL_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, []);
 
   useEffect(() => {
     if (!IN_COMPOSITOR) return;
@@ -99,20 +131,18 @@ function useExposureWindows(compositor: WindowsState): ExposureWindow[] | null {
           | { windows?: EvoWindowInfo[] }
           | undefined;
         if (!cancelled && res?.windows) {
-          setListed(res.windows.filter((w) => !SHELL_APP_IDS.has(w.app_id)).map(toExposure));
+          setListed(res.windows.map(toExposure));
         }
       } catch {
         /* keep the last list */
       }
     };
     const timers = [setTimeout(list, 300), setTimeout(list, 1500)];
-    const poll = anyOnScreen ? setInterval(list, FRAMES_POLL_MS) : undefined;
     return () => {
       cancelled = true;
       timers.forEach(clearTimeout);
-      if (poll) clearInterval(poll);
     };
-  }, [compositor, anyOnScreen]);
+  }, [compositor]);
 
   // Frames from the last list, flags from the store (live, where the list
   // can be a few hundred ms old); a window the list hasn't seen yet comes
@@ -120,8 +150,10 @@ function useExposureWindows(compositor: WindowsState): ExposureWindow[] | null {
   return useMemo(() => {
     if (!IN_COMPOSITOR) return null;
     const frames = new Map((listed ?? []).map((w) => [w.id, w]));
+    // The list's app id over the store's: the store can hold a window under
+    // the id it had when it was first seen ("unknown", "vela-default").
     return Object.values(compositor.byId)
-      .filter((w) => !SHELL_APP_IDS.has(w.waylandAppId))
+      .filter((w) => !SHELL_APP_IDS.has(frames.get(w.windowId)?.appId ?? w.waylandAppId))
       .map((w) => {
         const f = frames.get(w.windowId);
         return {
@@ -182,6 +214,9 @@ export const Desktop: React.FC = () => {
   const compositor = useCompositorWindows();
   const exposureWindows = useExposureWindows(compositor);
   const exposure = useWallpaperExposure(exposureWindows);
+  // Locked, Evo draws only the overlay over black: nobody can see this
+  // wallpaper, so it stops drawing frames (the lock screen has its own).
+  const { locked } = useSessionState();
   // The exposure as it settles, for the on-device suites: the state line is
   // written when the state changes, which is before the frames are re-read
   // (flags arrive by signal, sizes by ListWindows), so its figure is stale.
@@ -192,13 +227,18 @@ export const Desktop: React.FC = () => {
     const last = loggedExposure.current;
     if (last !== null && Math.abs(exposure.exposed - last) < 0.05) return;
     loggedExposure.current = exposure.exposed;
-    const line = `PYXIS-WALLPAPER-EXPOSURE exposed=${exposure.exposed.toFixed(2)} windows=${windowCount}`;
+    // `store=` is every window the store holds, by app id, shell included:
+    // what to read when the count looks wrong.
+    const store = Object.values(compositor.byId)
+      .map((w) => w.waylandAppId || '?')
+      .join(',');
+    const line = `PYXIS-WALLPAPER-EXPOSURE exposed=${exposure.exposed.toFixed(2)} windows=${windowCount} store=${store}`;
     try {
       (globalThis as { dump?: (s: string) => void }).dump?.(`${line}\n`);
     } catch {
       /* dump is Gecko's, and may be off */
     }
-  }, [exposure.exposed, windowCount]);
+  }, [exposure.exposed, windowCount, compositor]);
 
   // Lumen: while Super+D has the windows receded, the wallpaper eases in a
   // little, and back out when they return. A scale, so full mode only.
@@ -241,8 +281,8 @@ export const Desktop: React.FC = () => {
           <DynamicWallpaper
             wallpaper={wallpaper}
             animationMode={mode}
-            paused={exposure.pause}
-            logDetail={`mode=${mode} exposed=${exposure.exposed.toFixed(2)} fullscreen=${exposure.fullscreen} hidden=${exposure.documentHidden} windows=${exposureWindows?.length ?? 'none'}`}
+            paused={exposure.pause || locked}
+            logDetail={`mode=${mode} exposed=${exposure.exposed.toFixed(2)} fullscreen=${exposure.fullscreen} hidden=${exposure.documentHidden} locked=${locked} windows=${exposureWindows?.length ?? 'none'}`}
             {...DEV_OVERRIDES}
           />
         </motion.div>

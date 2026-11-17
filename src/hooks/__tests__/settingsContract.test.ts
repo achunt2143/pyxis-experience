@@ -114,6 +114,13 @@ describe('settings SDK matches the Rust schema', () => {
     expect(validateSetting(SETTING_KEYS.theme, 'auto')).toBeNull();
   });
 
+  it('the launch bar sits at the bottom unless the rail is picked', () => {
+    expect(SETTING_KEYS.launchBarPosition).toBe('pyxis.launchBar.position');
+    expect(SETTING_DEFAULTS[SETTING_KEYS.launchBarPosition]).toBe('bottom');
+    expect(validateSetting(SETTING_KEYS.launchBarPosition, 'left')).toBeNull();
+    expect(validateSetting(SETTING_KEYS.launchBarPosition, 'right')).toContain(SETTING_KEYS.launchBarPosition);
+  });
+
   it('validateSetting refuses what echo refuses, naming the key', () => {
     const bad: [string, unknown][] = [
       [SETTING_KEYS.theme, 42],

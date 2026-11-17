@@ -28,6 +28,17 @@ import { CompositorWindowsContext } from './useAppWindows';
 /** How old Evo's ListWindows sample can be (it is refreshed every 250 ms), with a margin. */
 export const LIST_SAMPLE_AGE_MS = 300;
 
+/** How often, and how many times, to re-list while a window's app id is still unresolved. */
+export const ID_RETRY_MS = 1000;
+export const ID_RETRIES = 5;
+
+/**
+ * An app id Evo reports before the client has set its own: `WindowCreated`
+ * is sent at map time, when most Wayland windows have none yet ("unknown"),
+ * and a vela window that hasn't run its PYXIS block claims `vela-default`.
+ */
+const unresolvedAppId = (id: string | undefined) => !id || id === 'unknown' || id === 'vela-default';
+
 export function CompositorWindowsProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(windowsReducer, EMPTY_WINDOWS);
   const stateRef = useRef(state);
@@ -59,6 +70,15 @@ export function CompositorWindowsProvider({ children }: { children: ReactNode })
     let listing = false;
     let again = false;
     let followUp: ReturnType<typeof setTimeout> | undefined;
+    // Evo sends no signal when a window's app id arrives, so a window created
+    // without one is re-listed until it has one, or is gone from the list.
+    // Its own overlay is that case: created as "unknown", then never listed,
+    // and before this it sat in the store for good as a full-screen app
+    // window (the desktop paused its wallpaper under it). The first list gets
+    // the same retries: it can be a sample from before vela has set the
+    // shell's own id, which left the shell's window in the store as an app.
+    let idTries = ID_RETRIES;
+    let unresolvedSeen = false;
     const relist = async () => {
       if (listing) {
         again = true;
@@ -72,9 +92,14 @@ export function CompositorWindowsProvider({ children }: { children: ReactNode })
           | undefined;
         const recent = (m: Map<number, number>) =>
           [...m].filter(([, at]) => at >= since).map(([id]) => id);
+        const windows = res?.windows ?? [];
+        const keep = recent(created);
         if (!cancelled) {
-          dispatch({ type: 'list', windows: res?.windows ?? [], keep: recent(created), drop: recent(closed) });
+          dispatch({ type: 'list', windows, keep, drop: recent(closed) });
         }
+        unresolvedSeen =
+          windows.some((w) => unresolvedAppId(w.app_id)) ||
+          keep.some((id) => !windows.some((w) => w.window_id === id));
         for (const m of [created, closed]) {
           for (const [id, at] of m) if (at < since) m.delete(id);
         }
@@ -87,6 +112,10 @@ export function CompositorWindowsProvider({ children }: { children: ReactNode })
           again = false;
           clearTimeout(followUp);
           followUp = setTimeout(() => void relist(), LIST_SAMPLE_AGE_MS + 50);
+        } else if (!cancelled && idTries > 0 && unresolvedSeen) {
+          idTries -= 1;
+          clearTimeout(followUp);
+          followUp = setTimeout(() => void relist(), ID_RETRY_MS);
         }
       }
     };
@@ -118,6 +147,10 @@ export function CompositorWindowsProvider({ children }: { children: ReactNode })
           width: p.width,
           height: p.height,
         });
+        if (unresolvedAppId(p.app_id)) {
+          idTries = ID_RETRIES;
+          void relist();
+        }
       }),
       on<EvoWindowClosedPayload>(EVO_SIGNALS.closed, (p) => {
         closed.set(p.window_id, Date.now());

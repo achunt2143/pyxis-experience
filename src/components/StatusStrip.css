@@ -1,0 +1,42 @@
+/*
+ * The status strip (TopSystemBar.tsx) and the search box in it
+ * (DesktopSearch.tsx): drawn straight on the wallpaper, no slab. The ink
+ * variables come from useShellTint (@pyxis/app-sdk/identity.css), which follows
+ * the wallpaper on screen, so the strip reads dark by day and light at night.
+ * Only what inline styles can't say lives here: placeholder, hover, focus.
+ */
+.px-strip-search input::placeholder {
+  color: var(--px-ink-quiet);
+  opacity: 1;
+  font-family: var(--px-font-ui);
+  font-style: italic;
+}
+
+.px-strip-search {
+  border-bottom: 1px solid color-mix(in srgb, var(--px-ink) 28%, transparent);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.px-strip-search:focus-within,
+.px-strip-search[data-open='true'] {
+  border-bottom-color: var(--px-ink);
+  box-shadow: 0 1px 0 0 var(--px-ink);
+}
+
+.px-strip-status {
+  transition: background 0.15s ease;
+}
+
+.px-strip-status:hover,
+.px-strip-status[aria-expanded='true'] {
+  background: color-mix(in srgb, var(--px-ink) 12%, transparent);
+}
+
+.px-strip-status:focus-visible {
+  outline: 1.5px solid var(--px-ink);
+  outline-offset: 1px;
+}
+
+.px-search-row[data-active='true'] {
+  background: color-mix(in srgb, var(--px-material-ink) 9%, transparent);
+}

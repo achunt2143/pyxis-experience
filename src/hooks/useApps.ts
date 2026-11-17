@@ -3,8 +3,13 @@ import { echoClient, NOVA_IFACE, NOVA_SIGNALS, type NovaAppInfo } from '@pyxis/a
 import {
   DEFAULT_APP_SIZE,
   PYXIS_APPS,
+  __resetAppIconCache,
   appById,
+  appHue,
   entryUrlFor,
+  getCachedAppIcon,
+  isCrossOriginPyxisUrl,
+  resolveAppIcon,
   type PyxisAppDef,
 } from '../apps/registry';
 
@@ -33,6 +38,8 @@ export interface DesktopApp {
   defaultSize: { width: number; height: number };
   category: string;
   pinned: boolean;
+  /** Resolved `#rrggbb` accent from Nova's manifest, falling back to `APP_ACCENTS[id].hue`. */
+  accent?: string;
 }
 
 /**
@@ -80,8 +87,18 @@ export function iconUrlFrom(info: NovaAppInfo): string | undefined {
   return `pyxis://${info.id}/${relativeIconPath(path, info.id)}`;
 }
 
+function normalizeCategory(raw: string | null | undefined): string {
+  const trimmed = raw?.trim().toLowerCase();
+  if (!trimmed) return 'utility';
+  if (trimmed === 'utilities') return 'utility';
+  return trimmed;
+}
+
 function merge(info: NovaAppInfo): DesktopApp {
   const def = appById(info.id);
+  const accent = appHue(info.id, info.accent);
+  const rawIconUrl = def?.iconUrl ?? iconUrlFrom(info);
+  const cachedDataUrl = rawIconUrl && isCrossOriginPyxisUrl(rawIconUrl) ? getCachedAppIcon(info.id, rawIconUrl) : undefined;
   return {
     id: info.id,
     // The overlay wins on name: a built-in's display name is a product
@@ -91,11 +108,12 @@ function merge(info: NovaAppInfo): DesktopApp {
     info,
     def,
     icon: def?.icon,
-    iconUrl: def?.iconUrl ?? iconUrlFrom(info),
+    iconUrl: cachedDataUrl ?? rawIconUrl,
     entryUrl: entryUrlFor(info.id, info.entry || 'index.html'),
     defaultSize: def?.defaultSize ?? DEFAULT_APP_SIZE,
-    category: def?.category ?? info.category ?? 'utility',
+    category: def?.category ?? normalizeCategory(info.category),
     pinned: def?.pinned ?? false,
+    ...(accent ? { accent } : {}),
   };
 }
 
@@ -149,10 +167,34 @@ function emit(next: Snapshot) {
   listeners.forEach((l) => l());
 }
 
+const SHELL_APP_IDS = new Set(['bloom', 'bloom-overlay']);
+
+let storeEpoch = 0;
+
+function hydrateCrossOriginIcons(apps: DesktopApp[], epoch: number) {
+  for (const app of apps) {
+    if (app.icon || !app.iconUrl || !isCrossOriginPyxisUrl(app.iconUrl)) continue;
+    const rawIconUrl = app.iconUrl;
+    void resolveAppIcon(app.id, rawIconUrl).then((dataUrl) => {
+      if (!dataUrl || epoch !== storeEpoch) return;
+      let changed = false;
+      const nextApps = snapshot.apps.map((entry) => {
+        if (entry.id !== app.id || entry.iconUrl !== rawIconUrl) return entry;
+        changed = true;
+        return { ...entry, iconUrl: dataUrl };
+      });
+      if (changed) {
+        emit({ ...snapshot, apps: nextApps });
+      }
+    });
+  }
+}
+
 async function fetchApps(): Promise<void> {
   // Collapse concurrent refreshes: mount and a burst of registry signals can
   // otherwise queue several identical List calls.
   if (inFlight) return inFlight;
+  const epoch = storeEpoch;
   inFlight = (async () => {
     try {
       const list = await echoClient.callMethod(
@@ -161,8 +203,20 @@ async function fetchApps(): Promise<void> {
         'List',
         {}
       ) as { apps?: NovaAppInfo[] } | undefined;
-      emit({ apps: (list?.apps ?? []).map(merge), loading: false, error: null });
+      if (epoch !== storeEpoch) return;
+      // Defensive filter: Nova::list excludes shell components, and the UI
+      // mirrors the guard so bloom / bloom-overlay never surface in app lists.
+      const merged = (list?.apps ?? [])
+        .filter((a) => !SHELL_APP_IDS.has(a.id))
+        .map(merge);
+      emit({
+        apps: merged,
+        loading: false,
+        error: null,
+      });
+      hydrateCrossOriginIcons(merged, epoch);
     } catch (err) {
+      if (epoch !== storeEpoch) return;
       // Keep the last good list rather than blanking the launcher — a
       // transient bus hiccup should not empty the desktop.
       emit({
@@ -185,10 +239,14 @@ function subscribe(listener: () => void): () => void {
     // RegistryChanged covers nova.Reload, which is what the Installer
     // triggers after opkg — the path every .ipk app actually arrives by.
     void fetchApps();
+    const reload = () => {
+      __resetAppIconCache();
+      void fetchApps();
+    };
     signalUnsubs = [
-      echoClient.onSignal(NOVA_IFACE, NOVA_SIGNALS.installed, () => void fetchApps()),
-      echoClient.onSignal(NOVA_IFACE, NOVA_SIGNALS.uninstalled, () => void fetchApps()),
-      echoClient.onSignal(NOVA_IFACE, NOVA_SIGNALS.registryChanged, () => void fetchApps()),
+      echoClient.onSignal(NOVA_IFACE, NOVA_SIGNALS.installed, reload),
+      echoClient.onSignal(NOVA_IFACE, NOVA_SIGNALS.uninstalled, reload),
+      echoClient.onSignal(NOVA_IFACE, NOVA_SIGNALS.registryChanged, reload),
     ];
   }
   return () => {
@@ -207,6 +265,8 @@ export const __subscribeApps = subscribe;
 
 /** Testing seam: drop all cached state so a suite starts clean. */
 export function __resetAppsStore() {
+  storeEpoch += 1;
+  __resetAppIconCache();
   signalUnsubs.forEach((u) => u());
   signalUnsubs = [];
   listeners.clear();

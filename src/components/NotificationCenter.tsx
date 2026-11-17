@@ -1,10 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Badge, FloatingPanel } from 'remochi';
 import { Bell, CheckCircle2, Trash2, X } from 'lucide-react';
-import { usePyxisTheme, type NotificationEntry } from '@pyxis/app-sdk';
+import { type NotificationEntry } from '@pyxis/app-sdk';
 import { useMotion } from '../useMotion';
 import { PANEL_ENTER, PANEL_REST, SCRIM_IN, SCRIM_OUT, TRANSITION } from '../motion';
+import { AppDropIcon } from './AppDropIcon';
+import { useAppName } from '../hooks/useAppName';
+import { notificationAnchor, useLaunchBarPosition } from './launchBarState';
+
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface NotificationCenterProps {
   isOpen: boolean;
@@ -24,14 +29,23 @@ function formatRelativeTime(timestamp: number): string {
   return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+/** The panel rises from below: it starts lower and settles up. */
+const RISE_FROM = { ...PANEL_ENTER, y: 10 };
+
 /**
- * NotificationCenter — Palm webOS Notification Dashboard.
+ * The notification centre, opening upward out of the launch bar's dashboard
+ * at the bottom right (webOS's dashboard), where the toasts rise from too
+ * (`DASHBOARD_ANCHOR`); beside the rail at the bottom left when the launch
+ * bar is one (`RAIL_ANCHOR`). The shell decides when it opens; the dashboard's
+ * button toggles it.
  *
- * Implements Palm's non-intrusive notification architecture:
- * - Clear grouped list with relative timestamps
- * - App-badged squircle notification cards
- * - One-tap swipe/click dismissal and batch clear
- * - Peaceful "All caught up" empty state
+ * Drawn in the strong material with the waterdrop corner; each notification
+ * is a waterdrop row with its app's waterdrop icon and name. Its X dismisses
+ * it from the store; "Clear all" dismisses every one.
+ *
+ * In the overlay, an open panel makes the shell take the whole screen's
+ * clicks (ShellLayer's full-screen region), so the scrim can catch the click
+ * that closes it.
  */
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({
   isOpen,
@@ -41,12 +55,64 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
   onClearAll,
 }) => {
   const { tr, to } = useMotion();
-  const theme = usePyxisTheme('light');
+  const rail = useLaunchBarPosition() === 'left';
+  const anchor = notificationAnchor(rail);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    previousFocusRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusTimer = window.setTimeout(() => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const first = panel.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      (first ?? panel).focus();
+    }, 0);
+    return () => {
+      window.clearTimeout(focusTimer);
+      const prev = previousFocusRef.current;
+      previousFocusRef.current = null;
+      if (prev && prev.isConnected) {
+        prev.focus();
+      }
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onOpenChange(false);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        onOpenChange(false);
+        return;
+      }
+      if (e.key === 'Tab') {
+        const panel = panelRef.current;
+        if (!panel) return;
+        const focusables = [...panel.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)].filter(
+          (el) => el.offsetParent !== null || el === document.activeElement
+        );
+        if (focusables.length === 0) {
+          e.preventDefault();
+          e.stopPropagation();
+          panel.focus();
+          return;
+        }
+        const at = focusables.indexOf(document.activeElement as HTMLElement);
+        const next = e.shiftKey
+          ? at <= 0
+            ? focusables.length - 1
+            : at - 1
+          : at === focusables.length - 1
+            ? 0
+            : at + 1;
+        e.preventDefault();
+        e.stopPropagation();
+        focusables[next]?.focus();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -57,16 +123,17 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            data-notification-scrim=""
             initial={{ opacity: 0 }}
             animate={{ opacity: 1, transition: tr(SCRIM_IN) }}
             exit={{ opacity: 0, transition: tr(SCRIM_OUT) }}
-            onClick={() => onOpenChange(false)}
+            onClick={isOpen ? () => onOpenChange(false) : undefined}
             style={{
               position: 'fixed',
               inset: 0,
               zIndex: 1299,
-              background: 'rgba(0, 0, 0, 0.22)',
-              backdropFilter: 'blur(2px)',
+              background: 'rgba(0, 0, 0, 0.16)',
+              pointerEvents: isOpen ? 'auto' : 'none',
             }}
             aria-hidden="true"
           />
@@ -76,255 +143,208 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            ref={panelRef}
             role="dialog"
+            aria-modal="true"
             aria-label="Notifications"
-            initial={to({ ...PANEL_ENTER, y: -8 })}
+            tabIndex={-1}
+            data-notification-centre={rail ? 'rail' : 'bar'}
+            initial={to(RISE_FROM)}
             animate={{ ...to(PANEL_REST), transition: tr(TRANSITION.open) }}
-            exit={{ ...to({ ...PANEL_ENTER, y: -8 }), transition: tr(TRANSITION.close) }}
+            exit={{ ...to(RISE_FROM), transition: tr(TRANSITION.close) }}
             style={{
               position: 'fixed',
-              top: 52,
-              right: 14,
+              ...anchor.style,
               width: 360,
-              maxWidth: 'calc(100vw - 28px)',
-              maxHeight: 'calc(100vh - 72px)',
+              maxWidth: `calc(100vw - ${anchor.side + 12}px)`,
+              // Clear of the status strip (36) with a little air.
+              maxHeight: `calc(100vh - ${anchor.style.bottom + 52}px)`,
               overflowY: 'auto',
+              boxSizing: 'border-box',
               zIndex: 1300,
-              transformOrigin: 'top right',
-              boxShadow: '0 18px 42px rgba(0, 0, 0, 0.28)',
-              borderRadius: 18,
+              pointerEvents: isOpen ? 'auto' : 'none',
+              transformOrigin: anchor.origin,
+              padding: 16,
+              borderRadius: 'var(--px-corner)',
+              background: 'var(--px-material-strong)',
+              color: 'var(--px-material-ink)',
+              fontFamily: 'var(--px-font-ui)',
+              boxShadow:
+                '0 -10px 50px rgba(0, 0, 0, 0.28), inset 0 0 0 1px color-mix(in srgb, var(--px-material-ink) 10%, transparent)',
             }}
           >
-            <FloatingPanel style={theme === 'dark' ? 'shadow' : 'default'}>
-              <div style={{ padding: '16px', color: 'var(--color-text)' }}>
-                {/* Header with Notification count and Clear All */}
-                <div
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: 12,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                <h2
+                  data-notification-head=""
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    paddingBottom: '12px',
-                    borderBottom: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.08))',
-                    marginBottom: 12,
+                    margin: 0,
+                    fontFamily: 'var(--px-font-display)',
+                    fontWeight: 300,
+                    fontSize: 14,
+                    letterSpacing: '0.16em',
+                    textTransform: 'uppercase',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span style={{ fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.01em' }}>
-                      Notifications
-                    </span>
-                    {notifications.length > 0 && (
-                      <Badge
-                        content={notifications.length}
-                        background="var(--color-primary, #3b82f6)"
-                        color="#fff"
-                      />
-                    )}
-                  </div>
-
-                  {notifications.length > 0 && (
-                    <button
-                      type="button"
-                      onClick={onClearAll}
-                      style={{
-                        background: 'var(--mochi-hover, rgba(0, 0, 0, 0.05))',
-                        border: '1px solid var(--color-border-light, rgba(0, 0, 0, 0.06))',
-                        borderRadius: 8,
-                        color: 'var(--color-text-secondary)',
-                        cursor: 'pointer',
-                        fontSize: '0.74rem',
-                        fontWeight: 600,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 5,
-                        padding: '4px 8px',
-                        transition: 'all 0.12s ease',
-                      }}
-                    >
-                      <Trash2 size={12} />
-                      <span>Clear all</span>
-                    </button>
-                  )}
-                </div>
-
-                {/* Notifications List or Empty State */}
-                {notifications.length === 0 ? (
-                  <div
-                    style={{
-                      padding: '36px 16px',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 8,
-                      textAlign: 'center',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: '20px 4px 20px 20px',
-                        background: 'rgba(76, 175, 80, 0.12)',
-                        color: 'var(--color-success, #4caf50)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <CheckCircle2 size={24} />
-                    </div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--color-text)' }}>
-                      All caught up
-                    </div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--color-text-secondary)' }}>
-                      No new notifications right now.
-                    </div>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {notifications.map((notification) => {
-                      const isCritical = notification.urgency === 'critical';
-                      return (
-                        <div
-                          key={notification.id}
-                          style={{
-                            background: 'var(--color-surface, rgba(255, 255, 255, 0.65))',
-                            border: `1px solid ${
-                              isCritical
-                                ? 'rgba(239, 68, 68, 0.4)'
-                                : 'var(--color-border-light, rgba(0, 0, 0, 0.08))'
-                            }`,
-                            borderRadius: 12,
-                            padding: '10px 12px',
-                            display: 'flex',
-                            gap: 10,
-                            position: 'relative',
-                            transition: 'background 0.12s ease',
-                          }}
-                        >
-                          <div
-                            style={{
-                              width: 30,
-                              height: 30,
-                              borderRadius: '12px 3px 12px 12px',
-                              background: isCritical
-                                ? 'rgba(239, 68, 68, 0.15)'
-                                : 'rgba(59, 130, 246, 0.12)',
-                              color: isCritical
-                                ? 'var(--color-error, #ef4444)'
-                                : 'var(--color-primary, #3b82f6)',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Bell size={15} />
-                          </div>
-
-                          <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
-                            <div
-                              style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'space-between',
-                                gap: 6,
-                                marginBottom: 2,
-                              }}
-                            >
-                              <span
-                                style={{
-                                  fontSize: '0.7rem',
-                                  fontWeight: 600,
-                                  textTransform: 'uppercase',
-                                  color: 'var(--color-text-secondary, #6b7280)',
-                                  letterSpacing: '0.04em',
-                                }}
-                              >
-                                {notification.appId || 'System'}
-                              </span>
-                              <span
-                                style={{
-                                  fontSize: '0.7rem',
-                                  color: 'var(--color-text-secondary)',
-                                  opacity: 0.8,
-                                }}
-                              >
-                                {formatRelativeTime(notification.timestamp)}
-                              </span>
-                            </div>
-
-                            <div
-                              style={{
-                                fontWeight: 600,
-                                fontSize: '0.84rem',
-                                color: 'var(--color-text)',
-                                lineHeight: 1.3,
-                                marginBottom: 2,
-                              }}
-                            >
-                              {notification.title}
-                            </div>
-
-                            {notification.body && (
-                              <div
-                                style={{
-                                  fontSize: '0.78rem',
-                                  color: 'var(--color-text-secondary)',
-                                  lineHeight: 1.35,
-                                  overflowWrap: 'anywhere',
-                                }}
-                              >
-                                {notification.body}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Dismiss Button */}
-                          <button
-                            type="button"
-                            onClick={() => onDismiss(notification.id)}
-                            title="Dismiss notification"
-                            aria-label={`Dismiss ${notification.title}`}
-                            style={{
-                              position: 'absolute',
-                              top: 8,
-                              right: 8,
-                              background: 'transparent',
-                              border: 'none',
-                              cursor: 'pointer',
-                              color: 'var(--color-text-secondary)',
-                              padding: 3,
-                              borderRadius: 6,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              opacity: 0.6,
-                              transition: 'opacity 0.12s ease, background 0.12s ease',
-                            }}
-                            onMouseEnter={(e) => {
-                              (e.currentTarget as HTMLElement).style.opacity = '1';
-                              (e.currentTarget as HTMLElement).style.background =
-                                'var(--mochi-hover, rgba(0, 0, 0, 0.06))';
-                            }}
-                            onMouseLeave={(e) => {
-                              (e.currentTarget as HTMLElement).style.opacity = '0.6';
-                              (e.currentTarget as HTMLElement).style.background = 'transparent';
-                            }}
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  Notifications
+                </h2>
+                {notifications.length > 0 && (
+                  <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--px-material-ink-quiet)' }}>
+                    {notifications.length}
+                  </span>
                 )}
               </div>
-            </FloatingPanel>
+
+              {notifications.length > 0 && (
+                <button
+                  type="button"
+                  onClick={onClearAll}
+                  style={{
+                    background: 'color-mix(in srgb, var(--px-material-ink) 7%, transparent)',
+                    border: 'none',
+                    borderRadius: 'var(--px-corner-20)',
+                    color: 'var(--px-material-ink-quiet)',
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    fontSize: 12,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 5,
+                    padding: '4px 9px',
+                  }}
+                >
+                  <Trash2 size={12} />
+                  <span>Clear all</span>
+                </button>
+              )}
+            </div>
+
+            {notifications.length === 0 ? (
+              <div
+                style={{
+                  padding: '28px 16px 20px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 8,
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: 'var(--px-corner-40)',
+                    background: 'color-mix(in srgb, var(--px-material-ink) 7%, transparent)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <CheckCircle2 size={22} />
+                </div>
+                <div
+                  style={{
+                    fontFamily: 'var(--px-font-accent)',
+                    fontWeight: 700,
+                    fontStyle: 'italic',
+                    fontSize: 15,
+                  }}
+                >
+                  All caught up
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--px-material-ink-quiet)' }}>
+                  No new notifications right now.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {notifications.map((notification) => (
+                  <NotificationRow key={notification.id} notification={notification} onDismiss={onDismiss} />
+                ))}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
     </>
+  );
+};
+
+const NotificationRow: React.FC<{ notification: NotificationEntry; onDismiss: (id: string) => void }> = ({
+  notification,
+  onDismiss,
+}) => {
+  const critical = notification.urgency === 'critical';
+  const appName = useAppName(notification.appId);
+
+  return (
+    <div
+      data-notification-id={notification.id}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        gap: 10,
+        padding: 10,
+        borderRadius: 'var(--px-corner-40)',
+        background: 'color-mix(in srgb, var(--px-material-ink) 6%, transparent)',
+        boxShadow: critical ? 'inset 0 0 0 1.5px var(--px-spinner-red)' : undefined,
+      }}
+    >
+      <AppDropIcon appId={notification.appId} critical={critical} fallback={Bell} />
+
+      <div style={{ flex: 1, minWidth: 0, paddingRight: 16 }}>
+        <div style={{ fontFamily: "'Mochi Bold', var(--px-font-ui)", fontWeight: 700, fontSize: 13, lineHeight: 1.3, overflowWrap: 'anywhere' }}>
+          {notification.title}
+        </div>
+        {notification.body && (
+          <div style={{ fontSize: 12.5, lineHeight: 1.35, overflowWrap: 'anywhere', marginTop: 1 }}>
+            {notification.body}
+          </div>
+        )}
+        <div style={{ fontSize: 11.5, color: 'var(--px-material-ink-quiet)', marginTop: 2 }}>
+          {appName} · {formatRelativeTime(notification.timestamp)}
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={() => onDismiss(notification.id)}
+        title="Dismiss notification"
+        aria-label={`Dismiss ${notification.title}`}
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          background: 'transparent',
+          border: 'none',
+          cursor: 'pointer',
+          color: 'var(--px-material-ink-quiet)',
+          padding: 3,
+          borderRadius: 'var(--px-corner-20)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          opacity: 0.7,
+          transition: 'opacity 0.12s ease',
+        }}
+        onMouseEnter={(e) => {
+          (e.currentTarget as HTMLElement).style.opacity = '1';
+        }}
+        onMouseLeave={(e) => {
+          (e.currentTarget as HTMLElement).style.opacity = '0.7';
+        }}
+      >
+        <X size={13} />
+      </button>
+    </div>
   );
 };
 

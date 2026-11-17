@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { act, cleanup, renderHook } from '@testing-library/react';
+import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import * as sdk from '@pyxis/app-sdk';
 import { resetOverlayRegion, useFullScreenRegion, useOverlayRegionRects } from '../useOverlayRegion';
 import { useOverlayKeyboard } from '../useOverlayKeyboard';
@@ -83,8 +83,8 @@ describe('panels no longer minimize apps to be seen', () => {
   it('launcher, overview and search just open their panel', () => {
     const source = readFileSync(SHELL_LAYER_TSX, 'utf8');
     const handlers = source.slice(source.indexOf('useGlobalShortcuts({'));
-    expect(handlers).toMatch(/launcher: \(\) => setAppDrawerOpen/);
-    expect(handlers).toMatch(/overview: \(\) => setOverviewOpen/);
+    expect(handlers).toMatch(/launcher: \(\) => togglePanel\('drawer'/);
+    expect(handlers).toMatch(/overview: \(\) => togglePanel\('overview'/);
     expect(handlers).toMatch(/search: \(\) => window\.dispatchEvent/);
     // Super+D, which is for hiding windows, is Evo's: it knows the stacking
     // order its staggered minimize runs in, so the shell moves nothing.
@@ -188,7 +188,7 @@ describe('the keyboard is asked for only while a panel needs it', () => {
   });
 });
 
-describe('the work area is the bar and the dock', () => {
+describe('the work area is the top bar and the launch bar', () => {
   afterEach(() => {
     cleanup();
     document.body.innerHTML = '';
@@ -205,31 +205,102 @@ describe('the work area is the bar and the dock', () => {
     return el;
   }
 
-  it('reports the bar height, and the dock with its margin and a gap', () => {
+  /** The launch bar as a rail: `data-shell-edge="left"`, 64 px wide, `left` from the edge. */
+  function rail(offsetWidth: number, left = ''): HTMLElement {
+    const el = document.createElement('div');
+    el.setAttribute('data-shell-edge', 'left');
+    Object.defineProperty(el, 'offsetWidth', { value: offsetWidth });
+    if (left) el.style.left = left;
+    document.body.append(el);
+    return el;
+  }
+
+  it('reports the top bar height, and exactly the launch bar height at the bottom', () => {
     const sent: unknown[] = [];
     vi.spyOn(sdk, 'setWorkArea').mockImplementation(async (insets) => {
       sent.push(insets);
       return true;
     });
     edge('top', 44);
-    edge('bottom', 60, '10px');
+    edge('bottom', 64, '0px');
     renderHook(() => useWorkArea(true));
-    expect(sent.at(-1)).toEqual({ top: 44, bottom: 76 });
+    expect(sent.at(-1)).toEqual({ top: 44, bottom: 64, left: 0, right: 0 });
   });
 
-  it('keeps the last edges while a fullscreen app hides the bar and dock', () => {
+  it('counts a bottom edge lifted off the screen edge, with no gap added', () => {
+    const sent: unknown[] = [];
+    vi.spyOn(sdk, 'setWorkArea').mockImplementation(async (insets) => {
+      sent.push(insets);
+      return true;
+    });
+    edge('top', 36);
+    edge('bottom', 64, '8px');
+    renderHook(() => useWorkArea(true));
+    expect(sent.at(-1)).toEqual({ top: 36, bottom: 72, left: 0, right: 0 });
+  });
+
+  it('keeps the last edges while a fullscreen app hides both bars', () => {
     const sent: unknown[] = [];
     vi.spyOn(sdk, 'setWorkArea').mockImplementation(async (insets) => {
       sent.push(insets);
       return true;
     });
     const bar = edge('top', 44);
-    const dock = edge('bottom', 60, '10px');
+    const launchBar = edge('bottom', 64);
     renderHook(() => useWorkArea(true));
     bar.remove();
-    dock.remove();
+    launchBar.remove();
     window.dispatchEvent(new Event('resize'));
-    expect(sent).toEqual([{ top: 44, bottom: 76 }]);
+    expect(sent).toEqual([{ top: 44, bottom: 64, left: 0, right: 0 }]);
+  });
+
+  it('with the launch bar as a left rail: the top 36, the bottom free, the left its width', () => {
+    const sent: Record<string, number>[] = [];
+    vi.spyOn(sdk, 'setWorkArea').mockImplementation(async (insets) => {
+      sent.push({ ...insets });
+      return true;
+    });
+    edge('top', 36);
+    rail(64, '0px');
+    renderHook(() => useWorkArea(true));
+    expect(sent.at(-1)).toEqual({ top: 36, bottom: 0, left: 64, right: 0 });
+  });
+
+  it('a placement switched live re-sends the work area, and the old edge is not kept', async () => {
+    const sent: Record<string, number>[] = [];
+    vi.spyOn(sdk, 'setWorkArea').mockImplementation(async (insets) => {
+      sent.push({ ...insets });
+      return true;
+    });
+    edge('top', 36);
+    const bottomBar = edge('bottom', 64, '0px');
+    renderHook(() => useWorkArea(true));
+    expect(sent.at(-1)).toEqual({ top: 36, bottom: 64, left: 0, right: 0 });
+
+    // The bar remounts as the rail (what Settings' switch does).
+    bottomBar.remove();
+    rail(64, '0px');
+    await waitFor(() => expect(sent.at(-1)).toEqual({ top: 36, bottom: 0, left: 64, right: 0 }));
+
+    // And back.
+    document.querySelector('[data-shell-edge="left"]')!.remove();
+    edge('bottom', 64, '0px');
+    await waitFor(() => expect(sent.at(-1)).toEqual({ top: 36, bottom: 64, left: 0, right: 0 }));
+  });
+
+  it('keeps the rail while a fullscreen app hides it', () => {
+    const sent: unknown[] = [];
+    vi.spyOn(sdk, 'setWorkArea').mockImplementation(async (insets) => {
+      sent.push({ ...insets });
+      return true;
+    });
+    const bar = edge('top', 36);
+    const side = rail(64);
+    renderHook(() => useWorkArea(true));
+    bar.remove();
+    side.remove();
+    window.dispatchEvent(new Event('resize'));
+    expect(sent).toEqual([{ top: 36, bottom: 0, left: 64, right: 0 }]);
   });
 
   it('reports nothing where the shell is not the real layer', () => {
@@ -248,7 +319,7 @@ describe('the work area is the bar and the dock', () => {
     edge('top', 44);
     const view = renderHook(() => useWorkArea(true));
     view.unmount();
-    expect(sent.at(-1)).toEqual({ top: 0, bottom: 0 });
+    expect(sent.at(-1)).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
   });
 });
 
@@ -301,6 +372,35 @@ describe('the dock tells Evo where its icons are', () => {
     ghost.setAttribute('data-app', 'hidden');
     root.append(ghost);
     expect(measureDockIcons().map((t) => t.appId)).toEqual(['a', 'b']);
+  });
+
+  /** The rail: fixed at (0, 36), 64 wide, icons stacked 52 px apart in full-width wrappers. */
+  function railDock(apps: string[]): HTMLElement {
+    const root = document.createElement('div');
+    root.setAttribute('data-shell-edge', 'left');
+    box(root, 0, 36, 64, 764);
+    apps.forEach((id, i) => {
+      const wrap = document.createElement('div');
+      box(wrap, 0, 150 + i * 52, 64, 40);
+      const icon = document.createElement('button');
+      icon.setAttribute('data-app', id);
+      box(icon, 12, 0, 40, 40);
+      wrap.append(icon);
+      root.append(wrap);
+      Object.defineProperty(wrap, 'offsetParent', { value: root });
+      Object.defineProperty(icon, 'offsetParent', { value: wrap });
+    });
+    Object.defineProperty(root, 'offsetParent', { value: null });
+    document.body.append(root);
+    return root;
+  }
+
+  it('measures the rail\'s icons too, down the left edge, by layout', () => {
+    railDock(['a', 'b']);
+    expect(measureDockIcons(document, () => undefined)).toEqual([
+      { appId: 'a', x: 12, y: 186, width: 40, height: 40 },
+      { appId: 'b', x: 12, y: 238, width: 40, height: 40 },
+    ]);
   });
 
   it('sends the icons when the dock appears, and not again for the same layout', () => {
