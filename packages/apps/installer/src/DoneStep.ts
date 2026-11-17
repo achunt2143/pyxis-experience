@@ -6,6 +6,8 @@ import type { CodeBehind } from './DoneStep.view.gen';
 export interface DoneInfo {
   result: InstallResult | null;
   launched: boolean;
+  launching?: boolean;
+  launchError?: string;
 }
 
 /** Step 4: the outcome. The app pushes `info`; raises onOpen {package} and onAgain. */
@@ -16,8 +18,8 @@ export default view(spec, {
   },
 
   openTap() {
-    const { result } = this.info as Partial<DoneInfo>;
-    if (result) this.doOpen({ package: result.package });
+    const { result, launched, launching } = this.info as Partial<DoneInfo>;
+    if (result && !launched && !launching) this.doOpen({ package: result.package });
     return true;
   },
   againTap() {
@@ -26,7 +28,7 @@ export default view(spec, {
   },
 
   infoChanged() {
-    const { result, launched } = this.info as Partial<DoneInfo>;
+    const { result, launched, launching, launchError } = this.info as Partial<DoneInfo>;
     const $ = this.$;
     $.none.setShowing(!result);
     $.content.setShowing(Boolean(result));
@@ -38,8 +40,12 @@ export default view(spec, {
     );
     $.notLaunchable.setShowing(!result.launchable);
     $.open.setShowing(result.launchable);
-    $.open.setDisabled(Boolean(launched));
-    $.openLabel.setContent(launched ? 'Launched' : `Open ${name}`);
+    $.open.setDisabled(Boolean(launched || launching));
+    $.openLabel.setContent(launched ? 'Launched' : launching ? 'Launching…' : `Open ${name}`);
+    const err = String(launchError ?? '');
+    $.launchErrorRow.setShowing(err !== '');
+    $.launchErrorRow.setAttributes(err !== '' ? { role: 'alert', 'data-launch-error': true } : {});
+    $.launchErrorText.setContent(err);
     $.logBox.setShowing(Boolean(result.log));
     $.log.setContent(result.log ?? '');
   },

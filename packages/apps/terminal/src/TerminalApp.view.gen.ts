@@ -5,14 +5,28 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 export type Named = {
   /** pyxis.Repeater */
   tabStrip: Instance<"pyxis.Repeater">;
+  /** pyxis.Control */
+  newTabBtn: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  modeBadge: Instance<"pyxis.Control">;
   /** remochi.Button */
   keysButton: Instance<"remochi.Button">;
   /** pyxis.Icon */
   keysIcon: Instance<"pyxis.Icon">;
   /** pyxis.Control */
   keysLabel: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  copyButton: Instance<"remochi.Button">;
+  /** remochi.Button */
+  pasteButton: Instance<"remochi.Button">;
+  /** remochi.Button */
+  clearButton: Instance<"remochi.Button">;
+  /** remochi.Button */
+  zoomOutBtn: Instance<"remochi.Button">;
   /** pyxis.Control */
   sizeLabel: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  zoomInBtn: Instance<"remochi.Button">;
   /** Terminal.Screens */
   screens: Instance<"Terminal.Screens">;
   /** pyxis.Control */
@@ -22,7 +36,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'clearActive' | 'newTab' | 'sendQuick' | 'setupTab' | 'tabExited' | 'titled' | 'toggleRibbon' | 'zoomIn' | 'zoomOut';
+export type Handlers = 'clearActive' | 'closeTab' | 'copyActive' | 'modeChanged' | 'newTab' | 'pasteActive' | 'pickTab' | 'sendQuick' | 'setupTab' | 'tabExited' | 'titled' | 'toggleRibbon' | 'zoomIn' | 'zoomOut';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

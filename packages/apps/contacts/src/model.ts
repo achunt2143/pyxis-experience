@@ -56,14 +56,16 @@ export function getInitials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export function newContact(): Contact {
+/** A new contact belongs where the user is looking: the picked category, starred under Starred. */
+export function newContact(filter: string = 'All'): Contact {
+  const real = filter !== 'All' && filter !== 'Starred';
   return {
     id: Math.random().toString(36).slice(2, 11),
     name: 'New contact',
     email: '',
     phone: '',
-    starred: false,
-    category: 'Personal',
+    starred: filter === 'Starred',
+    category: real ? filter : 'Personal',
     company: '',
     jobTitle: '',
     address: '',
@@ -119,29 +121,140 @@ export function groupByLetter(contacts: Contact[]): Array<{ letter: string; cont
 /** A category pill's colours (active: filled primary). */
 export function pillStyle(active: boolean): string {
   return (
-    `background:${active ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-surface, var(--mochi-surface, #ffffff))'};` +
-    `color:${active ? '#ffffff' : 'var(--color-text, #334155)'};` +
-    `border-color:${active ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-border, var(--mochi-border, #e5e7eb))'};` +
+    `background:${active ? 'var(--mochi-primary)' : 'var(--mochi-surface)'};` +
+    `color:${active ? 'var(--mochi-primary-text)' : 'var(--mochi-text)'};` +
+    `border-color:${active ? 'var(--mochi-primary)' : 'var(--mochi-border)'};` +
     `font-weight:${active ? 600 : 500}`
   );
+}
+
+/** A vCard text value, escaped as RFC 6350 §3.4 asks (backslash, comma, semicolon, newline). */
+function vcardText(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n').replace(/,/g, '\\,').replace(/;/g, '\\;');
 }
 
 export function vcardOf(c: Contact): string {
   return [
     'BEGIN:VCARD',
     'VERSION:3.0',
-    `FN:${c.name}`,
-    c.email ? `EMAIL:${c.email}` : '',
-    c.phone ? `TEL:${c.phone}` : '',
-    c.company ? `ORG:${c.company}` : '',
-    c.jobTitle ? `TITLE:${c.jobTitle}` : '',
-    c.address ? `ADR:;;${c.address};;;;` : '',
+    `FN:${vcardText(c.name)}`,
+    c.email ? `EMAIL:${vcardText(c.email)}` : '',
+    c.phone ? `TEL:${vcardText(c.phone)}` : '',
+    c.company ? `ORG:${vcardText(c.company)}` : '',
+    c.jobTitle ? `TITLE:${vcardText(c.jobTitle)}` : '',
+    c.address ? `ADR:;;${vcardText(c.address)};;;;` : '',
     c.birthday ? `BDAY:${c.birthday}` : '',
-    c.notes ? `NOTE:${c.notes.replace(/\n/g, '\\n')}` : '',
+    c.category ? `CATEGORIES:${vcardText(c.category)}` : '',
+    c.notes ? `NOTE:${vcardText(c.notes)}` : '',
     'END:VCARD',
   ]
     .filter(Boolean)
     .join('\r\n');
+}
+
+function unescapeVcard(value: string): string {
+  return value.replace(/\\([\\,;nN])/g, (_m, ch: string) => (ch === 'n' || ch === 'N' ? '\n' : ch));
+}
+
+/** Splits on separators not escaped with a backslash. */
+function splitUnescaped(value: string, sep: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  for (let i = 0; i < value.length; i++) {
+    const ch = value[i]!;
+    if (ch === '\\' && i + 1 < value.length) {
+      cur += ch + value[i + 1];
+      i++;
+    } else if (ch === sep) {
+      out.push(cur);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  out.push(cur);
+  return out;
+}
+
+/** `YYYYMMDD` or `YYYY-MM-DD` (time and zone dropped); anything else is not a birthday. */
+function vcardDate(value: string): string {
+  const m = /^(\d{4})-?(\d{2})-?(\d{2})/.exec(value.trim());
+  return m ? `${m[1]}-${m[2]}-${m[3]}` : '';
+}
+
+/**
+ * The contacts in a .vcf file (vCard 2.1, 3.0 and 4.0, as phones and other address books
+ * write them): folded lines unfolded, parameters and groups ignored, the first of each
+ * field kept. A card with no name and no way to reach them is skipped.
+ */
+export function parseVCards(text: string): Contact[] {
+  const lines = text.replace(/\r\n|\r/g, '\n').replace(/\n[ \t]/g, '').split('\n');
+  const out: Contact[] = [];
+  let card: Contact | null = null;
+  for (const line of lines) {
+    const colon = line.indexOf(':');
+    if (colon < 0) continue;
+    const head = line.slice(0, colon);
+    const value = line.slice(colon + 1);
+    const prop = head.split(';')[0]!.split('.').pop()!.toUpperCase();
+    if (prop === 'BEGIN' && value.trim().toUpperCase() === 'VCARD') {
+      card = { ...newContact(), name: '', category: 'Personal' };
+      continue;
+    }
+    if (!card) continue;
+    if (prop === 'END') {
+      if (card.name || card.email || card.phone) {
+        if (!card.name) card.name = card.email || card.phone;
+        out.push(card);
+      }
+      card = null;
+      continue;
+    }
+    const text = unescapeVcard(value).trim();
+    switch (prop) {
+      case 'FN':
+        // The formatted name wins over one assembled from N, whichever comes first.
+        if (text) card.name = text;
+        break;
+      case 'N':
+        if (!card.name) {
+          const [family = '', given = ''] = splitUnescaped(value, ';').map((p) => unescapeVcard(p).trim());
+          card.name = [given, family].filter(Boolean).join(' ');
+        }
+        break;
+      case 'EMAIL':
+        card.email ||= text;
+        break;
+      case 'TEL':
+        card.phone ||= text.replace(/^tel:/i, '');
+        break;
+      case 'ORG':
+        card.company ||= unescapeVcard(splitUnescaped(value, ';')[0] ?? '').trim();
+        break;
+      case 'TITLE':
+        card.jobTitle ||= text;
+        break;
+      case 'ADR':
+        card.address ||= splitUnescaped(value, ';')
+          .map((p) => unescapeVcard(p).trim())
+          .filter(Boolean)
+          .join(', ');
+        break;
+      case 'BDAY':
+        card.birthday ||= vcardDate(value);
+        break;
+      case 'CATEGORIES': {
+        const first = unescapeVcard(splitUnescaped(value, ',')[0] ?? '').trim();
+        const known = CATEGORIES.slice(2).find((c) => c.toLowerCase() === first.toLowerCase());
+        if (known) card.category = known;
+        break;
+      }
+      case 'NOTE':
+        card.notes ||= unescapeVcard(value);
+        break;
+    }
+  }
+  return out;
 }
 
 function download(text: string, filename: string) {

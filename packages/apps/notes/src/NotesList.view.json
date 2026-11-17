@@ -1,27 +1,33 @@
 {
   "name": "Notes.List",
   "kind": "pyxis.Control",
-  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-height:0",
-  "published": { "items": [], "counts": {}, "category": "All", "selectedId": null, "loaded": false, "searching": false },
+  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-width:0;min-height:0",
+  "published": { "items": [], "counts": {}, "category": "All", "search": "", "selectedId": null, "loaded": false, "searching": false },
   "events": { "onAddNote": "", "onSelectNote": "", "onSearchChange": "", "onCategoryChange": "" },
   "components": [
     { "kind": "remochi.Header", "content": "Notes", "components": [
       { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "New Note" }, "components": [
-        { "kind": "remochi.Button", "variant": "affirmative", "ontap": "add", "components": [
+        { "name": "newNoteButton", "kind": "remochi.Button", "variant": "affirmative", "ontap": "add", "attributes": { "aria-label": "New Note" }, "components": [
           { "kind": "pyxis.Icon", "icon": "Plus", "size": 14, "style": "vertical-align:middle;margin-right:4px" },
           { "kind": "pyxis.Control", "tag": "span", "content": "Note", "style": "font-size:12px;font-weight:600" }
         ] }
       ] }
     ] },
-    { "kind": "pyxis.Control", "style": "display:flex;gap:8px;padding:8px 12px;align-items:center;background:var(--color-surface, #ffffff);border-bottom:1px solid var(--color-border-light, #e5e7eb)", "components": [
-      { "kind": "pyxis.Control", "style": "position:relative;flex:1", "components": [
-        { "kind": "pyxis.Icon", "icon": "Search", "size": 14, "color": "var(--color-text-muted, #9ca3af)", "style": "position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1" },
-        { "name": "search", "kind": "remochi.Input", "placeholder": "Search notes…", "width": "100%", "classes": "notes-search", "style": "display:block", "oninput": "searchInput" }
+    { "kind": "pyxis.Control", "style": "padding:0 32px", "components": [
+      { "kind": "remochi.Divider" }
+    ] },
+    { "kind": "pyxis.Control", "style": "display:flex;gap:8px;padding:8px 16px;align-items:center;background:var(--mochi-surface);border-bottom:1px solid var(--mochi-border);min-width:0", "components": [
+      { "kind": "pyxis.Control", "style": "position:relative;flex:1;min-width:0;display:flex;align-items:center", "components": [
+        { "kind": "pyxis.Icon", "icon": "Search", "size": 14, "color": "var(--mochi-text-muted)", "style": "position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1" },
+        { "name": "search", "kind": "remochi.Input", "placeholder": "Search notes…", "width": "100%", "classes": "notes-search", "style": "display:block", "oninput": "searchInput" },
+        { "name": "clearSearch", "kind": "pyxis.Control", "tag": "button", "showing": false, "classes": "notes-search-clear", "ontap": "clearSearch", "attributes": { "type": "button", "aria-label": "Clear Search", "title": "Clear Search" }, "components": [
+          { "kind": "pyxis.Icon", "icon": "X", "size": 12 }
+        ] }
       ] }
     ] },
     { "name": "pills", "kind": "pyxis.Repeater", "itemKind": "Notes.Pill", "keyField": "id", "itemProps": { "ontap": "pickCategory" },
-      "style": "display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--color-border-light, #e5e7eb);overflow-x:auto;scrollbar-width:none;background:var(--color-surface, #ffffff);user-select:none" },
-    { "kind": "pyxis.Control", "style": "flex:1;overflow-y:auto;min-height:0", "components": [
+      "style": "display:flex;gap:6px;padding:8px 16px;border-bottom:1px solid var(--mochi-border);overflow-x:auto;scrollbar-width:none;background:var(--mochi-surface);user-select:none" },
+    { "kind": "pyxis.Control", "style": "flex:1;overflow-y:auto;overflow-x:hidden;min-width:0;min-height:0", "components": [
       { "name": "loading", "kind": "pyxis.Control", "style": "display:flex;justify-content:center;padding:24px", "components": [
         { "kind": "remochi.Spinner", "styleType": "light", "size": "normal", "alt": "Loading notes" }
       ] },
@@ -32,8 +38,8 @@
             { "name": "badge", "kind": "remochi.Badge", "content": "0" }
           ] }
         ] },
-        { "name": "empty", "kind": "pyxis.Control", "showing": false, "style": "padding:24px;text-align:center;color:var(--color-text-muted, #9ca3af);font-size:13px" },
-        { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Notes.Row", "keyField": "id", "itemProps": { "ontap": "pickNote" }, "onSetupItem": "setupRow" }
+        { "name": "empty", "kind": "pyxis.Control", "showing": false, "style": "padding:24px;text-align:center;color:var(--mochi-text-muted);font-size:13px" },
+        { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Notes.Row", "keyField": "id", "itemProps": { "ontap": "pickNote", "onkeydown": "noteRowKey" }, "onSetupItem": "setupRow" }
       ] }
     ] }
   ]

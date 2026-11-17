@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" fill="none">
+  <defs>
+    <linearGradient id="vela-sky" x1="16" y1="12" x2="112" y2="116" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0ea5e9" />
+      <stop offset="55%" stop-color="#0284c7" />
+      <stop offset="100%" stop-color="#0369a1" />
+    </linearGradient>
+    <linearGradient id="vela-sheen" x1="20" y1="8" x2="96" y2="88" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.28" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </linearGradient>
+    <linearGradient id="vela-main-sail" x1="60" y1="24" x2="96" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#f0f9ff" />
+    </linearGradient>
+    <linearGradient id="vela-jib-sail" x1="34" y1="40" x2="54" y2="80" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fefce8" />
+      <stop offset="100%" stop-color="#e0f2fe" />
+    </linearGradient>
+    <linearGradient id="vela-hull" x1="28" y1="86" x2="100" y2="104" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff" />
+      <stop offset="100%" stop-color="#bae6fd" />
+    </linearGradient>
+    <linearGradient id="vela-star" x1="90" y1="16" x2="108" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#fef08a" />
+      <stop offset="100%" stop-color="#facc15" />
+    </linearGradient>
+  </defs>
+
+  <!-- Asymmetric Pyxis waterdrop tile (36px 9px 36px 36px) -->
+  <path
+    d="M40 4 L115 4 A9 9 0 0 1 124 13 L124 88 A36 36 0 0 1 88 124 L40 124 A36 36 0 0 1 4 88 L4 40 A36 36 0 0 1 40 4 Z"
+    fill="url(#vela-sky)"
+    stroke="#38bdf8"
+    stroke-width="2"
+  />
+  <path
+    d="M40 6 L115 6 A7 7 0 0 1 122 13 L122 64 C94 52 54 44 6 60 L6 40 A34 34 0 0 1 40 6 Z"
+    fill="url(#vela-sheen)"
+  />
+
+  <!-- Gentle wave beneath the boat -->
+  <path
+    d="M22 103 C34 97 44 108 56 103 C68 98 78 108 90 103 C97 100 102 101 106 103"
+    stroke="#bae6fd"
+    stroke-width="4"
+    stroke-linecap="round"
+    opacity="0.75"
+  />
+
+  <!-- Mast -->
+  <path d="M58 24 L58 88" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" />
+
+  <!-- Billowing main sail -->
+  <path
+    d="M62 26 C87 35 100 57 98 80 L62 80 Z"
+    fill="url(#vela-main-sail)"
+    stroke="#e0f2fe"
+    stroke-width="2.5"
+    stroke-linejoin="round"
+  />
+
+  <!-- Front jib sail -->
+  <path
+    d="M54 39 C40 50 34 64 32 80 L54 80 Z"
+    fill="url(#vela-jib-sail)"
+    stroke="#e0f2fe"
+    stroke-width="2.5"
+    stroke-linejoin="round"
+  />
+
+  <!-- Cozy curved boat hull -->
+  <path
+    d="M27 86 L101 86 L90 99 C80 103 48 103 38 99 Z"
+    fill="url(#vela-hull)"
+    stroke="#ffffff"
+    stroke-width="2.5"
+    stroke-linejoin="round"
+  />
+
+  <!-- Golden 4-point Vela constellation star at top-right -->
+  <path
+    d="M99 14 L102.2 22.8 L111 26 L102.2 29.2 L99 38 L95.8 29.2 L87 26 L95.8 22.8 Z"
+    fill="url(#vela-star)"
+  />
+</svg>

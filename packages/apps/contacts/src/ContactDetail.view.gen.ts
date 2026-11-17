@@ -3,16 +3,12 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
+  /** remochi.Header */
+  header: Instance<"remochi.Header">;
+  /** remochi.Button */
+  backButton: Instance<"remochi.Button">;
   /** pyxis.Control */
-  pane: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  avatar: Instance<"pyxis.Control">;
-  /** remochi.Input */
-  nameField: Instance<"remochi.Input">;
-  /** remochi.Badge */
-  badge: Instance<"remochi.Badge">;
-  /** pyxis.Control */
-  subtitle: Instance<"pyxis.Control">;
+  headerActions: Instance<"pyxis.Control">;
   /** pyxis.Control */
   starWrap: Instance<"pyxis.Control">;
   /** remochi.Button */
@@ -27,6 +23,16 @@ export type Named = {
   deleteWrap: Instance<"pyxis.Control">;
   /** pyxis.Icon */
   deleteIcon: Instance<"pyxis.Icon">;
+  /** pyxis.Control */
+  pane: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  avatar: Instance<"pyxis.Control">;
+  /** remochi.Input */
+  nameField: Instance<"remochi.Input">;
+  /** remochi.Badge */
+  badge: Instance<"remochi.Badge">;
+  /** pyxis.Control */
+  subtitle: Instance<"pyxis.Control">;
   /** pyxis.Control */
   quick: Instance<"pyxis.Control">;
   /** pyxis.Control */
@@ -59,6 +65,8 @@ export type Named = {
   category: Instance<"remochi.Dropdown">;
   /** remochi.DateInput */
   birthday: Instance<"remochi.DateInput">;
+  /** remochi.Button */
+  clearBirthday: Instance<"remochi.Button">;
   /** remochi.TextArea */
   notes: Instance<"remochi.TextArea">;
   /** pyxis.Control */
@@ -72,7 +80,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'add' | 'askDelete' | 'birthdayInput' | 'categoryInput' | 'copyEmail' | 'copyPhone' | 'exportOne' | 'fieldInput' | 'notesInput' | 'toggleStar';
+export type Handlers = 'add' | 'askDelete' | 'back' | 'birthdayInput' | 'categoryInput' | 'clearBirthday' | 'copyEmail' | 'copyPhone' | 'exportOne' | 'fieldInput' | 'notesInput' | 'toggleStar';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

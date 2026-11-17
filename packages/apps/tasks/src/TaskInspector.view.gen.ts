@@ -13,6 +13,8 @@ export type Named = {
   priorities: Instance<"pyxis.Repeater">;
   /** remochi.DateInput */
   due: Instance<"remochi.DateInput">;
+  /** remochi.Button */
+  clearDue: Instance<"remochi.Button">;
   /** remochi.Dropdown */
   category: Instance<"remochi.Dropdown">;
   /** remochi.TextArea */
@@ -26,7 +28,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'askDelete' | 'categoryInput' | 'close' | 'doneToggled' | 'dueInput' | 'notesInput' | 'textInput';
+export type Handlers = 'askDelete' | 'categoryInput' | 'clearDue' | 'close' | 'doneToggled' | 'dueInput' | 'notesInput' | 'pickPriority' | 'textInput';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

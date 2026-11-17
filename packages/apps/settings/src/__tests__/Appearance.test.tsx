@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  $, $$, callsTo, checked, click, echo, emit, installEcho, mountSettings, openSection, stubCanvas, text, typeInto, shown, visibleText,
+  $, $$, callsTo, checked, click, echo, emit, installEcho, mountSettings, openSection, slideTo, stubCanvas, text, shown, visibleText,
   type Mounted,
 } from './testUtils';
 
@@ -70,6 +70,48 @@ describe('Settings: Appearance, the theme', () => {
     expect($(m.host, '[data-auto-next]')).toBeNull();
     await click($(m.host, '[data-theme-choice="auto"]')!);
     expect(text(m.host, '[data-auto-next]')).toMatch(/(Light|Dark) now\. Turns (dark|light)/);
+  });
+});
+
+describe('Settings: Appearance, the launch bar', () => {
+  it('offers Bottom and Left (data-launch-bar-choice), Bottom checked by default', async () => {
+    m = await mountSettings();
+    expect($$(m.host, '[data-launch-bar-choice]').map((c) => c.dataset.launchBarChoice)).toEqual(['bottom', 'left']);
+    expect($(m.host, '[role="radiogroup"][aria-label="Launch bar"]')).not.toBeNull();
+    expect($(m.host, '[data-settings-group="launch-bar"]')).not.toBeNull();
+    expect(checked($(m.host, '[data-launch-bar-choice="bottom"]'))).toBe(true);
+    expect(checked($(m.host, '[data-launch-bar-choice="left"]'))).toBe(false);
+  });
+
+  it('shows the stored placement', async () => {
+    echo.settings.set('pyxis.launchBar.position', 'left');
+    m = await mountSettings();
+    expect(checked($(m.host, '[data-launch-bar-choice="left"]'))).toBe(true);
+    expect(checked($(m.host, '[data-launch-bar-choice="bottom"]'))).toBe(false);
+  });
+
+  it('writes pyxis.launchBar.position when a card is pressed, and the card follows', async () => {
+    m = await mountSettings();
+    await click($(m.host, '[data-launch-bar-choice="left"]')!);
+    expect(lastSet()).toEqual({ key: 'pyxis.launchBar.position', value: 'left' });
+    expect(checked($(m.host, '[data-launch-bar-choice="left"]'))).toBe(true);
+    await click($(m.host, '[data-launch-bar-choice="bottom"]')!);
+    expect(lastSet()).toEqual({ key: 'pyxis.launchBar.position', value: 'bottom' });
+    expect(checked($(m.host, '[data-launch-bar-choice="bottom"]'))).toBe(true);
+  });
+
+  it('follows a placement changed elsewhere', async () => {
+    m = await mountSettings();
+    emit('org.geckoOS.settings', 'SettingChanged', { key: 'pyxis.launchBar.position', value: 'left' });
+    expect(checked($(m.host, '[data-launch-bar-choice="left"]'))).toBe(true);
+  });
+
+  it('shows a refused write instead of swallowing it', async () => {
+    echo.refuseSet.add('pyxis.launchBar.position');
+    m = await mountSettings();
+    await click($(m.host, '[data-launch-bar-choice="left"]')!);
+    expect(text(m.host, '[data-settings-error]')).toContain("Couldn't save pyxis.launchBar.position");
+    expect(checked($(m.host, '[data-launch-bar-choice="left"]'))).toBe(false);
   });
 });
 
@@ -142,9 +184,9 @@ describe('Settings: Appearance, Daylight', () => {
 
   it('scrubs a preview time without writing anything, and Back to now returns', async () => {
     m = await mountSettings();
-    const scrubber = $(m.host, '[data-daylight-scrubber]') as HTMLInputElement;
+    const scrubber = $(m.host, '[data-daylight-scrubber]')!;
     expect($(m.host, '[data-daylight-scrub-reset]')!.hasAttribute('disabled')).toBe(true);
-    await typeInto(scrubber, '360');
+    await slideTo(scrubber, 360);
     expect(text(m.host, '[data-daylight-phase]')).toContain('06:00 AM');
     expect($(m.host, '[data-wallpaper-preview] [data-mock-wallpaper]')!.dataset.time).toBe('360');
     expect(callsTo('settings', 'set')).toHaveLength(0);
@@ -157,12 +199,12 @@ describe('Settings: Appearance, Daylight', () => {
 
   it('pins the scrubbed time, and follows the day again', async () => {
     m = await mountSettings();
-    await typeInto($(m.host, '[data-daylight-scrubber]') as HTMLInputElement, '390');
+    await slideTo($(m.host, '[data-daylight-scrubber]')!, 390);
     await click($(m.host, '[data-daylight-time="pin"]')!);
     expect(lastSet()).toEqual({ key: 'pyxis.wallpaper.pinnedTime', value: 390 });
     expect(checked($(m.host, '[data-daylight-time="pin"]'))).toBe(true);
     expect(text(m.host, '[data-daylight-desktop]')).toContain('Desktop pinned at 06:30 AM');
-    expect($(m.host, '[data-daylight-scrub-reset]')!.textContent).toBe('Back to pinned');
+    expect($(m.host, '[data-daylight-scrub-reset]')!.textContent).toContain('Back to pinned');
 
     await click($(m.host, '[data-daylight-time="follow"]')!);
     expect(lastSet()).toEqual({ key: 'pyxis.wallpaper.pinnedTime', value: null });

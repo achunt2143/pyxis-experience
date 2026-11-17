@@ -1,10 +1,10 @@
 {
   "name": "Settings.Appearance",
   "kind": "pyxis.Control",
-  "published": { "theme": "light", "wallpaper": "daylight", "motion": "flow", "pinned": null, "hour24": false, "animationMode": "full", "clock": null, "location": null, "scrub": null, "failure": "" },
+  "published": { "theme": "light", "wallpaper": "daylight", "motion": "flow", "pinned": null, "hour24": false, "animationMode": "full", "clock": null, "location": null, "scrub": null, "failure": "", "barPosition": "bottom" },
   "components": [
     { "kind": "Settings.Groupbox", "title": "Theme", "glyph": "Sun", "glyphColor": "#f59e0b", "group": "theme", "components": [
-      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Theme" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(150px, 1fr));gap:8px", "components": [
+      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Theme" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(150px, 100%), 1fr));gap:8px;width:100%;min-width:0", "components": [
         { "name": "themeLight", "kind": "Settings.Choice", "option": "light", "label": "Light", "hint": "Always light", "glyph": "Sun", "glyphColor": "#f59e0b", "attributes": { "data-theme-choice": "light" }, "ontap": "pickTheme" },
         { "name": "themeDark", "kind": "Settings.Choice", "option": "dark", "label": "Dark", "hint": "Always dark", "glyph": "Moon", "glyphColor": "#8b5cf6", "attributes": { "data-theme-choice": "dark" }, "ontap": "pickTheme" },
         { "name": "themeAuto", "kind": "Settings.Choice", "option": "auto", "label": "Auto", "hint": "Dark from dusk to dawn", "glyph": "SunMoon", "glyphColor": "#0ea5e9", "attributes": { "data-theme-choice": "auto" }, "ontap": "pickTheme" }
@@ -14,13 +14,19 @@
         { "name": "autoNextText", "kind": "pyxis.Control", "tag": "span" }
       ] }
     ] },
+    { "kind": "Settings.Groupbox", "title": "Launch bar", "glyph": "PanelBottom", "glyphColor": "#14b8a6", "group": "launch-bar", "components": [
+      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Launch bar" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(150px, 100%), 1fr));gap:8px;width:100%;min-width:0", "components": [
+        { "name": "barBottom", "kind": "Settings.Choice", "option": "bottom", "label": "Bottom", "hint": "Along the bottom edge", "glyph": "PanelBottom", "glyphColor": "#14b8a6", "attributes": { "data-launch-bar-choice": "bottom" }, "ontap": "pickBar" },
+        { "name": "barLeft", "kind": "Settings.Choice", "option": "left", "label": "Left", "hint": "A rail down the left edge", "glyph": "PanelLeft", "glyphColor": "#0ea5e9", "attributes": { "data-launch-bar-choice": "left" }, "ontap": "pickBar" }
+      ] }
+    ] },
     { "kind": "Settings.Groupbox", "title": "Desktop wallpaper", "glyph": "Palette", "glyphColor": "#8b5cf6", "group": "wallpaper", "components": [
       { "name": "grid", "kind": "Settings.WallpaperGrid", "onPick": "wallpaperPicked" },
       { "name": "preview", "kind": "Settings.WallpaperPreview" },
       { "name": "daylightHost", "kind": "pyxis.Control", "style": "display:contents" },
-      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Wallpaper motion" }, "style": "display:grid;grid-template-columns:1fr 1fr;gap:8px", "components": [
+      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Wallpaper motion" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(160px, 100%), 1fr));gap:8px;width:100%;min-width:0", "components": [
         { "name": "motionFlow", "kind": "Settings.Choice", "option": "flow", "label": "Flowing", "hint": "The colours drift slowly", "glyph": "Waves", "glyphColor": "#0ea5e9", "attributes": { "data-wallpaper-motion": "flow" }, "ontap": "pickMotion" },
-        { "name": "motionStill", "kind": "Settings.Choice", "option": "still", "label": "Still", "hint": "Stands still", "glyph": "Palette", "glyphColor": "#64748b", "attributes": { "data-wallpaper-motion": "still" }, "ontap": "pickMotion" }
+        { "name": "motionStill", "kind": "Settings.Choice", "option": "still", "label": "Still", "hint": "Stands still", "glyph": "Palette", "attributes": { "data-wallpaper-motion": "still" }, "ontap": "pickMotion" }
       ] },
       { "name": "motionNote", "kind": "pyxis.Control", "classes": "st-secondary", "showing": false },
       { "name": "errorLine", "kind": "pyxis.Control", "classes": "st-error", "showing": false }

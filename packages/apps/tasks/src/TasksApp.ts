@@ -1,7 +1,7 @@
 import { view, type Component, type ComponentEvent } from '@duyojs/duyo';
 import { loadAppData, saveAppData } from '@pyxis/app-sdk';
 import { onDestroy, registerIcons } from '@pyxis/app-sdk/duyo';
-import { Calendar, Check, CircleCheck, Clock, Flag, Plus, Trash2, X } from 'lucide-react';
+import { AlertCircle, Calendar, Check, CircleCheck, Clock, Flag, Plus, Trash2, X } from 'lucide-react';
 import spec from './TasksApp.view.json';
 import {
   ALL_LISTS,
@@ -12,6 +12,8 @@ import {
   countTasks,
   getTodayString,
   newTaskId,
+  searchTasks,
+  taskTitle,
   visibleTasks,
   type ListId,
   type SortOption,
@@ -25,7 +27,16 @@ import './TaskInspector';
 import './tasks.css';
 
 // Every icon the Tasks specs name (the React rows import theirs directly).
-registerIcons({ Calendar, Check, CircleCheck, Clock, Flag, Plus, Trash2, X });
+registerIcons({ AlertCircle, Calendar, Check, CircleCheck, Clock, Flag, Plus, Trash2, X });
+
+/** A dialog or open menu has the keyboard: the app's shortcuts stand aside. */
+function hasOpenModalOrPopup(): boolean {
+  return Boolean(
+    document.querySelector(
+      '.mochi-dialog-overlay.open, [role="dialog"][aria-modal="true"]:not(.mochi-dialog):not([aria-hidden="true"]), .mochi-dropdown-trigger[aria-expanded="true"]'
+    )
+  );
+}
 
 const INSPECTOR_PANEL = {
   kind: 'remochi.Repanel',
@@ -52,19 +63,31 @@ export default view(spec, {
     this.inherited();
     this.setAttributes({ 'data-window-id': this.windowId });
     this._saveTimer = null as ReturnType<typeof setTimeout> | null;
+    this._saveSeq = 0;
+    this._dirty = false;
     this._countsKey = '';
     this._panel = null as Component | null;
 
+    // Save what is pending when the page goes (a closing window) or the app is destroyed.
     const flush = () => {
       if (this._saveTimer) {
         clearTimeout(this._saveTimer);
         this._saveTimer = null;
-        void saveAppData(STORE, { tasks: this.tasks } satisfies TasksDoc);
       }
+      if (!this._dirty) return;
+      this._dirty = false;
+      void this.persist(++(this._saveSeq as number));
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!this.destroyed) this.handleKeyDown(e);
     };
     window.addEventListener('beforeunload', flush);
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('keydown', onKeyDown);
     onDestroy(this, () => {
       window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('keydown', onKeyDown);
       flush();
     });
 
@@ -77,7 +100,55 @@ export default view(spec, {
     this.sync();
   },
 
+  /**
+   * Ctrl+N: the quick-add field. Ctrl+F: the search. Escape: clears the search, else closes
+   * the inspector. Typing in a field or a dialog's keys are never taken.
+   */
+  handleKeyDown(e: KeyboardEvent) {
+    const target = e.target as HTMLElement | null;
+    if (
+      this.$.deleteDialog.getOpen() ||
+      this.$.clearDialog.getOpen() ||
+      hasOpenModalOrPopup() ||
+      target?.closest?.('.mochi-dialog-overlay, .mochi-contextual-popup')
+    ) {
+      return;
+    }
+    const mod = e.ctrlKey || e.metaKey;
+    const key = e.key.toLowerCase();
+    if (mod && !e.altKey && (key === 'n' || key === 'f')) {
+      e.preventDefault();
+      if (this.$.stack.getActiveIndex() !== 1) this.$.stack.setActiveIndex(1);
+      if (key === 'n') this.$.stream.focusDraft();
+      else this.$.stream.focusSearch();
+    } else if (!mod && !e.altKey && e.key === 'Escape') {
+      if (this.search !== '') {
+        e.preventDefault();
+        this.setSearch('');
+        this.sync();
+      } else if (this.selectedId && !target?.closest?.('input, textarea')) {
+        e.preventDefault();
+        this.closeInspector();
+      }
+    }
+  },
+
+  /** One panel at a time (the stack's narrow layout). */
+  isNarrow() {
+    const host = document.querySelector(`[data-duyo-id="${this.$.stack.id}"]`);
+    return Boolean(host?.querySelector('.repanel[data-narrow="true"]')) || window.innerWidth <= 768;
+  },
+
   // Handlers for the panels' events.
+  searchEdited(_sender, event) {
+    this.setSearch(String(event['value'] ?? ''));
+    this.sync();
+    return true;
+  },
+  backToLists() {
+    this.$.stack.setActiveIndex(0);
+    return true;
+  },
   listPicked(_sender, event) {
     this.setSelectedList(event['id'] as ListId);
     this.setSelectedId(null);
@@ -114,9 +185,16 @@ export default view(spec, {
       category: categoryForList(list),
       createdAt: Date.now(),
     };
+    // A search the new task doesn't match would hide it the moment it is made.
+    if (searchTasks([task], this.search as string).length === 0) this.setSearch('');
     this.mutate((prev: Task[]) => [task, ...prev]);
+    if (this.isNarrow()) {
+      // One panel at a time: stay in the stream so the next task can be typed straight away.
+      this.sync();
+      return true;
+    }
     this.setSelectedId(task.id);
-    this.$.stack.setActiveIndex(2); // the new task opens in the inspector
+    this.$.stack.setActiveIndex(2); // the new task opens in the inspector, beside the stream
     this.sync();
     return true;
   },
@@ -145,7 +223,7 @@ export default view(spec, {
 
   askDelete() {
     const task = this.selectedTask();
-    this.$.deleteName.setContent(task?.text || 'this task');
+    this.$.deleteName.setContent(task ? taskTitle(task) : 'this task');
     this.$.deleteDialog.setOpen(true);
     return true;
   },
@@ -173,25 +251,46 @@ export default view(spec, {
     this.sync();
     return true;
   },
-  /** A dialog's close would bubble to the root's onClose and close the whole app: stop it here. */
-  dialogDismissed() {
-    return true;
-  },
 
   selectedTask() {
     return (this.tasks as Task[]).find((t) => t.id === this.selectedId) ?? null;
+  },
+
+  retrySave() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    this._dirty = true;
+    this.setSaveStatus('saving');
+    void this.persist(++(this._saveSeq as number));
+    return true;
+  },
+
+  /** Writes the tasks; only the newest save says how it went. */
+  async persist(seq: number) {
+    let ok = false;
+    try {
+      ok = await saveAppData(STORE, { tasks: this.tasks } satisfies TasksDoc);
+    } catch {
+      ok = false;
+    }
+    if (this.destroyed || seq !== this._saveSeq) return;
+    this._dirty = !ok;
+    this.setSaveStatus(ok ? 'saved' : 'error');
   },
 
   /** Replaces the tasks (never edits in place) and schedules the save. */
   mutate(change: (prev: Task[]) => Task[]) {
     const next = change(this.tasks as Task[]);
     this.setTasks(next);
+    const seq = ++(this._saveSeq as number);
+    this._dirty = true;
     this.setSaveStatus('saving');
     if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(async () => {
+    this._saveTimer = setTimeout(() => {
       this._saveTimer = null;
-      await saveAppData(STORE, { tasks: next } satisfies TasksDoc);
-      if (!this.destroyed && this._saveTimer === null) this.setSaveStatus('saved');
+      void this.persist(seq);
     }, AUTOSAVE_MS);
   },
 
@@ -201,7 +300,7 @@ export default view(spec, {
     const tasks = this.tasks as Task[];
     const today = getTodayString();
     const counts = countTasks(tasks, today);
-    const visible = visibleTasks(tasks, this.selectedList, this.sortBy, today);
+    const visible = searchTasks(visibleTasks(tasks, this.selectedList, this.sortBy, today), this.search as string);
     const def = ALL_LISTS.find((l) => l.id === this.selectedList) ?? SMART_LISTS[0];
     const total = visible.length;
     const completed = visible.filter((t) => t.done).length;
@@ -223,6 +322,7 @@ export default view(spec, {
       listCompleted: completed,
       doneCount: counts.done,
       sortBy: this.sortBy,
+      search: this.search,
     });
 
     const task = this.selectedTask() as Task | null;
@@ -240,6 +340,9 @@ export default view(spec, {
   },
 
   saveStatusChanged() {
+    const isError = this.saveStatus === 'error';
+    this.$.saveErrorBanner.setAttributes(isError ? { role: 'alert' } : {});
+    this.$.saveErrorBanner.setShowing(isError);
     const inspector = (this.$ as Record<string, Component | undefined>)['inspector'];
     if (inspector && !inspector.destroyed) inspector.set('saveStatus', this.saveStatus);
   },

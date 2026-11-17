@@ -7,6 +7,8 @@ export type Named = {
   newFolder: Instance<"remochi.Dialog">;
   /** remochi.Input */
   folderName: Instance<"remochi.Input">;
+  /** pyxis.Control */
+  folderError: Instance<"pyxis.Control">;
   /** remochi.Button */
   folderCancel: Instance<"remochi.Button">;
   /** remochi.Button */
@@ -15,6 +17,8 @@ export type Named = {
   rename: Instance<"remochi.Dialog">;
   /** remochi.Input */
   renameName: Instance<"remochi.Input">;
+  /** pyxis.Control */
+  renameError: Instance<"pyxis.Control">;
   /** remochi.Button */
   renameCancel: Instance<"remochi.Button">;
   /** remochi.Button */
@@ -32,7 +36,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'confirmDelete' | 'dismiss' | 'dismissError' | 'nameInput' | 'nameKey' | 'submit';
+export type Handlers = 'confirmDelete' | 'dismiss' | 'dismissError' | 'nameInput' | 'submit';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

@@ -15,7 +15,11 @@ export default view(spec, {
     const enforced = ENFORCED_PERMISSIONS.has(name);
     const { badge } = this.$;
     badge.setContent(name);
-    badge.setBackground(enforced ? 'rgba(16, 185, 129, 0.15)' : 'rgba(107, 114, 128, 0.12)');
-    badge.setColor(enforced ? '#065f46' : '#374151');
+    badge.setBackground(
+      enforced
+        ? 'color-mix(in srgb, var(--mochi-success) 16%, transparent)'
+        : 'var(--mochi-hover)',
+    );
+    badge.setColor(enforced ? 'var(--mochi-success)' : 'var(--mochi-text-muted)');
   },
 } satisfies CodeBehind);

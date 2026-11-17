@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PackageInfo } from '@pyxis/app-sdk';
-import { compareVersions, filterInstalled, formatSize, installedOf, phasePercent, upgradeKindOf } from '../model';
+import { ENFORCED_PERMISSIONS, compareVersions, filterInstalled, formatSize, installedOf, isInstallingPhase, phasePercent, upgradeKindOf } from '../model';
 
 const pkg = (over: Partial<PackageInfo>): PackageInfo =>
   ({ path: '/tmp/a.ipk', package: 'a', version: '1.0.0', architecture: 'all', description: '', maintainer: '',
@@ -36,5 +36,19 @@ describe('installer model', () => {
     const list = installedOf([pkg({ installed: true }), pkg({ package: 'b', installedVersion: '1' }), pkg({ package: 'c' })]);
     expect(list.map((p) => p.package)).toEqual(['a', 'b']);
     expect(filterInstalled(list, ' B ').map((p) => p.package)).toEqual(['b']);
+  });
+  it('uses colon-delimited enforced permissions matching PyxisBridgeParent and tracks active install phases', () => {
+    expect(ENFORCED_PERMISSIONS.has('filesystem:read')).toBe(true);
+    expect(ENFORCED_PERMISSIONS.has('filesystem:write')).toBe(true);
+    expect(ENFORCED_PERMISSIONS.has('notifications')).toBe(true);
+    expect(ENFORCED_PERMISSIONS.has('filesystem.read')).toBe(false);
+    expect(ENFORCED_PERMISSIONS.has('filesystem.write')).toBe(false);
+
+    expect(isInstallingPhase('verifying')).toBe(true);
+    expect(isInstallingPhase('installing')).toBe(true);
+    expect(isInstallingPhase('registering')).toBe(true);
+    expect(isInstallingPhase('idle')).toBe(false);
+    expect(isInstallingPhase('done')).toBe(false);
+    expect(isInstallingPhase('failed')).toBe(false);
   });
 });

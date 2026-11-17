@@ -2,7 +2,7 @@
 import { act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Contact } from '../model';
-import { vcardOf } from '../model';
+import { parseVCards, vcardOf } from '../model';
 import {
   $,
   $$,
@@ -23,7 +23,7 @@ vi.mock('../../../../app-sdk/src/appStorage', () => ({
   loadAppData: async () => structuredClone(storage.doc),
   saveAppData: async (_store: string, data: { contacts: Contact[] }) => {
     storage.saves.push(structuredClone(data));
-    return true;
+    return !storage.fail;
   },
 }));
 vi.mock('../../../../app-sdk/src/usePyxisTheme', () => ({ usePyxisTheme: () => 'light' }));
@@ -172,7 +172,7 @@ describe('Contacts: editing', () => {
   it('export vCard builds the old file', () => {
     const c = seedContact(0, { company: 'Acme', notes: 'a\nb' });
     expect(vcardOf(c)).toBe(
-      'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada Lovelace\r\nEMAIL:p0@example.com\r\nTEL:555-0000\r\nORG:Acme\r\nNOTE:a\\nb\r\nEND:VCARD'
+      'BEGIN:VCARD\r\nVERSION:3.0\r\nFN:Ada Lovelace\r\nEMAIL:p0@example.com\r\nTEL:555-0000\r\nORG:Acme\r\nCATEGORIES:Personal\r\nNOTE:a\\nb\r\nEND:VCARD'
     );
   });
 
@@ -183,7 +183,8 @@ describe('Contacts: editing', () => {
     expect(storage.saves).toEqual([]);
     click($$(document.body, 'button').filter((b) => b.textContent === '(Delete)').at(-1)!);
     expect(dirText(m.host)).not.toContain('Ada Lovelace');
-    expect(m.host.textContent).toContain('Select a contact, or create a new one.');
+    // The card moves on to the next contact in the list rather than going blank.
+    expect(nameInput(m.host).value).toBe('Bob Brown');
     await advance(600);
     expect(storage.saves.at(-1)!.contacts.map((c) => c.id)).toEqual(['c1', 'c2', 'c3', 'c4']);
   });
@@ -209,5 +210,127 @@ describe('Contacts: editing', () => {
     m.unmount();
     m = undefined;
     expect(storage.saves.at(-1)!.contacts[0]!.name).toBe('Late');
+  });
+});
+
+describe('Contacts: Wave B fixes', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  });
+
+  it('shows the stored birthday as that local day, and Clear removes it', async () => {
+    m = await mountContacts([seedContact(0, { birthday: '1990-02-03' })]);
+    const d = m.app.root.$['detail']!.$;
+    const shown = d['birthday']!.get('value') as Date;
+    expect([shown.getFullYear(), shown.getMonth(), shown.getDate()]).toEqual([1990, 1, 3]);
+    // A pick is local midnight: stored as that day, never the UTC day before.
+    act(() => d['birthday']!.doChange({ value: new Date(2001, 6, 9) }));
+    await advance(600);
+    expect(storage.saves.at(-1)!.contacts[0]!.birthday).toBe('2001-07-09');
+    click($(m.host, 'button[aria-label="Clear Birthday"]') ?? titled(m.host, 'Clear Birthday'));
+    await advance(600);
+    expect(storage.saves.at(-1)!.contacts[0]!.birthday).toBe('');
+  });
+
+  it('a failed save never says Saved: it shows the error, and Retry writes again', async () => {
+    m = await mountContacts(five());
+    storage.fail = true;
+    type(nameInput(m.host), 'Zed');
+    await advance(600);
+    // Hidden Duyo components stay in the DOM, so ask what is showing.
+    const root = m.app.root.$;
+    const saved = root['detail']!.$['saved']!;
+    expect(root['saveErrorBanner']!.getShowing()).toBe(true);
+    expect(saved.getShowing()).toBe(false);
+    storage.fail = false;
+    click($$(m.host, 'button').find((b) => b.textContent?.includes('Retry'))!);
+    await advance(0);
+    expect(storage.saves.at(-1)!.contacts.some((c) => c.name === 'Zed')).toBe(true);
+    expect(root['saveErrorBanner']!.getShowing()).toBe(false);
+    expect(saved.getShowing()).toBe(true);
+  });
+
+  it('a new contact takes the category being shown, and is starred under Starred', async () => {
+    m = await mountContacts(five());
+    click(pill(m.host, 'Work'));
+    click(titled(m.host, 'New Contact'));
+    click(pill(m.host, 'Starred'));
+    click(titled(m.host, 'New Contact'));
+    await advance(600);
+    const made = storage.saves.at(-1)!.contacts.filter((c) => c.name === 'New contact');
+    expect(made.map((c) => [c.category, c.starred])).toEqual([
+      ['Work', false],
+      ['Personal', true],
+    ]);
+  });
+
+  it('a new contact clears a search it would not match', async () => {
+    m = await mountContacts(five());
+    type(searchInput(m.host), 'ada');
+    click(titled(m.host, 'New Contact'));
+    expect(searchInput(m.host).value).toBe('');
+    expect(dirText(m.host)).toContain('New contact');
+  });
+
+  it('vCard text is escaped, and an exported card imports back the same', () => {
+    const c = seedContact(0, {
+      name: 'Lovelace, Ada; Countess',
+      company: 'Analytical, Ltd',
+      address: '12 St James; London',
+      birthday: '1815-12-10',
+      category: 'Work',
+      notes: 'line one\nback\\slash',
+    });
+    const card = vcardOf(c);
+    expect(card).toContain('FN:Lovelace\\, Ada\\; Countess');
+    const [back] = parseVCards(card);
+    expect(back).toMatchObject({
+      name: c.name,
+      email: c.email,
+      phone: c.phone,
+      company: c.company,
+      address: c.address,
+      birthday: c.birthday,
+      category: 'Work',
+      notes: c.notes,
+    });
+  });
+
+  it('imports cards the way phones write them: folded lines, N without FN, groups and parameters', () => {
+    const text = [
+      'BEGIN:VCARD',
+      'VERSION:2.1',
+      'N:Hopper;Grace;;;',
+      'item1.TEL;TYPE=CELL:+1 555',
+      ' 0100',
+      'EMAIL;TYPE=INTERNET:grace@navy.mil',
+      'BDAY:19061209',
+      'END:VCARD',
+      'BEGIN:VCARD',
+      'VERSION:3.0',
+      'NOTE:nothing to reach',
+      'END:VCARD',
+    ].join('\r\n');
+    const cards = parseVCards(text);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toMatchObject({
+      name: 'Grace Hopper',
+      phone: '+1 5550100',
+      email: 'grace@navy.mil',
+      birthday: '1906-12-09',
+    });
+  });
+
+  it('Ctrl+N makes a contact and Escape clears the search', async () => {
+    m = await mountContacts(five());
+    type(searchInput(m.host), 'bob');
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(searchInput(m.host).value).toBe('');
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true }));
+    });
+    expect(nameInput(m.host).value).toBe('New contact');
   });
 });

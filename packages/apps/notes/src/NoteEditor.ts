@@ -8,27 +8,27 @@ const COPIED_MS = 2000;
 
 /**
  * The editor panel. The app pushes the selected `note` (or null), `loaded` and `saveStatus`
- * in; the panel raises onEdit {patch} and onDeleteNote {id} out. Copy, export and the inline
- * delete confirmation are the panel's own business.
+ * in; the panel raises onEdit {patch}, onAskDelete, and onBack out. Copy and export are the
+ * panel's own business; the app owns the delete dialog.
  */
 export default view(spec, {
   create() {
     this.inherited();
-    this._confirmId = null as string | null;
     this._copiedTimer = null as ReturnType<typeof setTimeout> | null;
+    this._copyToken = 0;
+    this._lastNoteId = null as string | null;
     onDestroy(this, () => {
       if (this._copiedTimer) clearTimeout(this._copiedTimer);
     });
     this.loadedChanged();
     this.saveStatusChanged();
+    this.copyErrorChanged();
     this.noteChanged();
   },
 
-  /** remochi.Input takes no aria attributes (it is not a pyxis.Control): set the label on the field once drawn. */
-  rendered() {
-    this.inherited();
-    const host = document.querySelector(`[data-duyo-id="${this.$.title.id}"]`);
-    host?.querySelector('input')?.setAttribute('aria-label', 'note title');
+  back() {
+    this.doBack();
+    return true;
   },
 
   // Events from the controls, re-raised as edits.
@@ -53,13 +53,36 @@ export default view(spec, {
   copy() {
     const note = this.note as Note | null;
     if (!note) return true;
-    void navigator.clipboard?.writeText(`${note.title}\n\n${note.body}`)?.catch(() => {});
-    this.setCopied(true);
-    if (this._copiedTimer) clearTimeout(this._copiedTimer);
-    this._copiedTimer = setTimeout(() => {
-      this._copiedTimer = null;
-      if (!this.destroyed) this.setCopied(false);
-    }, COPIED_MS);
+    const token = ++(this._copyToken as number);
+    this.setCopyError('');
+    const write = navigator.clipboard?.writeText;
+    if (typeof write !== 'function') {
+      this.setCopied(false);
+      this.setCopyError('Clipboard is unavailable.');
+      return true;
+    }
+    void Promise.resolve(write.call(navigator.clipboard, `${note.title}\n\n${note.body}`)).then(
+      () => {
+        if (this.destroyed || token !== this._copyToken) return;
+        this.setCopyError('');
+        this.setCopied(true);
+        if (this._copiedTimer) clearTimeout(this._copiedTimer);
+        this._copiedTimer = setTimeout(() => {
+          this._copiedTimer = null;
+          if (!this.destroyed) this.setCopied(false);
+        }, COPIED_MS);
+      },
+      () => {
+        if (this.destroyed || token !== this._copyToken) return;
+        this.setCopied(false);
+        this.setCopyError('Could not copy note to clipboard.');
+        if (this._copiedTimer) clearTimeout(this._copiedTimer);
+        this._copiedTimer = setTimeout(() => {
+          this._copiedTimer = null;
+          if (!this.destroyed) this.setCopyError('');
+        }, COPIED_MS);
+      }
+    );
     return true;
   },
   exportIt() {
@@ -67,61 +90,58 @@ export default view(spec, {
     if (note) exportNote(note);
     return true;
   },
-
-  // Inline delete confirmation: no modal.
   askDelete() {
-    const note = this.note as Note | null;
-    this._confirmId = note ? note.id : null;
-    this.showConfirm();
+    this.doAskDelete();
     return true;
-  },
-  cancelDelete() {
-    this._confirmId = null;
-    this.showConfirm();
-    return true;
-  },
-  confirmDelete() {
-    const note = this.note as Note | null;
-    this._confirmId = null;
-    if (note) this.doDeleteNote({ id: note.id });
-    this.showConfirm();
-    return true;
-  },
-  showConfirm() {
-    const note = this.note as Note | null;
-    const confirming = !!note && this._confirmId === note.id;
-    this.$.confirmGroup.setShowing(confirming);
-    this.$.trashWrap.setShowing(!confirming);
   },
 
   // Published properties pushed in by the app.
   noteChanged() {
     const note = this.note as Note | null;
-    const { pane, empty, title, category, body, pinWrap, pinButton, pinIcon, edited, stats } = this.$;
+    const nextId = note?.id ?? null;
+    if (nextId !== this._lastNoteId) {
+      this._lastNoteId = nextId;
+      (this._copyToken as number)++;
+      if (this._copiedTimer) {
+        clearTimeout(this._copiedTimer);
+        this._copiedTimer = null;
+      }
+      this.setCopied(false);
+      this.setCopyError('');
+    }
+    const { headerActions, pane, empty, title, category, body, pinWrap, pinButton, pinIcon, edited, stats } = this.$;
+    headerActions.setShowing(!!note);
     pane.setShowing(!!note);
     empty.setShowing(!note);
     if (note) {
       title.setValue(note.title);
       category.setValue(note.category || 'General');
       body.setValue(note.body);
-      pinWrap.setAttributes({ title: note.pinned ? 'Unpin Note' : 'Pin Note to Top' });
+      const pinLabel = note.pinned ? 'Unpin Note' : 'Pin Note to Top';
+      pinWrap.setAttributes({ title: pinLabel });
+      pinButton.setAttributes({ 'aria-label': pinLabel });
       pinButton.setVariant(note.pinned ? 'warning' : 'normal');
       pinIcon.setStyle(note.pinned ? 'vertical-align:middle;fill:currentColor' : 'vertical-align:middle');
       edited.setContent(`Last edited ${formatRelativeDate(note.updatedAt)}`);
       stats.setContent(bodyStats(note.body));
     }
-    if (this._confirmId !== (note ? note.id : null)) this._confirmId = null;
-    this.showConfirm();
   },
   loadedChanged() {
     this.$.emptyText.setContent(this.loaded ? 'Select a note from the left, or create a new one.' : '');
   },
   saveStatusChanged() {
     this.$.saving.setShowing(this.saveStatus === 'saving');
-    this.$.saved.setShowing(this.saveStatus !== 'saving');
+    this.$.saved.setShowing(this.saveStatus === 'saved');
+    this.$.saveErrorFooter.setShowing(this.saveStatus === 'error');
   },
   copiedChanged() {
     this.$.copyIcon.setIcon(this.copied ? 'Check' : 'Copy');
-    this.$.copyIcon.setColor(this.copied ? '#10b981' : undefined);
+    this.$.copyIcon.setColor(this.copied ? 'var(--mochi-success)' : undefined);
+  },
+  copyErrorChanged() {
+    const msg = String(this.copyError ?? '');
+    this.$.copyErrorBar.setAttributes(msg !== '' ? { role: 'alert' } : {});
+    this.$.copyErrorBar.setContent(msg);
+    this.$.copyErrorBar.setShowing(msg !== '');
   },
 } satisfies CodeBehind);

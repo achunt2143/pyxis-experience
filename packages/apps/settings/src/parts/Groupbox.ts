@@ -28,7 +28,8 @@ export default view(spec, {
     const title = String(this.title);
     this.$.label.setContent(title.toUpperCase());
     this.$.icon.setIcon(this.glyph);
-    this.$.icon.setColor(this.glyphColor || undefined);
+    this.$.icon.setColor('var(--mochi-text-muted)');
+    this.$.icon.setShowing(this.glyph !== '');
     this.setAttributes({ 'aria-label': title, ...(this.group ? { 'data-settings-group': this.group } : {}) });
   },
 } satisfies CodeBehind);

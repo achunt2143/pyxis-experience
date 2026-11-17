@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "web",
   "entry": "index.html",
+  "accent": "#0d9488",
   "category": "pim",
   "singleInstance": true,
   "display": "windowed",

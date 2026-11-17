@@ -5,14 +5,14 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 export type Named = {
   /** pyxis.Control */
   caption: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  input: Instance<"pyxis.Control">;
+  /** remochi.Input */
+  input: Instance<"remochi.Input">;
   /** pyxis.Control */
   message: Instance<"pyxis.Control">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'keyed' | 'typed';
+export type Handlers = 'entered' | 'typed';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

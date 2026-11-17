@@ -17,10 +17,26 @@ export type Named = {
   level: Instance<"pyxis.Control">;
   /** pyxis.Repeater */
   outputs: Instance<"pyxis.Repeater">;
+  /** remochi.Subheader */
+  noInputAudio: Instance<"remochi.Subheader">;
+  /** pyxis.Control */
+  inputControls: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  inputMute: Instance<"pyxis.Control">;
+  /** pyxis.Icon */
+  inputMuteIcon: Instance<"pyxis.Icon">;
+  /** remochi.Slider */
+  inputSlider: Instance<"remochi.Slider">;
+  /** pyxis.Control */
+  inputLevel: Instance<"pyxis.Control">;
+  /** pyxis.Repeater */
+  inputs: Instance<"pyxis.Repeater">;
+  /** pyxis.Control */
+  errorRow: Instance<"pyxis.Control">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'playTone' | 'toggleMute' | 'volumeMoved';
+export type Handlers = 'inputVolumeMoved' | 'pickInput' | 'pickOutput' | 'playTone' | 'previewSound' | 'toggleInputMute' | 'toggleMute' | 'volumeMoved';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

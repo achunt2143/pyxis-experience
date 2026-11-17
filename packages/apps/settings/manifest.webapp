@@ -4,8 +4,9 @@
   "version": "0.1.0",
   "type": "web",
   "entry": "index.html",
+  "accent": "#64748b",
   "category": "system",
   "singleInstance": true,
   "display": "windowed",
-  "permissions": ["power", "audio", "network", "settings:write"]
+  "permissions": ["power", "audio", "network:read", "network:manage", "settings:write"]
 }

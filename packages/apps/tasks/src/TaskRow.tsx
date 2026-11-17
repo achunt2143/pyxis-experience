@@ -1,7 +1,7 @@
-import { adapt } from '@duyojs/duyo/react';
+import { adaptIsland } from '@pyxis/app-sdk/duyo';
 import { FileText } from 'lucide-react';
 import { Checkbox } from 'remochi';
-import { PRIORITY_CONFIG, fmtDisplayDate, getTodayString, type Task } from './model';
+import { PRIORITY_CONFIG, fmtDisplayDate, getTodayString, taskTitle, type Task } from './model';
 import { registerIsland } from './islands';
 
 interface RowProps {
@@ -26,15 +26,13 @@ export function TaskRowView({ task: t, selected: isSelected, onToggle }: RowProp
         gap: '10px',
         padding: '10px 14px',
         borderRadius: '12px',
-        background: isSelected
-          ? 'var(--mochi-primary-soft, rgba(47, 111, 237, 0.12))'
-          : 'var(--color-surface, var(--mochi-surface, #ffffff))',
-        border: `1.5px solid ${
-          isSelected ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-border, var(--mochi-border, #e5e7eb))'
-        }`,
+        background: isSelected ? 'var(--mochi-primary-soft)' : 'var(--mochi-panel-bg)',
+        border: `1.5px solid ${isSelected ? 'var(--mochi-primary)' : 'var(--mochi-border)'}`,
         cursor: 'pointer',
         transition: 'all 0.12s ease',
         opacity: t.done ? 0.65 : 1,
+        minWidth: 0,
+        boxSizing: 'border-box',
       }}
     >
       <div onClick={(e) => e.stopPropagation()}>
@@ -55,27 +53,28 @@ export function TaskRowView({ task: t, selected: isSelected, onToggle }: RowProp
             fontSize: '0.86rem',
             fontWeight: isSelected ? 600 : 500,
             textDecoration: t.done ? 'line-through' : 'none',
-            color: isSelected ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-text, var(--mochi-text, #111827))',
+            color: isSelected ? 'var(--mochi-primary)' : 'var(--mochi-text)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
           }}
         >
-          {t.text}
+          {taskTitle(t)}
         </span>
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
+            flexWrap: 'wrap',
             fontSize: '0.74rem',
-            color: 'var(--color-text-secondary, #64748b)',
+            color: 'var(--mochi-text-muted)',
           }}
         >
           {t.dueDate && (
             <span
               style={{
-                color: isOverdue ? '#ef4444' : isDueToday ? '#f59e0b' : 'inherit',
+                color: isOverdue ? 'var(--mochi-error)' : isDueToday ? 'var(--mochi-warning)' : 'inherit',
                 fontWeight: isOverdue || isDueToday ? 600 : 400,
               }}
             >
@@ -91,7 +90,7 @@ export function TaskRowView({ task: t, selected: isSelected, onToggle }: RowProp
 }
 
 registerIsland(
-  adapt({
+  adaptIsland({
     name: 'Tasks.Row',
     component: TaskRowView,
     kind: 'pyxis.Row',

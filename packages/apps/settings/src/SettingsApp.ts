@@ -1,13 +1,15 @@
 import { view, type Component, type ComponentEvent } from '@duyojs/duyo';
 import spec from "./SettingsApp.view.json";
 import {
-  Accessibility, Clock, Cpu, Info, Palette, Volume2, Wifi,
-  Globe2, MapPin, Moon, Play, Power, RotateCcw, Search, Sparkles, Sun, SunMoon, Sunrise, VolumeX, Waves, WifiOff,
+  Accessibility, Bell, Clock, Cpu, Globe, HardDrive, Info, Mic, MicOff, Monitor, MousePointer, Palette, Shield, Type, Users, Volume2, Wifi,
+  Eye, EyeOff, Globe2, Hash, KeyRound, Lock, MapPin, Moon, PanelBottom, PanelLeft, Play, Power, RotateCcw, Search, ShieldAlert,
+  ShieldCheck, Sparkles, Sun, SunMoon, Sunrise, User, UserRound, VolumeX, Waves, WifiOff,
 } from 'lucide-react';
+import { powerCall, type PowerAction } from '@pyxis/app-sdk';
 import { onDestroy, registerIcons } from '@pyxis/app-sdk/duyo';
 import { fetchSystemInfo, type SystemInfo } from './about';
 import { SECTIONS, footerText, isSectionId, type SectionId } from './model';
-import { powerCall, type PowerAction } from './services';
+import { forwardAriaLabel } from './parts/present';
 import type { RailItem } from './parts/RailRow';
 import type { CodeBehind } from './SettingsApp.view.gen';
 import './parts/Groupbox';
@@ -19,14 +21,16 @@ import './sections/Sound';
 import './sections/Accessibility';
 import './sections/Network';
 import './sections/DateTime';
+import './sections/Users';
 import './sections/System';
 import './sections/About';
 import './settings.css';
 
 // Every icon the Settings views and code name (specs and the code-behinds' setIcon calls).
 registerIcons({
-  Accessibility, Clock, Cpu, Info, Palette, Volume2, Wifi,
-  Globe2, MapPin, Moon, Play, Power, RotateCcw, Search, Sparkles, Sun, SunMoon, Sunrise, VolumeX, Waves, WifiOff,
+  Accessibility, Bell, Clock, Cpu, Globe, HardDrive, Info, Mic, MicOff, Monitor, MousePointer, Palette, Shield, Type, Users, Volume2, Wifi,
+  Eye, EyeOff, Globe2, Hash, KeyRound, Lock, MapPin, Moon, PanelBottom, PanelLeft, Play, Power, RotateCcw, Search, ShieldAlert,
+  ShieldCheck, Sparkles, Sun, SunMoon, Sunrise, User, UserRound, VolumeX, Waves, WifiOff,
 });
 
 const POWER_COPY: Record<PowerAction, { title: string; confirm: string; body: string }> = {
@@ -65,22 +69,39 @@ export default view(spec, {
     this.setAttributes({ 'data-window-id': this.windowId });
     // undefined while asking, null when the system service didn't answer (as the old app held it).
     this._info = undefined as SystemInfo | null | undefined;
+    this._infoSeq = 0;
     this._section = null as Component | null;
     this._statusTimer = null as ReturnType<typeof setTimeout> | null;
     onDestroy(this, () => {
       if (this._statusTimer) clearTimeout(this._statusTimer);
     });
 
-    void fetchSystemInfo().then((info) => {
-      if (this.destroyed) return;
-      this._info = info;
-      this.$.footer.setContent(footerText(info));
-      (this._section as Component | null)?.set('infoState', info === null ? 'failed' : 'ready');
-      (this._section as Component | null)?.set('info', info);
-    });
+    void this.refreshSystemInfo();
     this.$.footer.setContent(footerText(undefined));
     this.openSection();
     this.drawRail();
+  },
+
+  rendered() {
+    this.inherited();
+    forwardAriaLabel(this.$.backButton, 'button', 'Back to sections');
+  },
+
+  async refreshSystemInfo() {
+    const seq = ++(this._infoSeq as number);
+    const info = await fetchSystemInfo();
+    if (this.destroyed || seq !== this._infoSeq) return;
+    this._info = info;
+    this.$.footer.setContent(footerText(info));
+    if (this.section === 'about') {
+      (this._section as Component | null)?.set('infoState', info === null ? 'failed' : 'ready');
+      (this._section as Component | null)?.set('info', info);
+    }
+  },
+
+  backToRail() {
+    this.$.stack.setActiveIndex(0);
+    return true;
   },
 
   pickSection(sender: Component) {
@@ -111,12 +132,9 @@ export default view(spec, {
   /** Replaces the stage's section with the open one's kind. */
   openSection() {
     const def = SECTIONS.find((s) => s.id === (this.section as SectionId)) ?? SECTIONS[0];
-    const { stage, stageBadge, stageIcon, stageTitle, host } = this.$;
+    const { stage, stageHeader, stageTitle, host } = this.$;
     stage.setAttributes({ 'data-settings-stage': def.id });
-    stageBadge.setStyle(
-      `width:32px;height:32px;border-radius:13px 3px 13px 13px;display:flex;align-items:center;justify-content:center;background:${def.bg};color:${def.color}`
-    );
-    stageIcon.setIcon(def.iconName);
+    stageHeader.setContent(def.label);
     stageTitle.setContent(def.label);
 
     (this._section as Component | null)?.destroy();
@@ -131,6 +149,9 @@ export default view(spec, {
       { owner: this }
     );
     this._section = section;
+    if (def.id === 'about') {
+      void this.refreshSystemInfo();
+    }
   },
 
   /** System's buttons: ask before acting. */

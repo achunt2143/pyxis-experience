@@ -10,15 +10,55 @@
   font-family: inherit;
 }
 
-/* The title field is bold and large; the Input's own element sits inside the wrapper. */
-.notes-title-input input {
+/* The title field is bold and large. */
+input.notes-title-input {
   font-weight: 700;
   font-size: 1.1rem;
 }
 
-/* The search icon sits over the field's left edge. */
-.notes-search input {
+/* The search icon sits over the field's left edge; clear button sits on the right. */
+input.notes-search {
   padding-left: 30px;
+  padding-right: 28px;
+}
+
+.notes-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mochi-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  z-index: 1;
+}
+.notes-search-clear:hover {
+  background: var(--mochi-hover);
+  color: var(--mochi-text);
+}
+
+.notes-back-btn {
+  display: none !important;
+}
+.repanel[data-narrow="true"] .notes-back-btn {
+  display: inline-block !important;
+}
+@media (max-width: 768px) {
+  .notes-back-btn {
+    display: inline-block !important;
+  }
+}
+.notes-back-btn .mochi-button {
+  font-size: 0.82rem;
+  padding: 4px 8px;
 }
 
 .notes-pill {
@@ -35,8 +75,8 @@
 }
 
 .notes-row {
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--color-border-light, #f1f3f5);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--mochi-border);
   border-left: 3px solid transparent;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -45,12 +85,16 @@
   gap: 4px;
 }
 .notes-row:hover {
-  background: var(--color-surface-hover, #f8fafc);
+  background: var(--mochi-hover);
+}
+.notes-row:focus-visible {
+  outline: 2px solid var(--mochi-primary);
+  outline-offset: -2px;
 }
 .notes-row.selected,
 .notes-row.selected:hover {
-  border-left-color: var(--mochi-color-blue, #3388ff);
-  background: var(--color-surface-selected, #eff6ff);
+  border-left-color: var(--mochi-primary);
+  background: var(--mochi-primary-soft);
 }
 .notes-row .notes-title {
   font-weight: 600;

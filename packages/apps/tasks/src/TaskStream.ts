@@ -20,13 +20,14 @@ type State = {
   listCompleted?: number;
   doneCount?: number;
   sortBy?: string;
+  search?: string;
 };
 
 /**
  * The middle panel: header with progress badge, sort and Clear Done, the quick-add form
  * with its chips, and the task rows. It owns the draft (text, priority, due date); the app
  * pushes the rest in through `update` and hears onAddTask / onSelectTask / onToggleTask /
- * onSortChange / onClearDone.
+ * onSortChange / onClearDone / onSearchChange / onBack.
  */
 export default view(spec, {
   create() {
@@ -51,6 +52,27 @@ export default view(spec, {
   clearDone() {
     this.doClearDone();
     return true;
+  },
+  back() {
+    this.doBack();
+    return true;
+  },
+  searchInput(_sender, event) {
+    this.doSearchChange({ value: String(event['value'] ?? '') });
+    return true;
+  },
+  focusDraft() {
+    this.focusInput(this.$.draft.id);
+  },
+  focusSearch() {
+    this.focusInput(this.$.search.id, true);
+  },
+  focusInput(id: string, select = false) {
+    const input = document.querySelector<HTMLInputElement>(
+      `input[data-duyo-id="${id}"], [data-duyo-id="${id}"] input`
+    );
+    input?.focus();
+    if (select) input?.select();
   },
   sortInput(_sender, event) {
     this.doSortChange({ value: String(event['value']) });
@@ -87,6 +109,8 @@ export default view(spec, {
     this.setDraftDueDate('');
     this.setDraftPriority('none');
     this.draw();
+    // Quick add stays quick: the field keeps the keyboard for the next task.
+    this.focusDraft();
     return true;
   },
 
@@ -96,6 +120,7 @@ export default view(spec, {
     header.setContent(this.heading);
     badge.setContent(`${this.listCompleted}/${this.listTotal}`);
     sort.setValue(this.sortBy);
+    if (this.$.search.getValue() !== this.search) this.$.search.setValue(this.search as string);
     clearWrap.setShowing((this.doneCount as number) > 0);
 
     draft.setValue(this.draftText);
@@ -104,7 +129,13 @@ export default view(spec, {
 
     loading.setShowing(!this.loaded);
     empty.setShowing(this.loaded && items.length === 0);
-    emptyText.setContent(this.listTotal === 0 ? 'No tasks yet — add one above!' : 'All clear in this view');
+    emptyText.setContent(
+      String(this.search).trim()
+        ? 'No tasks match your search'
+        : this.listTotal === 0
+          ? 'No tasks yet — add one above!'
+          : 'All clear in this view'
+    );
     rows.setShowing(this.loaded && items.length > 0);
     rows.setItems(items);
     rows.refresh();

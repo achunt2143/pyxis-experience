@@ -3,11 +3,11 @@
   "kind": "pyxis.Control",
   "tag": "label",
   "style": "display:flex;flex-direction:column;gap:4px;min-width:0",
-  "published": { "label": "", "placeholder": "", "field": "", "error": "", "text": "" },
+  "published": { "label": "", "placeholder": "", "field": "", "error": "", "text": "", "attr": "data-location-field", "inputType": "text" },
   "events": { "onEnter": "", "onText": "" },
   "components": [
     { "name": "caption", "kind": "pyxis.Control", "tag": "span", "classes": "st-field-label" },
-    { "name": "input", "kind": "pyxis.Control", "tag": "input", "classes": "st-input", "oninput": "typed", "onkeydown": "keyed" },
+    { "name": "input", "kind": "remochi.Input", "width": "100%", "classes": "st-input", "style": "margin-right:0;padding:8px 10px;font-size:0.84rem;box-sizing:border-box", "oninput": "typed", "onenter": "entered" },
     { "name": "message", "kind": "pyxis.Control", "tag": "span", "classes": "st-error", "showing": false, "style": "font-size:0.74rem" }
   ]
 }

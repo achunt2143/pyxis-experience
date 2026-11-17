@@ -1,0 +1,12 @@
+{
+  "name": "Settings.Users",
+  "kind": "pyxis.Control",
+  "published": { "account": null, "accounts": [], "accountState": "asking" },
+  "components": [
+    { "name": "unavailable", "kind": "pyxis.Control", "classes": "st-error", "showing": false, "content": "The accounts service didn't answer, so the profile and password can't be shown. The lock settings below still work." },
+    { "name": "profile", "kind": "Settings.UserProfile", "onChanged": "reload" },
+    { "name": "password", "kind": "Settings.UserPassword", "onChanged": "reload" },
+    { "name": "userAccounts", "kind": "Settings.UserAccounts", "onChanged": "reload" },
+    { "name": "lockSettings", "kind": "Settings.LockSettings" }
+  ]
+}

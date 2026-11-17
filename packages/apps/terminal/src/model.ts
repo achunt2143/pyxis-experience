@@ -8,6 +8,49 @@ export const FONT_MIN = 10;
 export const FONT_MAX = 22;
 export const FONT_DEFAULT = 13;
 
+export type TerminalMode = 'connecting' | 'pty' | 'mock';
+
+export type TerminalShortcutAction =
+  | 'newTab'
+  | 'closeTab'
+  | 'copy'
+  | 'paste'
+  | 'zoomIn'
+  | 'zoomOut'
+  | 'zoomReset'
+  | 'nextTab'
+  | 'prevTab';
+
+export function matchTerminalShortcut(e: {
+  key: string;
+  code?: string;
+  ctrlKey: boolean;
+  metaKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}): TerminalShortcutAction | null {
+  const mod = (e.ctrlKey || e.metaKey) && !e.altKey;
+  if (!mod) return null;
+
+  const lower = e.key.toLowerCase();
+  if (e.shiftKey) {
+    if (lower === 't' || e.code === 'KeyT') return 'newTab';
+    if (lower === 'w' || e.code === 'KeyW') return 'closeTab';
+    if (lower === 'c' || e.code === 'KeyC') return 'copy';
+    if (lower === 'v' || e.code === 'KeyV') return 'paste';
+    if (e.key === 'Tab') return 'prevTab';
+  } else {
+    if (e.key === 'Tab') return 'nextTab';
+    if (e.key === '-' || e.key === '_' || e.code === 'Minus' || e.code === 'NumpadSubtract') return 'zoomOut';
+    if (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0') return 'zoomReset';
+  }
+
+  if (e.key === '=' || e.key === '+' || e.code === 'Equal' || e.code === 'NumpadAdd') {
+    return 'zoomIn';
+  }
+  return null;
+}
+
 /** The helper ribbon's keys: what each sends to the shell. */
 export interface QuickKeyDef {
   label: string;

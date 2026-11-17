@@ -1,8 +1,33 @@
 /* Browser: what a Duyo `style` string cannot say (:hover, a library's inner elements) and
    the fixed look of the list rows, whose hover states used to be mouseenter handlers. */
 
+@media (max-width: 640px) {
+  .br-toolbar {
+    padding-left: 16px !important;
+    padding-right: 16px !important;
+  }
+  .br-scroll-body {
+    padding: 12px 16px 20px !important;
+  }
+}
+
+.br-add-grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 8px;
+  min-width: 0;
+}
+.br-add-grid > * {
+  min-width: 0;
+}
+@media (max-width: 560px) {
+  .br-add-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* The address field: room for the search icon on the left, the clear and star buttons on the right. */
-.br-address input {
+input.br-address {
   width: 100%;
   padding-left: 32px;
   padding-right: 64px;
@@ -14,13 +39,33 @@
   padding: 2px;
   cursor: pointer;
   display: flex;
+  color: var(--mochi-text-muted);
+}
+.br-icon-btn:hover {
+  color: var(--mochi-text);
+}
+.br-icon-btn:focus-visible,
+.br-tile:focus-visible,
+.br-add-tile:focus-visible,
+.br-suggestion:focus-visible,
+.br-pill:focus-visible {
+  outline: 2px solid var(--mochi-primary);
+  outline-offset: 2px;
+}
+.br-error-close {
+  color: var(--mochi-error);
+  flex-shrink: 0;
+}
+.br-error-close:hover {
+  color: var(--mochi-error);
+  opacity: 0.8;
 }
 
 /* Speed dial tile. `--site` is the tile's own colour (set by the row). */
 .br-tile {
-  background: var(--color-surface, #ffffff);
-  border: 1px solid var(--color-border-light, #e5e7eb);
-  border-radius: 12px;
+  background: var(--mochi-surface);
+  border: 1px solid var(--mochi-border);
+  border-radius: var(--mochi-corner-sm, 10px);
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
@@ -28,20 +73,23 @@
   text-align: center;
   gap: 8px;
   cursor: pointer;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  min-width: 0;
+  box-sizing: border-box;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease, background 0.15s ease;
   position: relative;
 }
 .br-tile:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.12);
+  background: var(--mochi-panel-hover);
   border-color: var(--site);
 }
 
 .br-add-tile {
   background: transparent;
-  border: 1px dashed var(--color-border, #d1d5db);
-  border-radius: 12px;
+  border: 1px dashed var(--mochi-border);
+  border-radius: var(--mochi-corner-sm, 10px);
   padding: 16px 12px;
   display: flex;
   flex-direction: column;
@@ -51,27 +99,37 @@
   gap: 8px;
   cursor: pointer;
   min-height: 120px;
+  min-width: 0;
+  box-sizing: border-box;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 .br-add-tile:hover {
-  border-color: var(--mochi-color-blue, #3b82f6);
-  background: rgba(59, 130, 246, 0.04);
+  border-color: var(--mochi-primary);
+  background: var(--mochi-primary-soft);
 }
 
-/* Bookmark and history rows: a card of them, separated by hairlines. */
-.br-row {
+/* Section headings aligned with the scrollable pane's 800px inner column. */
+.br-subheader .mochi-subheader {
+  padding: 0;
+  height: auto;
+  min-height: 36px;
+  margin-bottom: 12px;
+  white-space: normal;
+}
+.br-list-header .mochi-list-header {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Bookmark and history rows rendered as Remochi Items. */
+.br-row.mochi-item {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--color-border-light, #f1f3f5);
-  transition: background 0.1s ease;
+  background: var(--mochi-surface);
+  min-width: 0;
+  overflow: hidden;
 }
-.br-row:last-child {
-  border-bottom: none;
-}
-.br-row:hover {
-  background: var(--color-surface-hover, #f8fafc);
+.br-row .mochi-item-body:first-child {
+  margin-top: 0;
 }
 
 .br-suggestion {
@@ -79,15 +137,16 @@
   align-items: center;
   gap: 10px;
   padding: 8px 12px;
-  border-bottom: 1px solid var(--color-border-light, #f3f4f6);
+  border-bottom: 1px solid var(--mochi-border);
   cursor: pointer;
+  min-width: 0;
   transition: background 0.1s ease;
 }
 .br-suggestion:last-child {
   border-bottom: none;
 }
 .br-suggestion:hover {
-  background: var(--color-surface-hover, #f8fafc);
+  background: var(--mochi-hover);
 }
 
 /* View selector pills. */
@@ -96,37 +155,43 @@
   align-items: center;
   gap: 6px;
   padding: 5px 12px;
-  border-radius: 16px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  background: var(--color-surface, #ffffff);
-  color: var(--color-text, #374151);
+  border-radius: var(--mochi-corner-pill, 9999px);
+  border: 1px solid var(--mochi-border);
+  background: var(--mochi-surface);
+  color: var(--mochi-text);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
 }
+.br-pill:hover {
+  background: var(--mochi-hover);
+}
 .br-pill.active {
-  border-color: var(--mochi-color-blue, #3b82f6);
-  background: rgba(59, 130, 246, 0.1);
-  color: var(--mochi-color-blue, #2563eb);
+  border-color: var(--mochi-primary);
+  background: var(--mochi-primary-soft);
+  color: var(--mochi-primary);
   font-weight: 600;
 }
 .br-pill-count {
   font-size: 10px;
   font-weight: 700;
-  background: var(--color-surface-hover, #f3f4f6);
+  background: var(--mochi-hover);
+  color: var(--mochi-text-muted);
   padding: 1px 6px;
-  border-radius: 10px;
-  opacity: 0.6;
+  border-radius: var(--mochi-corner-pill, 9999px);
 }
 .br-pill.active .br-pill-count {
-  background: rgba(0, 0, 0, 0.08);
-  opacity: 1;
+  background: color-mix(in srgb, var(--mochi-primary) 18%, transparent);
+  color: var(--mochi-primary);
 }
 
 .br-empty {
   padding: 32px;
   text-align: center;
-  color: var(--color-text-muted, #9ca3af);
+  background: var(--mochi-surface);
+  border: 1px solid var(--mochi-border);
+  border-radius: var(--mochi-corner-sm, 10px);
+  color: var(--mochi-text-muted);
   font-size: 13px;
 }

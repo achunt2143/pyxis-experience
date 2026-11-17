@@ -5,24 +5,40 @@
   "events": { "onRequest": "" },
   "components": [
     { "kind": "Settings.Groupbox", "title": "Power & session", "glyph": "Power", "glyphColor": "#ef4444", "components": [
-      { "kind": "pyxis.Control", "content": "Manage the operating system power state and user session.", "style": "font-size:0.78rem;color:var(--color-text-secondary, #64748b);margin-bottom:4px" },
-      { "kind": "pyxis.Control", "style": "display:grid;grid-template-columns:repeat(3, 1fr);gap:10px", "components": [
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "Manage the operating system power state and user session." },
+      { "kind": "pyxis.Control", "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(96px, 100%), 1fr));gap:10px;width:100%;min-width:0", "components": [
         { "kind": "pyxis.Control", "tag": "button", "classes": "st-power-button", "ontap": "askSleep", "components": [
-          { "kind": "pyxis.Icon", "icon": "Moon", "size": 18, "color": "#8b5cf6" },
+          { "kind": "pyxis.Icon", "icon": "Moon", "size": 18, "color": "var(--mochi-primary)" },
           { "kind": "pyxis.Control", "tag": "span", "content": "Sleep", "style": "font-size:0.78rem;font-weight:600" }
         ] },
         { "kind": "pyxis.Control", "tag": "button", "classes": "st-power-button", "ontap": "askReboot", "components": [
-          { "kind": "pyxis.Icon", "icon": "RotateCcw", "size": 18, "color": "#3b82f6" },
+          { "kind": "pyxis.Icon", "icon": "RotateCcw", "size": 18, "color": "var(--mochi-primary)" },
           { "kind": "pyxis.Control", "tag": "span", "content": "Restart", "style": "font-size:0.78rem;font-weight:600" }
         ] },
         { "kind": "pyxis.Control", "tag": "button", "classes": "st-power-button danger", "ontap": "askShutdown", "components": [
-          { "kind": "pyxis.Icon", "icon": "Power", "size": 18, "color": "#ef4444" },
-          { "kind": "pyxis.Control", "tag": "span", "content": "Shut Down", "style": "font-size:0.78rem;font-weight:700;color:#ef4444" }
+          { "kind": "pyxis.Icon", "icon": "Power", "size": 18, "color": "var(--mochi-error)" },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Shut Down", "style": "font-size:0.78rem;font-weight:700;color:var(--mochi-error)" }
         ] }
       ] },
       { "name": "statusBox", "kind": "pyxis.Control", "showing": false, "style": "margin-top:6px", "components": [
-        { "name": "badge", "kind": "remochi.Badge", "background": "var(--mochi-primary, #2f6fed)", "color": "#fff" }
+        { "name": "badge", "kind": "remochi.Badge", "background": "var(--mochi-primary)", "color": "var(--mochi-primary-text, #ffffff)" }
       ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Power, brightness & preferences", "glyph": "Sun", "glyphColor": "#f59e0b", "components": [
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "Adjust screen brightness, Do Not Disturb, battery status, and system defaults." },
+      { "name": "powerBrightness", "kind": "Settings.PowerBrightnessCard" }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Display & outputs", "glyph": "Monitor", "glyphColor": "#2563eb", "components": [
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "Configure display resolution, HiDPI scaling, and multi-monitor layout." },
+      { "name": "displayOutputs", "kind": "Settings.DisplayCard" }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Privileged access", "glyph": "Shield", "glyphColor": "#f59e0b", "components": [
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "See which apps have temporary access to change system files and lock them at any time." },
+      { "name": "privilegedAccess", "kind": "Settings.PrivilegedAccessCard" }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "App permissions", "glyph": "KeyRound", "glyphColor": "#0ea5e9", "components": [
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "Review and revoke Echo capabilities declared by installed apps." },
+      { "name": "appPermissions", "kind": "Settings.AppPermissionsCard" }
     ] }
   ]
 }

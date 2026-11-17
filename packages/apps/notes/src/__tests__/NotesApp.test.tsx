@@ -1,12 +1,11 @@
 // @vitest-environment jsdom
-import { act } from '@testing-library/react';
+import { act, fireEvent } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Note } from '../model';
+import { snippetOf, type Note } from '../model';
 import {
   $,
   $$,
   bodyArea,
-  buttonText,
   click,
   mountNotes,
   pill,
@@ -27,7 +26,7 @@ vi.mock('../../../../app-sdk/src/appStorage', () => ({
   loadAppData: async () => structuredClone(storage.doc),
   saveAppData: async (_store: string, data: { notes: Note[] }) => {
     storage.saves.push(structuredClone(data));
-    return true;
+    return storage.saveResult;
   },
 }));
 vi.mock('../../../../app-sdk/src/usePyxisTheme', () => ({ usePyxisTheme: () => 'light' }));
@@ -74,8 +73,8 @@ describe('Notes: loading', () => {
     m = await mountNotes(five());
     expect(warn.mock.calls.filter(([text]) => String(text).startsWith('pyxis.Icon'))).toEqual([]);
     const svgs = $$(m.host, 'svg[data-duyo-kind="pyxis.Icon"]');
-    // Plus, Search, 6 pill pins, 5 row pins, FileText x2, 4 action icons, the saved tick.
-    expect(svgs.length).toBe(20);
+    // AlertCircle (save banner), Plus, Search, X (clear search), 6 pill pins, 5 row pins, FileText x2, 4 action icons, the saved tick.
+    expect(svgs.length).toBe(22);
   });
 
   it('counts per pill, the list heading and its badge', async () => {
@@ -135,14 +134,28 @@ describe('Notes: creating', () => {
     expect(m.host.textContent).toContain('Saved to Pyxis PIM storage');
   });
 
-  it('files the new note under the active category pill (not All or Pinned)', async () => {
+  it('files the new note under the active category pill, and pins when viewing Pinned', async () => {
     m = await mountNotes(five());
     click(pill(m.host, 'Work'));
     click(titled(m.host, 'New Note'));
-    expect(m.app.root.$['editor']!.get('note')).toMatchObject({ category: 'Work' });
+    expect(m.app.root.$['editor']!.get('note')).toMatchObject({ category: 'Work', pinned: false });
     click(pill(m.host, 'Pinned'));
     click(titled(m.host, 'New Note'));
-    expect(m.app.root.$['editor']!.get('note')).toMatchObject({ category: 'General' });
+    expect(m.app.root.$['editor']!.get('note')).toMatchObject({ category: 'General', pinned: true });
+    expect(rowTitles(m.host)).toContain('Untitled note');
+  });
+
+  it('clears search when a new note would be hidden and scrolls it into view', async () => {
+    const scrollSpy = vi.fn();
+    Element.prototype.scrollIntoView = scrollSpy;
+    m = await mountNotes(five());
+    type(searchInput(m.host), 'nonexistent-filter');
+    expect(rows(m.host)).toHaveLength(0);
+    click(titled(m.host, 'New Note'));
+    await advance(0);
+    expect(searchInput(m.host).value).toBe('');
+    expect(rowTitles(m.host)).toContain('Untitled note');
+    expect(scrollSpy).toHaveBeenCalled();
   });
 });
 
@@ -284,45 +297,64 @@ describe('Notes: opening and deleting', () => {
     expect(rows(m.host).find((r) => r.classList.contains('selected'))!.textContent).toContain('Note number 3');
   });
 
-  it('asks inline, can be cancelled, and deletes on Confirm', async () => {
+  it('asks via warning Dialog, can be cancelled, and deletes on Confirm returning stack to 0', async () => {
+    const close = vi.spyOn(window, 'close').mockImplementation(() => {});
     m = await mountNotes(five());
-    expect(buttonText(m.host, 'Confirm')!.closest('[style*="display: none"]')).toBeTruthy();
     click(titled(m.host, 'Delete Note'));
-    expect($(m.host, '[title="Delete Note"]')!.style.display).toBe('none');
-    click(buttonText(m.host, 'Cancel'));
-    expect($(m.host, '[title="Delete Note"]')!.style.display).not.toBe('none');
+    expect(document.body.textContent).toContain('? This cannot be undone.');
+    const dialog = document.body.querySelector('.mochi-dialog-overlay.open [role="dialog"]');
+    expect(dialog?.getAttribute('data-tone')).toBe('warning');
+    click($$(document.body, 'button').filter((b) => b.textContent === '(Cancel)').at(-1)!);
+    expect(close).not.toHaveBeenCalled();
     expect(rows(m.host)).toHaveLength(5);
 
     click(titled(m.host, 'Delete Note'));
-    click(buttonText(m.host, 'Confirm'));
+    click($$(document.body, 'button').filter((b) => b.textContent === '(Delete)').at(-1)!);
     expect(rowTitles(m.host)).not.toContain('Note number 0');
     expect(rows(m.host)).toHaveLength(4);
-    // Nothing is open any more.
+    expect(m.app.root.$['stack']!.get('activeIndex')).toBe(0);
     expect(m.host.textContent).toContain('Select a note from the left, or create a new one.');
     expect(titleInput(m.host).closest('[style*="display: none"]')).toBeTruthy();
     await advance(500);
     expect(storage.saves.at(-1)!.notes.map((n) => n.id)).toEqual(['n1', 'n2', 'n3', 'n4']);
   });
 
-  it('opening another note drops a half-made delete', async () => {
+  it('Back button returns stack activeIndex to 0', async () => {
     m = await mountNotes(five());
-    click(titled(m.host, 'Delete Note'));
-    click(rows(m.host).find((r) => r.textContent!.includes('Note number 3'))!);
-    expect($(m.host, '[title="Delete Note"]')!.style.display).not.toBe('none');
+    expect(m.app.root.$['stack']!.get('activeIndex')).toBe(1);
+    const backBtn = $(m.host, 'button[aria-label="Back to Notes"]')!;
+    expect(backBtn).toBeTruthy();
+    click(backBtn);
+    expect(m.app.root.$['stack']!.get('activeIndex')).toBe(0);
   });
 });
 
 describe('Notes: copy and export', () => {
-  it('copies "title, blank line, body" and shows a tick for two seconds', async () => {
+  it('copies "title, blank line, body" and shows a tick for two seconds only after resolution', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
     const writeText = vi.fn(async () => {});
     Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
     m = await mountNotes([seedNote(0, { title: 'T', body: 'B' })]);
     click(titled(m.host, 'Copy Note Content'));
     expect(writeText).toHaveBeenCalledWith('T\n\nB');
+    await act(async () => {});
     expect(m.app.root.$['editor']!.$['copyIcon']!.get('icon')).toBe('Check');
     await advance(2000);
     expect(m.app.root.$['editor']!.$['copyIcon']!.get('icon')).toBe('Copy');
+    Reflect.deleteProperty(navigator, 'clipboard');
+  });
+
+  it('shows inline error on clipboard rejection and does not flash Copied', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const writeText = vi.fn(async () => {
+      throw new Error('denied');
+    });
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    m = await mountNotes([seedNote(0, { title: 'T', body: 'B' })]);
+    click(titled(m.host, 'Copy Note Content'));
+    await act(async () => {});
+    expect(m.app.root.$['editor']!.$['copyIcon']!.get('icon')).toBe('Copy');
+    expect($(m.host, '[role="alert"]')!.textContent).toContain('Could not copy');
     Reflect.deleteProperty(navigator, 'clipboard');
   });
 
@@ -341,5 +373,93 @@ describe('Notes: copy and export', () => {
     click(titled(m.host, 'Export Note as Markdown (.md)'));
     expect(downloads).toEqual(['my__note_.md']);
     expect(await blobs[0]!.text()).toBe('# My: Note!\n\ntext');
+  });
+});
+
+describe('Notes: Wave B regression, save failure, accessibility & shortcuts', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  });
+
+  it('snippetOf preserves digits and uppercase letters (regression for "Hello World\\n123 Test")', () => {
+    expect(snippetOf('Hello World\n123 Test')).toBe('Hello World\n123 Test');
+    expect(snippetOf('# Heading\n--- 42 Items')).toBe('Heading\n42 Items');
+  });
+
+  it('shows role=alert save error banner with Retry when saveAppData returns false, and recovers on retry', async () => {
+    m = await mountNotes(five());
+    storage.saveResult = false;
+    type(titleInput(m.host), 'Unsaved');
+    await advance(500);
+    await act(async () => {});
+    expect(m.app.root.get('saveStatus')).toBe('error');
+    const alert = $$(m.host, '[role="alert"]').find((el) => el.style.display !== 'none');
+    expect(alert?.textContent).toContain('Could not save changes');
+
+    storage.saveResult = true;
+    const retryBtn = $$(alert!, 'button').find((b) => b.textContent?.includes('Retry'))!;
+    click(retryBtn);
+    await act(async () => {});
+    expect(m.app.root.get('saveStatus')).toBe('saved');
+    expect(m.host.textContent).toContain('Saved to Pyxis PIM storage');
+  });
+
+  it('flushes pending edits on pagehide', async () => {
+    m = await mountNotes(five());
+    type(titleInput(m.host), 'Pagehide edit');
+    expect(storage.saves).toHaveLength(0);
+    act(() => {
+      window.dispatchEvent(new Event('pagehide'));
+    });
+    expect(storage.saves).toHaveLength(1);
+    expect(storage.saves[0]!.notes.find((n) => n.id === 'n0')!.title).toBe('Pagehide edit');
+  });
+
+  it('search clear button, keyboard accessible NoteRow, aria-labels, and Ctrl+N/Ctrl+F/Escape', async () => {
+    m = await mountNotes(five());
+    // aria-labels on icon buttons
+    for (const label of ['Pin Note to Top', 'Copy Note Content', 'Export Note as Markdown (.md)', 'Delete Note', 'Back to Notes']) {
+      expect($(m.host, `button[aria-label="${label}"]`), label).toBeTruthy();
+    }
+
+    // Keyboard focusable NoteRow (tabIndex=0 + Enter/Space)
+    const targetRow = rows(m.host).find((r) => r.textContent!.includes('Note number 3'))!;
+    expect(targetRow.getAttribute('tabindex')).toBe('0');
+    act(() => {
+      fireEvent.keyDown(targetRow, { key: 'Enter' });
+    });
+    expect(titleInput(m.host).value).toBe('Note number 3');
+    const row2 = rows(m.host).find((r) => r.textContent!.includes('Note number 2'))!;
+    act(() => {
+      fireEvent.keyDown(row2, { key: ' ' });
+    });
+    expect(titleInput(m.host).value).toBe('Note number 2');
+
+    // Ctrl+F focuses search, clear button clears it
+    act(() => {
+      fireEvent.keyDown(document, { key: 'f', ctrlKey: true });
+    });
+    expect(document.activeElement).toBe(searchInput(m.host));
+    type(searchInput(m.host), 'number 1');
+    expect(rowTitles(m.host)).toEqual(['Note number 1']);
+    click($(m.host, 'button[aria-label="Clear Search"]')!);
+    expect(searchInput(m.host).value).toBe('');
+    expect(rows(m.host)).toHaveLength(5);
+
+    // Escape clears search
+    type(searchInput(m.host), 'number 1');
+    expect(rows(m.host)).toHaveLength(1);
+    act(() => {
+      fireEvent.keyDown(document, { key: 'Escape' });
+    });
+    expect(searchInput(m.host).value).toBe('');
+    expect(rows(m.host)).toHaveLength(5);
+
+    // Ctrl+N creates a new note
+    act(() => {
+      fireEvent.keyDown(document, { key: 'n', ctrlKey: true });
+    });
+    expect(rows(m.host)).toHaveLength(6);
+    expect(titleInput(m.host).value).toBe('Untitled note');
   });
 });

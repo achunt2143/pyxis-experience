@@ -16,6 +16,8 @@ export function stubCanvas() {
 export const storage = {
   doc: { tasks: [] as Task[] },
   saves: [] as Array<{ tasks: Task[] }>,
+  /** While set, saveAppData answers false (the store refused the write). */
+  fail: false,
 };
 
 export function seedTask(i: number, over: Partial<Task> = {}): Task {
@@ -39,6 +41,7 @@ export interface Mounted {
 export async function mountTasks(tasks: Task[]): Promise<Mounted> {
   storage.doc = { tasks: structuredClone(tasks) };
   storage.saves = [];
+  storage.fail = false;
   const host = document.createElement('div');
   document.body.appendChild(host);
   let app!: DuyoApp;

@@ -1,8 +1,9 @@
 {
   "name": "Installer.Install",
   "kind": "pyxis.Control",
-  "style": "display:flex;flex-direction:column;gap:12px",
+  "style": "display:flex;flex-direction:column;gap:12px;min-width:0",
   "published": { "info": {} },
+  "events": { "onRetry": "" },
   "components": [
     { "name": "phase", "kind": "remochi.Subheader", "content": "Ready" },
     { "name": "bar", "kind": "remochi.ProgressBar", "value": 0, "color": "blue" },
@@ -11,12 +12,15 @@
       { "kind": "remochi.Spinner" },
       { "name": "busyText", "kind": "pyxis.Control", "tag": "span", "style": "font-size:13px;opacity:0.7" }
     ] },
-    { "name": "failed", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:flex-start;gap:8px;color:#b3261e;font-size:13px", "components": [
+    { "name": "failed", "kind": "pyxis.Control", "showing": false, "style": "display:flex;align-items:flex-start;gap:8px;padding:10px 12px;border-radius:var(--mochi-corner-sm, 10px);background:color-mix(in srgb, var(--mochi-error) 12%, transparent);border:1px solid color-mix(in srgb, var(--mochi-error) 35%, transparent);color:var(--mochi-error);font-size:13px;min-width:0", "components": [
       { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16, "style": "flex-shrink:0;margin-top:1px" },
-      { "kind": "pyxis.Control", "components": [
+      { "kind": "pyxis.Control", "style": "min-width:0;flex:1", "components": [
         { "kind": "pyxis.Control", "style": "font-weight:600", "content": "Installation failed" },
-        { "name": "failText", "kind": "pyxis.Control", "style": "white-space:pre-wrap" },
-        { "kind": "pyxis.Control", "style": "opacity:0.75;margin-top:6px", "content": "Go Back to pick a different package, or fix the issue and retry." }
+        { "name": "failText", "kind": "pyxis.Control", "style": "white-space:pre-wrap;overflow-wrap:anywhere" },
+        { "kind": "pyxis.Control", "style": "opacity:0.75;margin-top:6px", "content": "Go Back to pick a different package, or fix the issue and retry." },
+        { "kind": "pyxis.Control", "style": "margin-top:8px", "components": [
+          { "name": "retry", "kind": "remochi.Button", "variant": "blue", "content": "Retry", "attributes": { "data-install-retry": true }, "ontap": "retryTap" }
+        ] }
       ] }
     ] }
   ]

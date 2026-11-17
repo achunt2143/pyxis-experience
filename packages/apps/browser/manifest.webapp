@@ -1,11 +1,12 @@
 {
   "id": "browser",
-  "name": "Browser",
+  "name": "Vela",
   "version": "0.1.0",
   "type": "web",
   "entry": "index.html",
+  "accent": "#0284c7",
   "category": "system",
   "singleInstance": true,
   "display": "windowed",
-  "permissions": ["browser", "network"]
+  "permissions": ["browser", "network:read"]
 }

@@ -1,4 +1,5 @@
 // The Tasks data model and the pure functions over it: no Duyo, no DOM.
+import { formatLocalDate } from '@pyxis/app-sdk';
 // The document shape and STORE name are what users already have on disk (and what Bloom's
 // desktop search reads through `filesystem:apps`): do not change them.
 
@@ -56,24 +57,38 @@ export const CATEGORY_OPTIONS = [
 ];
 
 export const PRIORITY_CONFIG: Record<Priority, { label: string; color: string; bg: string }> = {
-  high: { label: 'High', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' },
-  medium: { label: 'Medium', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' },
-  low: { label: 'Low', color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.15)' },
-  none: { label: 'None', color: 'var(--color-text-secondary, #64748b)', bg: 'transparent' },
+  high: { label: 'High', color: 'var(--mochi-error)', bg: 'rgba(239, 83, 80, 0.16)' },
+  medium: { label: 'Medium', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.16)' },
+  low: { label: 'Low', color: 'var(--mochi-primary)', bg: 'var(--mochi-primary-soft)' },
+  none: { label: 'None', color: 'var(--mochi-text-muted)', bg: 'transparent' },
 };
 
 export function newTaskId(): string {
   return Math.random().toString(36).slice(2, 11);
 }
 
+// The device's own calendar day. toISOString() is UTC's, which is already tomorrow on an
+// evening west of Greenwich (and still yesterday on a morning east of it).
 export function getTodayString(): string {
-  return new Date().toISOString().slice(0, 10);
+  return formatLocalDate(new Date());
 }
 
 export function getTomorrowString(): string {
   const d = new Date();
   d.setDate(d.getDate() + 1);
-  return d.toISOString().slice(0, 10);
+  return formatLocalDate(d);
+}
+
+/** A row's title: never blank, so an emptied name still reads as a task. */
+export function taskTitle(t: Pick<Task, 'text'>): string {
+  return t.text.trim() || 'Untitled task';
+}
+
+/** The tasks whose title or notes contain the search (case-insensitive); all of them for none. */
+export function searchTasks(tasks: Task[], search: string): Task[] {
+  const q = search.trim().toLowerCase();
+  if (!q) return tasks;
+  return tasks.filter((t) => t.text.toLowerCase().includes(q) || (t.notes ?? '').toLowerCase().includes(q));
 }
 
 export function fmtDisplayDate(dateStr?: string, todayStr = getTodayString()): string {
@@ -173,14 +188,14 @@ const CHIP_BASE =
 function chipStyle(active: boolean, color: string, bg: string): string {
   return (
     `background:${active ? bg : 'transparent'};` +
-    `color:${active ? color : 'var(--color-text-secondary, #64748b)'};` +
-    `border:1px solid ${active ? color : 'var(--color-border, #e5e7eb)'};` +
+    `color:${active ? color : 'var(--mochi-text-muted)'};` +
+    `border:1px solid ${active ? color : 'var(--mochi-border)'};` +
     CHIP_BASE
   );
 }
 
-const PRIMARY = 'var(--mochi-primary, #2f6fed)';
-const PRIMARY_SOFT = 'rgba(59, 130, 246, 0.12)';
+const PRIMARY = 'var(--mochi-primary)';
+const PRIMARY_SOFT = 'var(--mochi-primary-soft)';
 
 /** The quick-add chips: Today, Tomorrow, then High / Medium / Low. */
 export function chipPills(draftDueDate: string, draftPriority: Priority, todayStr: string, tomorrowStr: string): PillItem[] {
@@ -229,9 +244,9 @@ export function priorityPills(current: Priority): PillItem[] {
       iconSize: 11,
       iconStyle: active ? `fill:${cfg.color}` : '',
       style:
-        `background:${active ? cfg.bg : 'var(--color-surface, var(--mochi-surface, #ffffff))'};` +
-        `color:${active ? cfg.color : 'var(--color-text, #334155)'};` +
-        `border:1px solid ${active ? cfg.color : 'var(--color-border, #e5e7eb)'};` +
+        `background:${active ? cfg.bg : 'var(--mochi-surface)'};` +
+        `color:${active ? cfg.color : 'var(--mochi-text)'};` +
+        `border:1px solid ${active ? cfg.color : 'var(--mochi-border)'};` +
         `border-radius:8px;padding:5px 4px;font-size:0.72rem;font-weight:${active ? 700 : 500};` +
         'cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px',
     };

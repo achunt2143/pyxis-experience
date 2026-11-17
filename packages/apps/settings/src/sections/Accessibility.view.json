@@ -1,14 +1,57 @@
 {
   "name": "Settings.Accessibility",
   "kind": "pyxis.Control",
-  "published": { "animationMode": "full" },
+  "published": {
+    "animationMode": "full",
+    "textScale": 100,
+    "highContrast": false,
+    "reduceTransparency": false,
+    "cursorSize": "default",
+    "error": ""
+  },
   "components": [
     { "kind": "Settings.Groupbox", "title": "Animations", "glyph": "Accessibility", "glyphColor": "#ec4899", "components": [
-      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Animations" }, "style": "display:flex;flex-direction:column;gap:8px", "components": [
+      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Animations" }, "style": "display:flex;flex-direction:column;gap:8px;width:100%;min-width:0", "components": [
         { "name": "full", "kind": "Settings.Choice", "option": "full", "label": "Full", "hint": "Windows and panels open, close and move with motion", "attributes": { "data-animation-mode": "full" }, "ontap": "pick" },
         { "name": "reduced", "kind": "Settings.Choice", "option": "reduced", "label": "Reduced", "hint": "Short fades only, with no scaling or sliding", "attributes": { "data-animation-mode": "reduced" }, "ontap": "pick" },
         { "name": "off", "kind": "Settings.Choice", "option": "off", "label": "Off", "hint": "Everything changes at once", "attributes": { "data-animation-mode": "off" }, "ontap": "pick" }
       ] }
-    ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Text size", "glyph": "Type", "glyphColor": "#6366f1", "components": [
+      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Text size" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(140px, 100%), 1fr));gap:8px;width:100%;min-width:0", "components": [
+        { "name": "scale75", "kind": "Settings.Choice", "option": "75", "label": "Small", "hint": "75%", "attributes": { "data-text-scale": "75" }, "ontap": "pickTextScale" },
+        { "name": "scale100", "kind": "Settings.Choice", "option": "100", "label": "Default", "hint": "100%", "attributes": { "data-text-scale": "100" }, "ontap": "pickTextScale" },
+        { "name": "scale125", "kind": "Settings.Choice", "option": "125", "label": "Large", "hint": "125%", "attributes": { "data-text-scale": "125" }, "ontap": "pickTextScale" },
+        { "name": "scale150", "kind": "Settings.Choice", "option": "150", "label": "Largest", "hint": "150%", "attributes": { "data-text-scale": "150" }, "ontap": "pickTextScale" }
+      ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Display contrast & transparency", "glyph": "Eye", "glyphColor": "#0ea5e9", "components": [
+      { "kind": "pyxis.Control", "classes": "mochi-item mochi-item-compact st-wrap-item", "components": [
+        { "kind": "pyxis.Control", "classes": "mochi-item-content", "components": [
+          { "kind": "pyxis.Control", "classes": "mochi-item-title", "content": "High contrast" },
+          { "kind": "pyxis.Control", "classes": "mochi-item-subtitle st-wrap", "content": "Increase text contrast and keyboard focus outlines." }
+        ] },
+        { "kind": "pyxis.Control", "classes": "mochi-item-right", "attributes": { "data-high-contrast": true }, "components": [
+          { "name": "highContrastToggle", "kind": "remochi.Toggle", "onChange": "toggleHighContrast" }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "classes": "mochi-item mochi-item-compact st-wrap-item", "components": [
+        { "kind": "pyxis.Control", "classes": "mochi-item-content", "components": [
+          { "kind": "pyxis.Control", "classes": "mochi-item-title", "content": "Reduce transparency" },
+          { "kind": "pyxis.Control", "classes": "mochi-item-subtitle st-wrap", "content": "Replace translucent frosted surfaces with solid backgrounds." }
+        ] },
+        { "kind": "pyxis.Control", "classes": "mochi-item-right", "attributes": { "data-reduce-transparency": true }, "components": [
+          { "name": "reduceTransparencyToggle", "kind": "remochi.Toggle", "onChange": "toggleReduceTransparency" }
+        ] }
+      ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Pointer size", "glyph": "MousePointer", "glyphColor": "#14b8a6", "components": [
+      { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Pointer size" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(150px, 100%), 1fr));gap:8px;width:100%;min-width:0", "components": [
+        { "name": "cursorDefault", "kind": "Settings.Choice", "option": "default", "label": "Default", "hint": "Standard pointer", "attributes": { "data-cursor-size": "default" }, "ontap": "pickCursorSize" },
+        { "name": "cursorLarge", "kind": "Settings.Choice", "option": "large", "label": "Large", "hint": "Easier to spot", "attributes": { "data-cursor-size": "large" }, "ontap": "pickCursorSize" },
+        { "name": "cursorXLarge", "kind": "Settings.Choice", "option": "xlarge", "label": "Extra large", "hint": "Maximum visibility", "attributes": { "data-cursor-size": "xlarge" }, "ontap": "pickCursorSize" }
+      ] }
+    ] },
+    { "name": "errorRow", "kind": "pyxis.Control", "classes": "st-error st-alert-banner", "showing": false }
   ]
 }

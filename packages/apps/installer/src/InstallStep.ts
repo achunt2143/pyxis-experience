@@ -21,6 +21,12 @@ export default view(spec, {
     this.infoChanged();
   },
 
+  retryTap() {
+    const { pkg } = this.info as Partial<InstallInfo>;
+    if (pkg) this.doRetry({ pkg });
+    return true;
+  },
+
   infoChanged() {
     const { pkg, progress, installError } = this.info as Partial<InstallInfo>;
     const phase = progress?.phase ?? 'idle';
@@ -32,7 +38,10 @@ export default view(spec, {
     const busy = phase !== 'failed' && phase !== 'done';
     $.busy.setShowing(busy && Boolean(pkg));
     $.busyText.setContent(`Installing ${pkg?.title ?? pkg?.package ?? ''}…`);
-    $.failed.setShowing(phase === 'failed');
+    const isFailed = phase === 'failed';
+    $.failed.setShowing(isFailed);
+    $.failed.setAttributes(isFailed ? { role: 'alert', 'data-install-error': true } : {});
     $.failText.setContent(installError ?? progress?.message ?? '');
+    $.retry.setDisabled(!pkg);
   },
 } satisfies CodeBehind);

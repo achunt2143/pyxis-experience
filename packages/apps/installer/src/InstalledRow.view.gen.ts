@@ -15,12 +15,18 @@ export type Named = {
   appType: Instance<"remochi.Badge">;
   /** pyxis.Control */
   meta: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  launchBtn: Instance<"remochi.Button">;
+  /** pyxis.Control */
+  launchLabel: Instance<"pyxis.Control">;
   /** pyxis.Control */
   confirmGroup: Instance<"pyxis.Control">;
   /** remochi.Button */
   confirm: Instance<"remochi.Button">;
   /** pyxis.Control */
   confirmLabel: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  cancel: Instance<"remochi.Button">;
   /** remochi.Button */
   trash: Instance<"remochi.Button">;
 };

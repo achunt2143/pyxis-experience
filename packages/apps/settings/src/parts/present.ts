@@ -9,3 +9,8 @@ export function present(node: Component, shown: boolean, attributes: Record<stri
   node.setShowing(shown);
   node.setAttributes(shown ? attributes : {});
 }
+
+/** Forwards `aria-label` onto the inner interactive element wrapped by a Remochi Duyo component. */
+export function forwardAriaLabel(component: Component, selector: string, label: string): void {
+  document.querySelector(`[data-duyo-id="${component.id}"] ${selector}`)?.setAttribute('aria-label', label);
+}

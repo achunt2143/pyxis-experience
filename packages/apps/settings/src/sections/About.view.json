@@ -6,25 +6,31 @@
     { "kind": "Settings.Groupbox", "title": "System specifications", "glyph": "Info", "glyphColor": "#06b6d4", "group": "about", "components": [
       { "name": "asking", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;padding:12px 0", "components": [
         { "kind": "remochi.Spinner", "styleType": "light", "size": "normal" },
-        { "kind": "pyxis.Control", "tag": "span", "content": "Asking the system…", "style": "font-size:0.82rem;color:var(--color-text-secondary)" }
+        { "kind": "pyxis.Control", "tag": "span", "classes": "st-secondary", "content": "Asking the system…" }
       ] },
       { "name": "answer", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;gap:8px", "components": [
-        { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Settings.Fact", "keyField": "key", "style": "display:flex;flex-direction:column;gap:8px" },
+        { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Settings.Fact", "keyField": "key", "style": "display:flex;flex-direction:column;gap:6px" },
         { "name": "failed", "kind": "pyxis.Control", "classes": "st-secondary", "content": "The system service didn't answer.", "showing": false }
       ] }
     ] },
     { "kind": "Settings.Groupbox", "title": "Heritage & architecture", "glyph": "Sparkles", "glyphColor": "#f59e0b", "components": [
-      { "kind": "pyxis.Control", "tag": "p", "style": "margin:0;font-size:0.8rem;line-height:1.6;color:var(--color-text-secondary, #64748b)", "components": [
-        { "kind": "pyxis.Control", "tag": "span", "content": "Pyxis is a modern open-source Linux experience inspired by the elegant principles of " },
-        { "kind": "pyxis.Control", "tag": "strong", "content": "Palm webOS" },
-        { "kind": "pyxis.Control", "tag": "span", "content": " and the " },
-        { "kind": "pyxis.Control", "tag": "strong", "content": "Zen of Palm" },
-        { "kind": "pyxis.Control", "tag": "span", "content": ". Every application runs in an isolated process sandbox composited via the " },
-        { "kind": "pyxis.Control", "tag": "strong", "content": "Evo Wayland compositor" },
-        { "kind": "pyxis.Control", "tag": "span", "content": " and rendered using the tactile " },
-        { "kind": "pyxis.Control", "tag": "strong", "content": "Remochi UI library" },
-        { "kind": "pyxis.Control", "tag": "span", "content": "." }
+      { "kind": "pyxis.Control", "classes": "st-mochi-card", "components": [
+        { "kind": "pyxis.Control", "tag": "p", "classes": "st-secondary", "style": "margin:0;font-size:0.8rem;line-height:1.6", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "Pyxis is a modern open-source Linux experience inspired by the elegant principles of " },
+          { "kind": "pyxis.Control", "tag": "strong", "style": "color:var(--mochi-text)", "content": "Palm webOS" },
+          { "kind": "pyxis.Control", "tag": "span", "content": " and the " },
+          { "kind": "pyxis.Control", "tag": "strong", "style": "color:var(--mochi-text)", "content": "Zen of Palm" },
+          { "kind": "pyxis.Control", "tag": "span", "content": ". Every application runs in an isolated process sandbox composited via the " },
+          { "kind": "pyxis.Control", "tag": "strong", "style": "color:var(--mochi-text)", "content": "Evo Wayland compositor" },
+          { "kind": "pyxis.Control", "tag": "span", "content": " and rendered using the tactile " },
+          { "kind": "pyxis.Control", "tag": "strong", "style": "color:var(--mochi-text)", "content": "Remochi UI library" },
+          { "kind": "pyxis.Control", "tag": "span", "content": "." }
+        ] }
       ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Storage & system services", "glyph": "HardDrive", "glyphColor": "#8b5cf6", "components": [
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "Monitor filesystem usage and live Echo daemon services." },
+      { "name": "diagnostics", "kind": "Settings.SystemDiagnosticsCard" }
     ] }
   ]
 }

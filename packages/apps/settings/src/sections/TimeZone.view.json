@@ -8,9 +8,9 @@
         { "name": "city", "kind": "pyxis.Control", "tag": "span", "style": "font-weight:700;font-size:0.95rem" },
         { "name": "detail", "kind": "pyxis.Control", "tag": "span", "classes": "st-secondary" }
       ] },
-      { "kind": "pyxis.Control", "style": "position:relative", "components": [
+      { "kind": "pyxis.Control", "style": "position:relative;width:100%;min-width:0", "components": [
         { "kind": "pyxis.Icon", "icon": "Search", "size": 14, "style": "position:absolute;left:10px;top:50%;transform:translateY(-50%);opacity:0.5;pointer-events:none" },
-        { "name": "search", "kind": "pyxis.Control", "tag": "input", "type": "search", "classes": "st-input search", "placeholder": "Search by city, country or offset (e.g. Tokyo, Brazil, UTC+5:30)",
+        { "name": "search", "kind": "remochi.Input", "type": "search", "width": "100%", "classes": "st-input search", "style": "margin-right:0;padding:8px 10px 8px 30px;font-size:0.84rem;box-sizing:border-box", "placeholder": "Search by city, country or offset (e.g. Tokyo, Brazil, UTC+5:30)",
           "attributes": { "aria-label": "Search time zones", "aria-controls": "timezone-list", "data-timezone-search": true }, "oninput": "searched" }
       ] },
       { "name": "list", "kind": "Settings.ZoneList", "onChoose": "chosen" },

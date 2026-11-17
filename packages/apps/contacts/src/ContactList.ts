@@ -1,4 +1,5 @@
 import { view, type Component } from '@duyojs/duyo';
+import { onDestroy } from '@pyxis/app-sdk/duyo';
 import spec from './ContactList.view.json';
 import { CATEGORIES, type Contact } from './model';
 import type { CodeBehind } from './ContactList.view.gen';
@@ -8,13 +9,27 @@ import './Directory';
 
 /**
  * The directory panel: header, search, category pills, the A-Z list. State comes in
- * (`items`, `counts`, `category`, `selectedId`, `loaded`, `total`); onAddContact,
- * onExportAll, onSearchChange, onCategoryChange and onSelectContact go out.
+ * (`items`, `counts`, `category`, `selectedId`, `loaded`, `total`, `notice`); onAddContact,
+ * onExportAll, onImportFile {text}, onSearchChange, onCategoryChange and onSelectContact go out.
  */
+
+const NOTICE_MS = 4000;
 export default view(spec, {
   create() {
     this.inherited();
+    this._noticeTimer = null as ReturnType<typeof setTimeout> | null;
+    onDestroy(this, () => {
+      if (this._noticeTimer) clearTimeout(this._noticeTimer);
+    });
     this.draw();
+  },
+
+  focusSearch() {
+    const input = document.querySelector<HTMLInputElement>(
+      `input[data-duyo-id="${this.$.search.id}"], [data-duyo-id="${this.$.search.id}"] input`
+    );
+    input?.focus();
+    input?.select();
   },
 
   add() {
@@ -23,6 +38,26 @@ export default view(spec, {
   },
   exportAll() {
     this.doExportAll();
+    return true;
+  },
+  /** A one-off file picker: the file's text goes up as onImportFile. */
+  importPick() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.vcf,text/vcard,text/x-vcard';
+    input.onchange = () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      void file.text().then(
+        (text) => {
+          if (!this.destroyed) this.doImportFile({ text });
+        },
+        () => {
+          if (!this.destroyed) this.setNotice('Could not read that file.');
+        }
+      );
+    };
+    input.click();
     return true;
   },
   searchInput(_sender, event) {
@@ -45,6 +80,20 @@ export default view(spec, {
     this.draw();
   },
 
+  noticeChanged() {
+    const text = String(this.notice ?? '');
+    this.$.notice.setContent(text);
+    this.$.notice.setShowing(text !== '');
+    if (this._noticeTimer) clearTimeout(this._noticeTimer);
+    this._noticeTimer = null;
+    if (text) {
+      this._noticeTimer = setTimeout(() => {
+        this._noticeTimer = null;
+        if (!this.destroyed) this.setNotice('');
+      }, NOTICE_MS);
+    }
+  },
+
   draw() {
     const { exportWrap, pills, loading, empty, emptyText, directory } = this.$;
     const items = this.items as Contact[];
@@ -56,6 +105,7 @@ export default view(spec, {
     emptyText.setContent(this.search ? 'No contacts match your search' : 'No contacts in this category');
     directory.setShowing(this.loaded && items.length > 0);
     directory.setItems(items);
+    if (this.$.search.getValue() !== this.search) this.$.search.setValue(this.search as string);
     directory.setSelectedId(this.selectedId);
   },
 } satisfies CodeBehind);

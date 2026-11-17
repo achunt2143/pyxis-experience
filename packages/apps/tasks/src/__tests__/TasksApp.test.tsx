@@ -26,7 +26,7 @@ vi.mock('../../../../app-sdk/src/appStorage', () => ({
   loadAppData: async () => structuredClone(storage.doc),
   saveAppData: async (_store: string, data: { tasks: Task[] }) => {
     storage.saves.push(structuredClone(data));
-    return true;
+    return !storage.fail;
   },
 }));
 vi.mock('../../../../app-sdk/src/usePyxisTheme', () => ({ usePyxisTheme: () => 'light' }));
@@ -138,6 +138,10 @@ describe('Tasks: quick add', () => {
   });
 
   it('adds on submit into Inbox, opens it in the inspector, saves after 600 ms, clears the draft', async () => {
+    // A wide window: jsdom lays out nothing, and a 0 px stack is the narrow, one-panel layout.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      x: 0, y: 0, top: 0, left: 0, right: 1200, bottom: 800, width: 1200, height: 800, toJSON: () => ({}),
+    } as DOMRect);
     m = await mountTasks([]);
     const submit = $(m.host, 'button[type="submit"]') as HTMLButtonElement;
     expect(submit.disabled).toBe(true);
@@ -307,5 +311,91 @@ describe('Tasks: stream and inspector', () => {
     m.unmount();
     m = undefined;
     expect(storage.saves.at(-1)!.tasks[0]!.text).toBe('Late');
+  });
+});
+
+describe('Tasks: Wave B fixes', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+  });
+
+  it("today is the device's calendar day, not UTC's", async () => {
+    vi.setSystemTime(new Date(2030, 0, 31, 23, 30));
+    const { getTodayString, getTomorrowString } = await import('../model');
+    expect(getTodayString()).toBe('2030-01-31');
+    expect(getTomorrowString()).toBe('2030-02-01');
+  });
+
+  it('the due date shows as that local day, a pick stores that day, and Clear removes it', async () => {
+    m = await mountTasks([seedTask(0, { dueDate: '2031-05-04' })]);
+    open(m.host, 'Task number 0');
+    const due = m.app.root.$['inspector']!.$['due']!;
+    const shown = due.get('value') as Date;
+    expect([shown.getFullYear(), shown.getMonth(), shown.getDate()]).toEqual([2031, 4, 4]);
+    act(() => due.doChange({ value: new Date(2032, 2, 1) }));
+    await advance(600);
+    expect(storage.saves.at(-1)!.tasks[0]!.dueDate).toBe('2032-03-01');
+    click($(m.host, 'button[aria-label="Clear Due Date"]') ?? $(m.host, '[title="Clear Due Date"] button')!);
+    await advance(600);
+    expect(storage.saves.at(-1)!.tasks[0]!.dueDate).toBeUndefined();
+  });
+
+  it('an emptied name is not saved: the task keeps its last name', async () => {
+    m = await mountTasks([seedTask(0)]);
+    open(m.host, 'Task number 0');
+    type(nameInput(m.host), '   ');
+    await advance(600);
+    expect(storage.saves).toEqual([]);
+    expect(rowTexts(m.host)).toEqual(['Task number 0']);
+  });
+
+  it('a failed save never says Saved: it shows the error, and Retry writes again', async () => {
+    m = await mountTasks([seedTask(0)]);
+    open(m.host, 'Task number 0');
+    storage.fail = true;
+    type(nameInput(m.host), 'Renamed');
+    await advance(600);
+    const root = m.app.root.$;
+    expect(root['saveErrorBanner']!.getShowing()).toBe(true);
+    expect(root['inspector']!.$['saved']!.getShowing()).toBe(false);
+    storage.fail = false;
+    click($$(m.host, 'button').find((b) => b.textContent?.includes('Retry'))!);
+    await advance(0);
+    expect(storage.saves.at(-1)!.tasks[0]!.text).toBe('Renamed');
+    expect(root['saveErrorBanner']!.getShowing()).toBe(false);
+    expect(root['inspector']!.$['saved']!.getShowing()).toBe(true);
+  });
+
+  it('search narrows the stream by title and notes, and Escape clears it', async () => {
+    m = await mountTasks([seedTask(0), seedTask(1, { notes: 'call the plumber' }), seedTask(2)]);
+    const search = $(m.host, 'input[placeholder="Search tasks…"]') as HTMLInputElement;
+    type(search, 'plumber');
+    expect(rowTexts(m.host)).toEqual(['Task number 1']);
+    type(search, 'number 2');
+    expect(rowTexts(m.host)).toEqual(['Task number 2']);
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(search.value).toBe('');
+    expect(rows(m.host).length).toBe(3);
+  });
+
+  it('in the narrow layout quick add stays in the stream, with the field still focused', async () => {
+    m = await mountTasks([]);
+    type(draftInput(m.host), 'First');
+    act(() => {
+      fireEvent.submit($(m!.host, 'form')!);
+    });
+    expect(rowTexts(m.host)).toEqual(['First']);
+    expect(inspectorOpen(m.host)).toBe(false);
+    expect(document.activeElement).toBe(draftInput(m.host));
+  });
+
+  it('Ctrl+N puts the keyboard in the quick-add field', async () => {
+    m = await mountTasks([seedTask(0)]);
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'n', ctrlKey: true, bubbles: true }));
+    });
+    expect(document.activeElement).toBe(draftInput(m.host));
   });
 });

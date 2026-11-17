@@ -3,14 +3,14 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
-  /** pyxis.Control */
-  tabWizard: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  tabInstalled: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  installedCount: Instance<"pyxis.Control">;
   /** remochi.Button */
   rescan: Instance<"remochi.Button">;
+  /** remochi.Button */
+  tabWizard: Instance<"remochi.Button">;
+  /** remochi.Button */
+  tabInstalled: Instance<"remochi.Button">;
+  /** pyxis.Control */
+  installedCount: Instance<"pyxis.Control">;
   /** pyxis.Control */
   wizardBody: Instance<"pyxis.Control">;
   /** remochi.Wizard */
@@ -30,7 +30,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'closeApp' | 'guardNext' | 'launchFromDone' | 'launchInstalled' | 'pickPackage' | 'removePackage' | 'rescan' | 'startOver' | 'tapInstalled' | 'tapWizard' | 'wizardStepped';
+export type Handlers = 'closeApp' | 'guardNext' | 'launchFromDone' | 'launchInstalled' | 'pickPackage' | 'removePackage' | 'rescan' | 'retryInstall' | 'startOver' | 'tapInstalled' | 'tapWizard' | 'wizardStepped';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

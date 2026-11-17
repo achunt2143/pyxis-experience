@@ -2,9 +2,49 @@
    and the fixed look of kinds whose dynamic look is set from code. */
 
 /* The search field is a little shorter and smaller than remochi's default. */
-.files-search input {
+input.files-search {
   height: 32px;
   font-size: 0.82rem;
+  padding-right: 26px;
+}
+
+.files-search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--mochi-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.files-search-clear:hover {
+  background: var(--mochi-hover);
+  color: var(--mochi-text);
+}
+
+.files-places-btn,
+.files-places-close {
+  display: none;
+}
+.repanel[data-narrow="true"] .files-places-btn,
+.repanel[data-narrow="true"] .files-places-close {
+  display: inline-flex;
+}
+
+.files-entry:focus-visible {
+  outline: 2px solid var(--mochi-primary);
+  outline-offset: -2px;
+}
+.files-entry:hover {
+  background: var(--mochi-hover);
 }
 
 /* A breadcrumb button; the last one (where you are) is highlighted. */
@@ -15,7 +55,7 @@
   padding: 4px 8px;
   font-size: 0.82rem;
   font-weight: 500;
-  color: var(--color-text, var(--mochi-text, #111827));
+  color: var(--mochi-text);
   cursor: pointer;
   white-space: nowrap;
   display: flex;
@@ -25,22 +65,28 @@
   font-family: inherit;
 }
 .files-crumb.last {
-  background: var(--mochi-primary-soft, rgba(47, 111, 237, 0.12));
-  border-color: var(--mochi-primary, #2f6fed);
-  color: var(--mochi-primary, #2f6fed);
+  background: var(--mochi-primary-soft);
+  border-color: var(--mochi-primary);
+  color: var(--mochi-primary);
   font-weight: 600;
 }
 
-/* The status bar's Refresh. */
+/* The status bar's Refresh and Hidden toggle. */
 .files-refresh {
   background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--mochi-text-muted);
   display: flex;
   align-items: center;
   gap: 4px;
   font: inherit;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+.files-refresh.active {
+  color: var(--mochi-primary);
+  font-weight: 600;
 }
 
 /* The inspector's copy links. */
@@ -48,7 +94,7 @@
   background: transparent;
   border: none;
   cursor: pointer;
-  color: var(--mochi-primary, #2f6fed);
+  color: var(--mochi-primary);
   display: flex;
   align-items: center;
   gap: 4px;
@@ -58,7 +104,7 @@
 .files-label {
   font-size: 0.72rem;
   font-weight: 600;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--mochi-text-muted);
 }
 
 .files-text {
@@ -70,8 +116,37 @@
   word-break: break-word;
   max-height: 240px;
   overflow: auto;
-  background: var(--mochi-field-bg, rgba(0, 0, 0, 0.03));
+  color: var(--mochi-text);
+  background: var(--mochi-panel-bg);
   padding: 10px;
   border-radius: 10px;
-  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  border: 1px solid var(--mochi-border);
+}
+
+.files-inspector-card {
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.files-inspector-card > .mochi-floating-panel {
+  border: 1px solid var(--mochi-border);
+  box-sizing: border-box;
+  min-width: 0;
+}
+.files-inspector-card--image > .mochi-floating-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 14px;
+}
+.files-inspector-card--center > .mochi-floating-panel {
+  padding: 22px 14px;
+  text-align: center;
+}
+.files-inspector-card--details > .mochi-floating-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px;
 }

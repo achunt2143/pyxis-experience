@@ -14,7 +14,11 @@ export const PHASE_LABEL: Record<InstallPhase, string> = {
 };
 
 /** Permissions that grant real capability at the bridge today. */
-export const ENFORCED_PERMISSIONS = new Set(['filesystem.read', 'filesystem.write', 'notifications']);
+export const ENFORCED_PERMISSIONS = new Set(['filesystem:read', 'filesystem:write', 'notifications']);
+
+export function isInstallingPhase(phase: InstallPhase | undefined): boolean {
+  return phase === 'verifying' || phase === 'installing' || phase === 'registering';
+}
 
 export function formatSize(bytes: number): string {
   if (!bytes) return '—';

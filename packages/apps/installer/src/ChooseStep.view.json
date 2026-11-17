@@ -1,13 +1,13 @@
 {
   "name": "Installer.Choose",
   "kind": "pyxis.Control",
-  "style": "display:flex;flex-direction:column;gap:12px",
+  "style": "display:flex;flex-direction:column;gap:12px;min-width:0",
   "published": { "info": {} },
   "events": { "onRescan": "", "onPick": "" },
   "components": [
-    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;justify-content:space-between", "components": [
-      { "name": "heading", "kind": "remochi.Subheader", "content": "Scanning for packages…" },
-      { "name": "rescan", "kind": "remochi.Button", "variant": "normal", "ontap": "rescanTap", "components": [
+    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;justify-content:space-between;flex-wrap:wrap;min-width:0", "components": [
+      { "name": "heading", "kind": "remochi.Subheader", "classes": "inst-subheader", "content": "Scanning for packages…", "style": "min-width:0;flex:1" },
+      { "name": "rescan", "kind": "remochi.Button", "variant": "normal", "ontap": "rescanTap", "style": "flex-shrink:0", "components": [
         { "kind": "pyxis.Control", "tag": "span", "style": "display:flex;align-items:center;gap:6px", "components": [
           { "kind": "pyxis.Icon", "icon": "RefreshCw", "size": 14 },
           { "kind": "pyxis.Control", "tag": "span", "content": "Rescan" }
@@ -15,14 +15,14 @@
       ] }
     ] },
     { "name": "spinner", "kind": "remochi.Spinner", "showing": false },
-    { "name": "errorRow", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;color:#b3261e;font-size:13px", "showing": false, "components": [
-      { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16 },
-      { "name": "errorText", "kind": "pyxis.Control", "tag": "span" }
+    { "name": "errorRow", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:var(--mochi-corner-sm, 10px);background:color-mix(in srgb, var(--mochi-error) 12%, transparent);border:1px solid color-mix(in srgb, var(--mochi-error) 35%, transparent);color:var(--mochi-error);font-size:13px;min-width:0;overflow-wrap:anywhere", "showing": false, "components": [
+      { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16, "style": "flex-shrink:0" },
+      { "name": "errorText", "kind": "pyxis.Control", "tag": "span", "style": "min-width:0" }
     ] },
     { "name": "empty", "kind": "pyxis.Control", "classes": "inst-card", "showing": false,
-      "style": "padding:24px;text-align:center;line-height:1.6;font-size:13px;color:var(--color-text-secondary, #6b7280)", "components": [
-      { "kind": "pyxis.Icon", "icon": "Package", "size": 36, "color": "var(--color-border, #d1d5db)", "style": "margin:0 auto 10px auto;display:block" },
-      { "kind": "pyxis.Control", "style": "font-weight:600;color:var(--color-text, #111827)", "content": "No .ipk packages found" },
+      "style": "padding:24px;text-align:center;line-height:1.6;font-size:13px;color:var(--mochi-text-muted);min-width:0;overflow-wrap:anywhere", "components": [
+      { "kind": "pyxis.Icon", "icon": "Package", "size": 36, "color": "var(--mochi-border)", "style": "margin:0 auto 10px auto;display:block" },
+      { "kind": "pyxis.Control", "style": "font-weight:600;color:var(--mochi-text)", "content": "No .ipk packages found" },
       { "kind": "pyxis.Control", "style": "margin-top:4px", "components": [
         { "kind": "pyxis.Control", "tag": "span", "content": "Place packages in " },
         { "kind": "pyxis.Control", "tag": "code", "content": "/var/lib/pyxis/incoming" },
@@ -33,7 +33,7 @@
         { "kind": "pyxis.Control", "tag": "span", "content": ", then click Rescan." }
       ] }
     ] },
-    { "name": "list", "kind": "remochi.List", "showing": false, "components": [
+    { "name": "list", "kind": "remochi.List", "classes": "inst-pkg-list", "showing": false, "style": "min-width:0;width:100%", "components": [
       { "kind": "remochi.ListHeader", "content": "Available Packages" },
       { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Installer.PackageRow", "keyField": "path", "itemProps": { "ontap": "pickRow" }, "onSetupItem": "setupRow" }
     ] }

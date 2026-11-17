@@ -1,2 +1,3 @@
-// The `remochi/css` export is a plain CSS bundle with no type declarations.
+// The `remochi/css` and `@duyojs/duyo/remochi/css` exports are plain CSS bundles with no type declarations.
 declare module 'remochi/css';
+declare module '@duyojs/duyo/remochi/css';

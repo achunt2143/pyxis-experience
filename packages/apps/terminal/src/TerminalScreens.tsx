@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { Terminal } from 'xterm';
-import { FitAddon } from 'xterm-addon-fit';
-import 'xterm/css/xterm.css';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import '@xterm/xterm/css/xterm.css';
 import { useEcho, TERMINAL_IFACE, TERMINAL_SIGNALS } from '@pyxis/app-sdk';
 import { startMockShell } from './mockShell';
 import type { TerminalHub } from './terminalHub';
-import type { TabInfo } from './model';
+import { matchTerminalShortcut, type TabInfo, type TerminalMode } from './model';
 
 interface SingleTerminalProps {
   tabId: string;
@@ -14,6 +14,7 @@ interface SingleTerminalProps {
   hub: TerminalHub | null;
   onCloseTab: (id: string) => void;
   onSetTitle: (id: string, title: string) => void;
+  onSetMode: (id: string, mode: TerminalMode) => void;
 }
 
 /**
@@ -32,13 +33,33 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
   hub,
   onCloseTab,
   onSetTitle,
+  onSetMode,
 }) => {
   const echo = useEcho();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const terminalIdRef = useRef<string | null>(null);
+  const lastSizeRef = useRef<{ cols: number; rows: number } | null>(null);
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
   const mockInputRef = useRef<((data: string) => void) | null>(null);
+  const [mode, setMode] = useState<TerminalMode>('connecting');
+  const [bellActive, setBellActive] = useState(false);
+
+  const syncPtySize = useCallback(
+    (force = false) => {
+      const tid = terminalIdRef.current;
+      const term = termRef.current;
+      if (!tid || !term) return;
+      const prev = lastSizeRef.current;
+      if (force || !prev || prev.cols !== term.cols || prev.rows !== term.rows) {
+        lastSizeRef.current = { cols: term.cols, rows: term.rows };
+        void echo.resizeTerminal(tid, term.cols, term.rows);
+      }
+    },
+    [echo]
+  );
 
   // Update font size when changed from toolbar
   useEffect(() => {
@@ -46,31 +67,35 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
       termRef.current.options.fontSize = fontSize;
       try {
         fitRef.current?.fit();
+        syncPtySize(false);
       } catch {
         /* ignore */
       }
     }
-  }, [fontSize]);
+  }, [fontSize, syncPtySize]);
 
-  // When tab becomes active, fit and focus
+  // When tab becomes active, fit, sync PTY dimensions if changed, and focus
   useEffect(() => {
-    if (isActive && termRef.current) {
-      setTimeout(() => {
-        try {
-          fitRef.current?.fit();
-          termRef.current?.focus();
-        } catch {
-          /* ignore */
-        }
-      }, 50);
-    }
-  }, [isActive]);
+    if (!isActive || !termRef.current) return;
+    const timer = setTimeout(() => {
+      try {
+        fitRef.current?.fit();
+        syncPtySize(false);
+        termRef.current?.focus();
+      } catch {
+        /* ignore */
+      }
+    }, 50);
+    return () => clearTimeout(timer);
+  }, [isActive, syncPtySize]);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    const containerEl = containerRef.current;
+    if (!containerEl) return;
 
     const term = new Terminal({
       cursorBlink: true,
+      scrollback: 5000,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       fontSize,
       theme: {
@@ -98,9 +123,12 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
       convertEol: true,
     });
 
+    // Defer app-level shortcuts to TerminalApp's keydown listener instead of letting xterm emit control chars.
+    term.attachCustomKeyEventHandler?.((ev) => !matchTerminalShortcut(ev));
+
     const fit = new FitAddon();
     term.loadAddon(fit);
-    term.open(containerRef.current);
+    term.open(containerEl);
     try {
       fit.fit();
     } catch {
@@ -112,8 +140,19 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
     hub?.registerTerm(tabId, term);
 
     let disposed = false;
+    let bellTimer: ReturnType<typeof setTimeout> | undefined;
+    const bellDisposable = term.onBell?.(() => {
+      if (disposed) return;
+      setBellActive(true);
+      if (bellTimer) clearTimeout(bellTimer);
+      bellTimer = setTimeout(() => {
+        if (!disposed) setBellActive(false);
+      }, 220);
+    });
+
     let unsubOutput: (() => void) | undefined;
     let unsubClosed: (() => void) | undefined;
+    let dataDisposable: { dispose?: () => void } | undefined;
 
     const start = async () => {
       // 1. Subscribe to signals before opening terminal to avoid race conditions
@@ -132,19 +171,35 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
         }
       });
 
-      const opened = await echo.openTerminal(term.cols, term.rows);
-      if (disposed) return;
+      let opened: { terminalId: string } | null = null;
+      try {
+        opened = await echo.openTerminal(term.cols, term.rows);
+      } catch {
+        opened = null;
+      }
+
+      if (disposed) {
+        if (opened?.terminalId) {
+          void echo.closeTerminal(opened.terminalId);
+        }
+        return;
+      }
 
       if (opened && opened.terminalId) {
         // Native PTY mode
         const terminalId = opened.terminalId;
         terminalIdRef.current = terminalId;
+        lastSizeRef.current = { cols: term.cols, rows: term.rows };
+        setMode('pty');
+        onSetMode(tabId, 'pty');
 
-        term.onData((data) => {
+        dataDisposable = term.onData((data) => {
           void echo.writeTerminal(terminalId, data);
-        });
+        }) as unknown as { dispose?: () => void };
       } else {
-        // Dev / Browser Mock Shell mode
+        // Dev / Browser Mock Shell mode (or fallback if openTerminal failed)
+        setMode('mock');
+        onSetMode(tabId, 'mock');
         mockInputRef.current = startMockShell(term, tabId, onSetTitle, () => onCloseTab(tabId));
       }
 
@@ -160,22 +215,39 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
     void start();
 
     const onResize = () => {
+      if (!isActiveRef.current) return;
       try {
         fit.fit();
-        if (terminalIdRef.current) {
-          void echo.resizeTerminal(terminalIdRef.current, term.cols, term.rows);
-        }
+        syncPtySize(true);
       } catch {
         /* ignore */
       }
     };
     window.addEventListener('resize', onResize);
 
+    const resizeObserver =
+      typeof ResizeObserver !== 'undefined'
+        ? new ResizeObserver(() => {
+            if (!isActiveRef.current) return;
+            try {
+              fit.fit();
+              syncPtySize(true);
+            } catch {
+              /* ignore */
+            }
+          })
+        : null;
+    resizeObserver?.observe(containerEl);
+
     return () => {
       disposed = true;
+      if (bellTimer) clearTimeout(bellTimer);
+      bellDisposable?.dispose?.();
+      dataDisposable?.dispose?.();
       hub?.registerTerm(tabId, null);
       hub?.registerSendInput(tabId, null);
       window.removeEventListener('resize', onResize);
+      resizeObserver?.disconnect();
       unsubOutput?.();
       unsubClosed?.();
       if (terminalIdRef.current) {
@@ -188,6 +260,9 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
 
   return (
     <div
+      className={bellActive ? 'term-screen term-bell-active' : 'term-screen'}
+      data-terminal-mode={mode}
+      data-bell={bellActive ? 'active' : 'idle'}
       style={{
         display: isActive ? 'block' : 'none',
         width: '100%',
@@ -211,6 +286,7 @@ export interface TerminalScreensProps {
   hub: TerminalHub | null;
   onCloseTab: (id: string) => void;
   onSetTitle: (id: string, title: string) => void;
+  onSetMode: (id: string, mode: TerminalMode) => void;
 }
 
 /**
@@ -230,13 +306,15 @@ export const TerminalScreens: React.FC<TerminalScreensProps> = ({
   hub,
   onCloseTab,
   onSetTitle,
+  onSetMode,
 }) => {
-  const latest = useRef({ onCloseTab, onSetTitle });
+  const latest = useRef({ onCloseTab, onSetTitle, onSetMode });
   useEffect(() => {
-    latest.current = { onCloseTab, onSetTitle };
+    latest.current = { onCloseTab, onSetTitle, onSetMode };
   });
   const closeTab = useCallback((id: string) => latest.current.onCloseTab(id), []);
   const setTitle = useCallback((id: string, title: string) => latest.current.onSetTitle(id, title), []);
+  const setMode = useCallback((id: string, mode: TerminalMode) => latest.current.onSetMode(id, mode), []);
 
   return (
     <>
@@ -249,6 +327,7 @@ export const TerminalScreens: React.FC<TerminalScreensProps> = ({
           hub={hub}
           onCloseTab={closeTab}
           onSetTitle={setTitle}
+          onSetMode={setMode}
         />
       ))}
     </>

@@ -1,14 +1,25 @@
 // Settings' adapted kinds, collected into Settings' own pack (registerIsland.ts).
-import type { ElementType } from 'react';
-import { adapt } from '@duyojs/duyo/react';
-import { Scrubber, WallpaperGrid, WallpaperPreview, ZoneList } from './IslandViews';
+import { adaptIsland } from '@pyxis/app-sdk/duyo';
+import {
+  AccountRoster,
+  AppPermissionsCard,
+  DisplayCard,
+  NetworkConfigCard,
+  PowerBrightnessCard,
+  PrivilegedAccessCard,
+  Scrubber,
+  SystemDiagnosticsCard,
+  WallpaperGrid,
+  WallpaperPreview,
+  ZoneList,
+} from './IslandViews';
 import { registerIsland } from './registerIsland';
 
 type Props = Record<string, unknown>;
 
-export const wallpaperGridEntry = adapt({
+export const wallpaperGridEntry = adaptIsland({
   name: 'Settings.WallpaperGrid',
-  component: WallpaperGrid as unknown as ElementType,
+  component: WallpaperGrid,
   published: { wallpaper: 'daylight', motion: 'flow', pinned: null },
   events: { onPick: '' },
   props: (node): Props => ({
@@ -20,9 +31,9 @@ export const wallpaperGridEntry = adapt({
 
 });
 
-export const wallpaperPreviewEntry = adapt({
+export const wallpaperPreviewEntry = adaptIsland({
   name: 'Settings.WallpaperPreview',
-  component: WallpaperPreview as unknown as ElementType,
+  component: WallpaperPreview,
   published: { wallpaper: 'daylight', motion: 'flow', time: null, label: '', pill: '' },
   props: (node): Props => ({
     wallpaper: node.get('wallpaper'),
@@ -34,9 +45,9 @@ export const wallpaperPreviewEntry = adapt({
 
 });
 
-export const scrubberEntry = adapt({
+export const scrubberEntry = adaptIsland({
   name: 'Settings.Scrubber',
-  component: Scrubber as unknown as ElementType,
+  component: Scrubber,
   published: { shownMinutes: 0, scrubbing: false, pinned: null, hour24: false },
   events: { onScrub: '' },
   props: (node): Props => ({
@@ -49,9 +60,9 @@ export const scrubberEntry = adapt({
 
 });
 
-export const zoneListEntry = adapt({
+export const zoneListEntry = adaptIsland({
   name: 'Settings.ZoneList',
-  component: ZoneList as unknown as ElementType,
+  component: ZoneList,
   published: { results: [], loading: true, emptyText: '', grouped: true, currentZone: '', pending: null },
   events: { onChoose: '' },
   props: (node): Props => ({
@@ -66,4 +77,77 @@ export const zoneListEntry = adapt({
 
 });
 
-for (const entry of [wallpaperGridEntry, wallpaperPreviewEntry, scrubberEntry, zoneListEntry]) registerIsland(entry);
+export const accountRosterEntry = adaptIsland({
+  name: 'Settings.AccountRoster',
+  component: AccountRoster,
+  published: { accounts: [], activeUser: 'geckouser', busyUser: null, confirmingUser: null },
+  events: { onSwitch: '', onDelete: '', onAskDelete: '', onCancelDelete: '' },
+  props: (node): Props => ({
+    accounts: node.get('accounts'),
+    activeUser: node.get('activeUser'),
+    busyUser: node.get('busyUser'),
+    confirmingUser: node.get('confirmingUser'),
+    onSwitch: (user: string) => node['doSwitch']({ user }),
+    onDelete: (user: string) => node['doDelete']({ user }),
+    onAskDelete: (user: string) => node['doAskDelete']({ user }),
+    onCancelDelete: () => node['doCancelDelete']({}),
+  }),
+});
+
+export const privilegedAccessCardEntry = adaptIsland({
+  name: 'Settings.PrivilegedAccessCard',
+  component: PrivilegedAccessCard,
+  published: {},
+  props: (): Props => ({}),
+});
+
+export const appPermissionsCardEntry = adaptIsland({
+  name: 'Settings.AppPermissionsCard',
+  component: AppPermissionsCard,
+  published: {},
+  props: (): Props => ({}),
+});
+
+export const displayCardEntry = adaptIsland({
+  name: 'Settings.DisplayCard',
+  component: DisplayCard,
+  published: {},
+  props: (): Props => ({}),
+});
+
+export const powerBrightnessCardEntry = adaptIsland({
+  name: 'Settings.PowerBrightnessCard',
+  component: PowerBrightnessCard,
+  published: {},
+  props: (): Props => ({}),
+});
+
+export const networkConfigCardEntry = adaptIsland({
+  name: 'Settings.NetworkConfigCard',
+  component: NetworkConfigCard,
+  published: {},
+  props: (): Props => ({}),
+});
+
+export const systemDiagnosticsCardEntry = adaptIsland({
+  name: 'Settings.SystemDiagnosticsCard',
+  component: SystemDiagnosticsCard,
+  published: {},
+  props: (): Props => ({}),
+});
+
+for (const entry of [
+  wallpaperGridEntry,
+  wallpaperPreviewEntry,
+  scrubberEntry,
+  zoneListEntry,
+  accountRosterEntry,
+  privilegedAccessCardEntry,
+  appPermissionsCardEntry,
+  displayCardEntry,
+  powerBrightnessCardEntry,
+  networkConfigCardEntry,
+  systemDiagnosticsCardEntry,
+]) {
+  registerIsland(entry);
+}

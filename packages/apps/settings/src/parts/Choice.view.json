@@ -5,13 +5,6 @@
   "classes": "st-choice",
   "published": { "label": "", "hint": "", "checked": false, "glyph": "", "glyphColor": "", "option": "" },
   "components": [
-    { "kind": "pyxis.Control", "tag": "span", "classes": "st-choice-main", "components": [
-      { "name": "icon", "kind": "pyxis.Icon", "size": 18, "showing": false },
-      { "kind": "pyxis.Control", "tag": "span", "style": "min-width:0", "components": [
-        { "name": "title", "kind": "pyxis.Control", "tag": "span", "classes": "st-choice-label" },
-        { "name": "hintText", "kind": "pyxis.Control", "tag": "span", "classes": "st-choice-hint", "showing": false }
-      ] }
-    ] },
-    { "name": "active", "kind": "remochi.Badge", "content": "Active", "background": "var(--mochi-primary, #2f6fed)", "color": "#fff", "showing": false }
+    { "name": "item", "kind": "remochi.Item", "variant": "compact", "hoverable": true }
   ]
 }

@@ -8,6 +8,7 @@ export interface FsEntry {
   isDirectory: boolean;
   isSymlink: boolean;
   size: number;
+  modified?: number;
 }
 
 export interface FsStat {
@@ -24,11 +25,30 @@ export interface DirState {
   loading?: boolean;
 }
 
+export interface StoragePartitionLike {
+  device: string;
+  mountPoint: string;
+  total: number;
+  used: number;
+  available: number;
+}
+
+export interface StorageSummary {
+  device: string;
+  mountPoint: string;
+  total: number;
+  used: number;
+  available: number;
+  pct: number;
+}
+
 export type EntryKind = 'folder' | 'file' | 'image' | 'audio' | 'video' | 'code' | 'archive' | 'text';
 
-export type SortBy = 'name' | 'size';
+export type SortBy = 'name' | 'size' | 'modified' | 'type';
 export type SortOrder = 'asc' | 'desc';
 export type ViewMode = 'list' | 'grid';
+
+export const TOO_LARGE_PREVIEW_MSG = 'File is too large to preview (512 KB limit)';
 
 export interface Preview {
   entry: FsEntry;
@@ -73,14 +93,14 @@ export function kindOf(entry: FsEntry): EntryKind {
 }
 
 export const KIND_COLOR: Record<EntryKind, { text: string; bg: string; border: string }> = {
-  folder: { text: '#d97706', bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.35)' },
-  image: { text: '#059669', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.35)' },
-  audio: { text: '#9333ea', bg: 'rgba(168, 85, 247, 0.15)', border: 'rgba(168, 85, 247, 0.35)' },
-  video: { text: '#dc2626', bg: 'rgba(239, 68, 68, 0.15)', border: 'rgba(239, 68, 68, 0.35)' },
-  code: { text: '#0284c7', bg: 'rgba(14, 165, 233, 0.15)', border: 'rgba(14, 165, 233, 0.35)' },
-  archive: { text: '#ea580c', bg: 'rgba(234, 88, 12, 0.15)', border: 'rgba(234, 88, 12, 0.35)' },
-  text: { text: '#2563eb', bg: 'rgba(37, 99, 235, 0.15)', border: 'rgba(37, 99, 235, 0.35)' },
-  file: { text: '#64748b', bg: 'rgba(100, 116, 139, 0.15)', border: 'rgba(100, 116, 139, 0.35)' },
+  folder: { text: '#f59e0b', bg: 'rgba(245, 158, 11, 0.16)', border: 'rgba(245, 158, 11, 0.35)' },
+  image: { text: 'var(--mochi-success)', bg: 'rgba(76, 175, 80, 0.16)', border: 'rgba(76, 175, 80, 0.35)' },
+  audio: { text: '#a855f7', bg: 'rgba(168, 85, 247, 0.16)', border: 'rgba(168, 85, 247, 0.35)' },
+  video: { text: 'var(--mochi-error)', bg: 'rgba(239, 83, 80, 0.16)', border: 'rgba(239, 83, 80, 0.35)' },
+  code: { text: 'var(--mochi-info)', bg: 'rgba(33, 150, 243, 0.16)', border: 'rgba(33, 150, 243, 0.35)' },
+  archive: { text: '#f97316', bg: 'rgba(249, 115, 22, 0.16)', border: 'rgba(249, 115, 22, 0.35)' },
+  text: { text: 'var(--mochi-primary)', bg: 'var(--mochi-primary-soft)', border: 'var(--mochi-primary)' },
+  file: { text: 'var(--mochi-text-muted)', bg: 'var(--mochi-hover)', border: 'var(--mochi-border)' },
 };
 
 export const HOME = '~';
@@ -123,6 +143,65 @@ export function fmtDate(ts?: number): string {
 export function normalizePath(p: string): string {
   const clean = p.replace(/\/+$/, '');
   return clean === '' ? '/' : clean;
+}
+
+/** Joins `dir` and a child `name` without producing `//name` when `dir` is `/`. */
+export function joinPath(dir: string, name: string): string {
+  const base = normalizePath(dir);
+  const child = name.replace(/^\/+/, '');
+  if (!child) return base;
+  return base === '/' ? `/${child}` : `${base}/${child}`;
+}
+
+/** Whether `candidate` is `target` itself or a descendant inside `target` along path boundaries. */
+export function isPathOrDescendant(candidate: string, target: string): boolean {
+  const c = normalizePath(candidate);
+  const t = normalizePath(target);
+  if (c === t) return true;
+  return t === '/' ? c.startsWith('/') : c.startsWith(`${t}/`);
+}
+
+export interface NameValidationOptions {
+  existingNames?: readonly string[];
+  currentName?: string;
+}
+
+/** Validates an entry name for New Folder / Rename; returns a message or `null` if valid. */
+export function validateEntryName(rawName: string, options: NameValidationOptions = {}): string | null {
+  if (rawName.includes('\0')) return 'Name cannot contain null characters';
+  if (rawName.includes('/')) return 'Name cannot contain "/"';
+  const name = rawName.trim();
+  if (!name) return 'Name cannot be empty';
+  if (name === '.' || name === '..') return 'Name cannot be "." or ".."';
+  if (options.existingNames && name !== options.currentName && options.existingNames.includes(name)) {
+    return `"${name}" already exists in this folder`;
+  }
+  return null;
+}
+
+/** Picks the most relevant partition for `currentPath` and computes usage percentage. */
+export function summarizeStorage(
+  partitions: readonly StoragePartitionLike[],
+  currentPath: string
+): StorageSummary | null {
+  const valid = partitions.filter((p) => Number.isFinite(p.total) && p.total > 0);
+  if (valid.length === 0) return null;
+  const preferredMount = currentPath.startsWith('/') ? '/' : '/home';
+  const part =
+    valid.find((p) => p.mountPoint === preferredMount) ??
+    valid.find((p) => p.mountPoint === '/') ??
+    valid[0]!;
+  const used = Math.max(0, part.used);
+  const available = Math.max(0, part.available);
+  const pct = Math.min(100, Math.max(0, Math.round((used / part.total) * 100)));
+  return {
+    device: part.device,
+    mountPoint: part.mountPoint,
+    total: part.total,
+    used,
+    available,
+    pct,
+  };
 }
 
 export function getParentPath(path: string): string {
@@ -186,25 +265,36 @@ export const PLACES: Place[] = [
 
 export const SYSTEM_PLACES: Place[] = [{ id: 'root', name: 'File System', path: '/' }];
 
-/** The sidebar's highlight rule for a favourite (`system` places match exactly). */
+/** The sidebar's highlight rule for a favourite (`system` places and `~` match exactly). */
 export function placeSelected(place: Place, currentPath: string, system: boolean): boolean {
-  if (system) return currentPath === place.path;
+  const current = normalizePath(currentPath);
+  if (system || place.path === '~') return current === place.path;
   return (
-    currentPath === place.path ||
-    (place.path === '~' && currentPath === '~') ||
-    (place.path !== '~' && currentPath.startsWith(place.path))
+    current === place.path ||
+    current.startsWith(place.path === '/' ? '/' : `${place.path}/`)
   );
 }
 
-/** Folders first, then by name (numeric, case-insensitive) or size; filtered by a name query. */
+function typeKey(entry: FsEntry): string {
+  if (entry.isDirectory) return 'folder';
+  const dot = entry.name.lastIndexOf('.');
+  const ext = dot > 0 ? entry.name.slice(dot + 1).toLowerCase() : '';
+  return `${kindOf(entry)}:${ext}`;
+}
+
+/** Folders first, then sorted by name, size, modified date, or type; filtered by dotfile visibility and query. */
 export function visibleEntries(
   entries: FsEntry[] | undefined,
   query: string,
   sortBy: SortBy,
-  sortOrder: SortOrder
+  sortOrder: SortOrder,
+  showHidden = false
 ): FsEntry[] {
   if (!entries) return [];
   let list = entries;
+  if (!showHidden) {
+    list = list.filter((e) => !e.name.startsWith('.'));
+  }
   if (query.trim()) {
     const q = query.trim().toLowerCase();
     list = list.filter((e) => e.name.toLowerCase().includes(q));
@@ -218,15 +308,34 @@ export function visibleEntries(
       res = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
     } else if (sortBy === 'size') {
       res = (a.size || 0) - (b.size || 0);
+      if (res === 0) {
+        res = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      }
+    } else if (sortBy === 'modified') {
+      res = (a.modified ?? 0) - (b.modified ?? 0);
+      if (res === 0) {
+        res = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      }
+    } else if (sortBy === 'type') {
+      res = typeKey(a).localeCompare(typeKey(b), undefined, { sensitivity: 'base' });
+      if (res === 0) {
+        res = a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      }
     }
     return sortOrder === 'asc' ? res : -res;
   });
 }
 
-/** The sort button's cycle: name asc -> name desc -> size desc -> size asc -> name asc. */
+/** The sort button's cycle: name asc -> name desc -> size desc -> size asc -> modified desc -> modified asc -> type asc -> type desc -> name asc. */
 export function nextSort(sortBy: SortBy, sortOrder: SortOrder): { sortBy: SortBy; sortOrder: SortOrder } {
   if (sortBy === 'name') {
     return sortOrder === 'asc' ? { sortBy, sortOrder: 'desc' } : { sortBy: 'size', sortOrder: 'desc' };
   }
-  return sortOrder === 'desc' ? { sortBy, sortOrder: 'asc' } : { sortBy: 'name', sortOrder: 'asc' };
+  if (sortBy === 'size') {
+    return sortOrder === 'desc' ? { sortBy, sortOrder: 'asc' } : { sortBy: 'modified', sortOrder: 'desc' };
+  }
+  if (sortBy === 'modified') {
+    return sortOrder === 'desc' ? { sortBy, sortOrder: 'asc' } : { sortBy: 'type', sortOrder: 'asc' };
+  }
+  return sortOrder === 'asc' ? { sortBy, sortOrder: 'desc' } : { sortBy: 'name', sortOrder: 'asc' };
 }

@@ -1,7 +1,7 @@
 {
   "name": "Settings.Daylight",
   "kind": "pyxis.Control",
-  "style": "display:flex;flex-direction:column;gap:10px",
+  "style": "display:flex;flex-direction:column;gap:10px;width:100%;min-width:0",
   "published": { "shownMinutes": 0, "scrubbing": false, "pinned": null, "hour24": false, "nowMinutes": 0, "nowPhase": "", "pinnedPhase": "", "sunText": "", "fixedDay": false },
   "events": { "onScrub": "", "onFollow": "", "onPin": "" },
   "components": [
@@ -10,7 +10,7 @@
       { "name": "sun", "kind": "pyxis.Control", "tag": "span", "attributes": { "data-daylight-sun": true } },
       { "name": "desktop", "kind": "pyxis.Control", "tag": "span", "attributes": { "data-daylight-desktop": true } }
     ] },
-    { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Daylight time" }, "style": "display:grid;grid-template-columns:1fr 1fr;gap:8px", "components": [
+    { "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Daylight time" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(160px, 100%), 1fr));gap:8px;width:100%;min-width:0", "components": [
       { "name": "follow", "kind": "Settings.Choice", "option": "follow", "label": "Follow the day", "hint": "The colours follow the sun", "attributes": { "data-daylight-time": "follow" }, "ontap": "followTap" },
       { "name": "pin", "kind": "Settings.Choice", "option": "pin", "label": "Pin this time", "attributes": { "data-daylight-time": "pin" }, "ontap": "pinTap" }
     ] }

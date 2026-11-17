@@ -26,18 +26,18 @@ export default view(spec, {
 
     pin.setShowing(pinned);
     // lucide's `fill` is not a pyxis.Icon property; the svg takes it from its style.
-    pin.setStyle(pinned && item.active ? 'fill:#b45309' : '');
-    pin.setColor(item.active ? '#b45309' : undefined);
+    pin.setStyle(pinned && item.active ? 'fill:#f59e0b' : '');
+    pin.setColor(item.active ? '#f59e0b' : undefined);
 
     dot.setShowing(!pinned && item.id !== 'All');
-    dot.setStyle(`background:${CATEGORY_COLORS[item.id] || '#3b82f6'}`);
+    dot.setStyle(`background:${CATEGORY_COLORS[item.id] || 'var(--mochi-primary)'}`);
 
     label.setContent(item.id);
     count.setContent(String(item.count));
     count.setStyle(
       item.active
-        ? 'opacity:1;background:rgba(0,0,0,0.08)'
-        : 'opacity:0.6;background:var(--color-surface-hover, #f3f4f6)'
+        ? 'opacity:1;background:var(--mochi-active)'
+        : 'opacity:0.7;background:var(--mochi-hover)'
     );
   },
 } satisfies CodeBehind);

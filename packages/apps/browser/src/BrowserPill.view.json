@@ -3,6 +3,8 @@
   "kind": "pyxis.Row",
   "tag": "button",
   "classes": "br-pill",
+  "attributes": { "tabIndex": 0 },
+  "handlers": { "onkeydown": "pillKeyDown" },
   "published": { "active": false },
   "components": [
     { "name": "label", "kind": "pyxis.Control", "tag": "span" },

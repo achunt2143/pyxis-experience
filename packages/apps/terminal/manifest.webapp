@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "type": "web",
   "entry": "index.html",
+  "accent": "#34d399",
   "category": "system",
   "singleInstance": true,
   "display": "windowed",

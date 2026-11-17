@@ -1,49 +1,60 @@
 {
   "name": "Terminal.App",
   "kind": "pyxis.Control",
-  "style": "width:100%;height:100%;background-color:#1a1b26;display:flex;flex-direction:column;overflow:hidden",
+  "style": "width:100%;height:100%;background-color:var(--mochi-bg, #1a1b26);display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden",
   "published": { "windowId": "", "tabs": [{ "id": "tab-1", "title": "bash 1" }], "activeId": "tab-1", "fontSize": 13, "showRibbon": true },
   "events": { "onClose": "" },
   "components": [
-    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;background:var(--color-surface, #24283b);border-bottom:1px solid var(--color-border, #1f2335);padding-left:8px;padding-right:8px;height:38px;user-select:none;gap:8px", "components": [
-      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;overflow-x:auto;flex:1;scrollbar-width:none;padding-top:4px", "components": [
+    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;background:var(--mochi-surface, #24283b);border-bottom:1px solid var(--mochi-border, #1f2335);padding-left:8px;padding-right:8px;height:38px;user-select:none;gap:8px;min-width:0;flex-shrink:0;box-sizing:border-box", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;padding-top:4px", "components": [
         { "name": "tabStrip", "kind": "pyxis.Repeater", "itemKind": "Terminal.Tab", "keyField": "id",
           "itemProps": { "ontap": "pickTab", "onCloseTab": "closeTab" }, "onSetupItem": "setupTab",
-          "style": "display:flex;align-items:center;gap:4px" },
-        { "kind": "pyxis.Control", "tag": "button", "classes": "term-newtab", "attributes": { "title": "New tab (Ctrl+Shift+T)" }, "ontap": "newTab", "components": [
+          "style": "display:flex;align-items:center;gap:4px;flex-shrink:0" },
+        { "name": "newTabBtn", "kind": "pyxis.Control", "tag": "button", "classes": "term-newtab", "attributes": { "title": "New tab (Ctrl+Shift+T)", "aria-label": "New tab" }, "ontap": "newTab", "components": [
           { "kind": "pyxis.Icon", "icon": "Plus", "size": 14 }
         ] }
       ] },
-      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;flex-shrink:0", "components": [
+        { "name": "modeBadge", "kind": "pyxis.Control", "tag": "span", "classes": "term-mode-badge", "showing": false },
         { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Toggle Palm Touch Quick Keys Ribbon" }, "components": [
           { "name": "keysButton", "kind": "remochi.Button", "variant": "affirmative", "ontap": "toggleRibbon", "components": [
             { "name": "keysIcon", "kind": "pyxis.Icon", "icon": "Keyboard", "size": 13, "style": "vertical-align:middle;margin-right:4px" },
             { "name": "keysLabel", "kind": "pyxis.Control", "tag": "span", "content": "Keys", "style": "font-size:11px;font-weight:600" }
           ] }
         ] },
+        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Copy selection (Ctrl+Shift+C)" }, "components": [
+          { "name": "copyButton", "kind": "remochi.Button", "variant": "normal", "ontap": "copyActive", "components": [
+            { "kind": "pyxis.Icon", "icon": "Copy", "size": 13, "style": "vertical-align:middle" }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Paste from clipboard (Ctrl+Shift+V)" }, "components": [
+          { "name": "pasteButton", "kind": "remochi.Button", "variant": "normal", "ontap": "pasteActive", "components": [
+            { "kind": "pyxis.Icon", "icon": "ClipboardPaste", "size": 13, "style": "vertical-align:middle" }
+          ] }
+        ] },
         { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Clear terminal screen" }, "components": [
-          { "kind": "remochi.Button", "variant": "normal", "ontap": "clearActive", "components": [
+          { "name": "clearButton", "kind": "remochi.Button", "variant": "normal", "ontap": "clearActive", "components": [
             { "kind": "pyxis.Icon", "icon": "Trash2", "size": 13, "style": "vertical-align:middle" }
           ] }
         ] },
         { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Zoom Out" }, "components": [
-          { "kind": "remochi.Button", "variant": "normal", "ontap": "zoomOut", "components": [
+          { "name": "zoomOutBtn", "kind": "remochi.Button", "variant": "normal", "ontap": "zoomOut", "components": [
             { "kind": "pyxis.Icon", "icon": "ZoomOut", "size": 13, "style": "vertical-align:middle" }
           ] }
         ] },
-        { "name": "sizeLabel", "kind": "pyxis.Control", "tag": "span", "style": "font-size:0.7rem;color:var(--color-text-muted, #7a88cf);min-width:24px;text-align:center" },
+        { "name": "sizeLabel", "kind": "pyxis.Control", "tag": "span", "style": "font-size:0.7rem;color:var(--mochi-text-muted, #7a88cf);min-width:24px;text-align:center" },
         { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Zoom In" }, "components": [
-          { "kind": "remochi.Button", "variant": "normal", "ontap": "zoomIn", "components": [
+          { "name": "zoomInBtn", "kind": "remochi.Button", "variant": "normal", "ontap": "zoomIn", "components": [
             { "kind": "pyxis.Icon", "icon": "ZoomIn", "size": 13, "style": "vertical-align:middle" }
           ] }
         ] }
       ] }
     ] },
-    { "name": "screens", "kind": "Terminal.Screens", "style": "flex:1;min-height:0;padding:8px;position:relative", "onCloseTab": "tabExited", "onSetTitle": "titled" },
-    { "name": "ribbon", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px;padding:5px 10px;background:#13141f;border-top:1px solid rgba(255, 255, 255, 0.08);overflow-x:auto;scrollbar-width:none;flex-shrink:0;user-select:none", "components": [
-      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;margin-right:4px;opacity:0.6", "components": [
-        { "kind": "pyxis.Icon", "icon": "Terminal", "size": 12, "color": "#7aa2f7" },
-        { "kind": "pyxis.Control", "tag": "span", "content": "Keys", "style": "font-size:9px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:#7aa2f7" }
+    { "name": "screens", "kind": "Terminal.Screens", "style": "flex:1;min-height:0;min-width:0;padding:8px;position:relative;overflow:hidden", "onCloseTab": "tabExited", "onSetTitle": "titled", "onSetMode": "modeChanged" },
+    { "name": "ribbon", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--mochi-surface, #13141f);border-top:1px solid var(--mochi-border, rgba(255, 255, 255, 0.08));overflow-x:auto;scrollbar-width:none;flex-shrink:0;min-width:0;width:100%;box-sizing:border-box;user-select:none", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;margin-right:4px;opacity:0.75", "components": [
+        { "kind": "pyxis.Icon", "icon": "Terminal", "size": 12, "color": "var(--mochi-primary, #7aa2f7)" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "Keys", "style": "font-size:9px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--mochi-primary, #7aa2f7)" }
       ] },
       { "name": "keys", "kind": "pyxis.Repeater", "itemKind": "Terminal.Key", "keyField": "label", "onSend": "sendQuick",
         "style": "display:flex;align-items:center;gap:6px" }

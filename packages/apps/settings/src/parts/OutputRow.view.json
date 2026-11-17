@@ -3,10 +3,6 @@
   "kind": "pyxis.Row",
   "classes": "st-output",
   "components": [
-    { "kind": "pyxis.Control", "components": [
-      { "name": "description", "kind": "pyxis.Control", "style": "font-size:0.84rem" },
-      { "name": "outputName", "kind": "pyxis.Control", "style": "font-size:0.74rem;color:var(--color-text-secondary, #64748b)" }
-    ] },
-    { "name": "badge", "kind": "remochi.Badge", "content": "Default", "background": "var(--mochi-primary, #2f6fed)", "color": "#fff", "showing": false }
+    { "name": "item", "kind": "remochi.Item", "variant": "compact", "hoverable": true }
   ]
 }

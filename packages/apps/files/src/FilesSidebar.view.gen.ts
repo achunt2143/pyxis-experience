@@ -3,14 +3,22 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
+  /** remochi.Button */
+  closePlaces: Instance<"remochi.Button">;
   /** pyxis.Repeater */
   favorites: Instance<"pyxis.Repeater">;
   /** pyxis.Repeater */
   storage: Instance<"pyxis.Repeater">;
+  /** pyxis.Control */
+  storageStatus: Instance<"pyxis.Control">;
+  /** remochi.ProgressBar */
+  storageBar: Instance<"remochi.ProgressBar">;
+  /** pyxis.Control */
+  storageDetail: Instance<"pyxis.Control">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'setupPlace';
+export type Handlers = 'closePlaces' | 'pickPlace' | 'setupPlace';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

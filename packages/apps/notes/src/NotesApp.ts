@@ -1,7 +1,7 @@
 import { view } from '@duyojs/duyo';
 import { loadAppData, saveAppData } from '@pyxis/app-sdk';
 import { onDestroy, registerIcons } from '@pyxis/app-sdk/duyo';
-import { Check, CircleCheck, Copy, FileText, Pin, Plus, Search, Share2, Trash2 } from 'lucide-react';
+import { AlertCircle, Check, CircleCheck, Copy, FileText, Pin, Plus, Search, Share2, Trash2, X } from 'lucide-react';
 import spec from './NotesApp.view.json';
 import {
   AUTOSAVE_MS,
@@ -18,7 +18,15 @@ import './NoteEditor';
 import './notes.css';
 
 // Every icon the Notes views name (specs, and NoteEditor's Copy/Check swap).
-registerIcons({ Check, CircleCheck, Copy, FileText, Pin, Plus, Search, Share2, Trash2 });
+registerIcons({ AlertCircle, Check, CircleCheck, Copy, FileText, Pin, Plus, Search, Share2, Trash2, X });
+
+function hasOpenModalOrPopup(): boolean {
+  return Boolean(
+    document.querySelector(
+      '.mochi-dialog-overlay.open, [role="dialog"][aria-modal="true"]:not(.mochi-dialog):not([aria-hidden="true"]), .mochi-dropdown-trigger[aria-expanded="true"]'
+    )
+  );
+}
 
 /**
  * Notes: Palm webOS Mochi-styled memo and note taking, with card previews, category pill
@@ -33,6 +41,8 @@ export default view(spec, {
     this.inherited();
     this.setAttributes({ 'data-window-id': this.windowId });
     this._saveTimer = null as ReturnType<typeof setTimeout> | null;
+    this._saveSeq = 0;
+    this._dirty = false;
     this._countsKey = '';
 
     // Save what is pending when the page goes (a closing window) or the app is destroyed.
@@ -40,12 +50,22 @@ export default view(spec, {
       if (this._saveTimer) {
         clearTimeout(this._saveTimer);
         this._saveTimer = null;
-        void saveAppData(STORE, { notes: this.notes } satisfies NotesDoc);
       }
+      if (!this._dirty) return;
+      this._dirty = false;
+      const seq = ++(this._saveSeq as number);
+      void this.persist(seq);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!this.destroyed) this.handleKeyDown(e);
     };
     window.addEventListener('beforeunload', flush);
+    window.addEventListener('pagehide', flush);
+    document.addEventListener('keydown', onKeyDown);
     onDestroy(this, () => {
       window.removeEventListener('beforeunload', flush);
+      window.removeEventListener('pagehide', flush);
+      document.removeEventListener('keydown', onKeyDown);
       flush();
     });
 
@@ -61,22 +81,75 @@ export default view(spec, {
     this.sync();
   },
 
+  handleKeyDown(e: KeyboardEvent) {
+    const target = e.target as HTMLElement | null;
+    if (
+      this.$.deleteDialog.getOpen() ||
+      hasOpenModalOrPopup() ||
+      target?.closest?.('.mochi-dialog-overlay, .mochi-contextual-popup')
+    ) {
+      return;
+    }
+
+    const key = e.key;
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && !e.altKey && key.toLowerCase() === 'n') {
+      e.preventDefault();
+      this.addNote();
+      return;
+    }
+    if (mod && !e.altKey && key.toLowerCase() === 'f') {
+      e.preventDefault();
+      const stackHost = document.querySelector(`[data-duyo-id="${this.$.stack.id}"]`);
+      const isNarrow = Boolean(stackHost?.querySelector('.repanel[data-narrow="true"]')) || window.innerWidth <= 768;
+      if (isNarrow && this.$.stack.getActiveIndex() !== 0) {
+        this.$.stack.setActiveIndex(0);
+      }
+      this.$.list.focusSearch();
+      return;
+    }
+    if (!mod && !e.altKey && key === 'Escape' && this.search !== '') {
+      e.preventDefault();
+      this.setSearch('');
+      this.sync();
+    }
+  },
+
   // Handlers for the panels' events.
   addNote() {
     const note = newNote(this.category);
+    const q = (this.search as string).trim().toLowerCase();
+    if (q && !note.title.toLowerCase().includes(q) && !note.body.toLowerCase().includes(q)) {
+      this.setSearch('');
+    }
     this.mutate((prev: Note[]) => [note, ...prev]);
     this.select(note.id);
+    this.$.list.scrollToId(note.id);
     return true;
   },
   selectNote(_sender, event) {
     this.select(event['id']);
     return true;
   },
-  deleteNote(_sender, event) {
-    const id = event['id'] as string;
-    this.mutate((prev: Note[]) => prev.filter((n) => n.id !== id));
-    if (this.selectedId === id) this.setSelectedId(null);
-    this.$.editor.cancelDelete();
+  backToList() {
+    this.$.stack.setActiveIndex(0);
+    return true;
+  },
+  askDelete() {
+    const note = this.selected() as Note | null;
+    if (!note) return true;
+    this.$.deleteName.setContent(note.title || 'Untitled note');
+    this.$.deleteDialog.setOpen(true);
+    return true;
+  },
+  deleteConfirmed() {
+    const note = this.selected() as Note | null;
+    if (!note) return true;
+    this.mutate((prev: Note[]) => prev.filter((n) => n.id !== note.id));
+    if (this.selectedId === note.id) {
+      this.setSelectedId(null);
+      this.$.stack.setActiveIndex(0);
+    }
     this.sync();
     return true;
   },
@@ -98,26 +171,52 @@ export default view(spec, {
     this.sync();
     return true;
   },
+  retrySave() {
+    if (this._saveTimer) {
+      clearTimeout(this._saveTimer);
+      this._saveTimer = null;
+    }
+    const seq = ++(this._saveSeq as number);
+    this._dirty = true;
+    this.setSaveStatus('saving');
+    void this.persist(seq);
+    return true;
+  },
 
-  /** Selecting brings the editor panel forward and drops a half-made delete. */
+  selected() {
+    return (this.notes as Note[]).find((n) => n.id === this.selectedId) ?? null;
+  },
+
+  /** Selecting brings the editor panel forward. */
   select(id: string) {
     this.setSelectedId(id);
     this.$.stack.setActiveIndex(1);
-    this.$.editor.cancelDelete();
     this.sync();
+  },
+
+  async persist(seq: number) {
+    let ok = false;
+    try {
+      ok = await saveAppData(STORE, { notes: this.notes } satisfies NotesDoc);
+    } catch {
+      ok = false;
+    }
+    if (this.destroyed || seq !== this._saveSeq) return;
+    this._dirty = !ok;
+    this.setSaveStatus(ok ? 'saved' : 'error');
   },
 
   /** Replaces the notes (never edits in place: rows compare items by identity) and schedules the save. */
   mutate(change: (prev: Note[]) => Note[]) {
     const next = change(this.notes as Note[]);
     this.setNotes(next);
+    const seq = ++(this._saveSeq as number);
+    this._dirty = true;
     this.setSaveStatus('saving');
     if (this._saveTimer) clearTimeout(this._saveTimer);
-    this._saveTimer = setTimeout(async () => {
+    this._saveTimer = setTimeout(() => {
       this._saveTimer = null;
-      await saveAppData(STORE, { notes: next } satisfies NotesDoc);
-      // Another edit may have started a newer save while this one was in flight.
-      if (!this.destroyed && this._saveTimer === null) this.setSaveStatus('saved');
+      void this.persist(seq);
     }, AUTOSAVE_MS);
   },
 
@@ -135,16 +234,20 @@ export default view(spec, {
       list.setCounts(counts);
     }
     list.setCategory(this.category);
+    list.setSearch(this.search);
     list.setSelectedId(this.selectedId);
     list.setSearching(this.search.trim() !== '');
     list.setLoaded(this.loaded);
     list.setItems(items);
 
     editor.setLoaded(this.loaded);
-    editor.setNote(notes.find((n) => n.id === this.selectedId) ?? null);
+    editor.setNote(this.selected());
   },
 
   saveStatusChanged() {
+    const isError = this.saveStatus === 'error';
+    this.$.saveErrorBanner.setAttributes(isError ? { role: 'alert' } : {});
+    this.$.saveErrorBanner.setShowing(isError);
     this.$.editor.setSaveStatus(this.saveStatus);
   },
 } satisfies CodeBehind);

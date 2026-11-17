@@ -23,7 +23,7 @@ export default view(spec, {
     this.$.label.setContent(item.id === 'Starred' ? '★ Starred' : item.id);
     this.$.count.setContent(String(item.count));
     this.$.count.setStyle(
-      item.active ? 'opacity:0.9;background:rgba(255,255,255,0.25)' : 'opacity:0.65;background:rgba(0,0,0,0.05)'
+      item.active ? 'opacity:0.9;background:rgba(255,255,255,0.25)' : 'opacity:0.7;background:var(--mochi-hover)'
     );
   },
 } satisfies CodeBehind);

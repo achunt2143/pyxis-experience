@@ -1,0 +1,45 @@
+{
+  "name": "Settings.LockSettings",
+  "kind": "pyxis.Control",
+  "published": { "after": 10, "onSleep": true, "notifications": "count", "error": "", "status": "" },
+  "components": [
+    { "kind": "Settings.Groupbox", "title": "Lock", "glyph": "Lock", "glyphColor": "#14b8a6", "group": "lock", "components": [
+      { "kind": "pyxis.Control", "classes": "mochi-item mochi-item-compact st-wrap-item", "components": [
+        { "kind": "pyxis.Control", "classes": "mochi-item-content", "components": [
+          { "kind": "pyxis.Control", "classes": "mochi-item-title", "content": "Lock after" },
+          { "kind": "pyxis.Control", "classes": "mochi-item-subtitle st-wrap", "content": "How long the device sits idle before it locks." }
+        ] },
+        { "kind": "pyxis.Control", "classes": "mochi-item-right st-lock-after", "attributes": { "data-lock-after": true }, "components": [
+          { "name": "afterDropdown", "kind": "remochi.Dropdown", "onChange": "afterPicked" }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "classes": "mochi-item mochi-item-compact st-wrap-item", "components": [
+        { "kind": "pyxis.Control", "classes": "mochi-item-content", "components": [
+          { "kind": "pyxis.Control", "classes": "mochi-item-title", "content": "Lock when the device sleeps" },
+          { "kind": "pyxis.Control", "classes": "mochi-item-subtitle st-wrap", "content": "Waking it asks for your password." }
+        ] },
+        { "kind": "pyxis.Control", "classes": "mochi-item-right", "attributes": { "data-lock-on-sleep": true }, "components": [
+          { "name": "sleepToggle", "kind": "remochi.Toggle", "onChange": "sleepToggled" }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:8px;margin-top:4px;min-width:0", "components": [
+        { "kind": "pyxis.Control", "classes": "st-field-label", "content": "Notifications on the lock screen" },
+        { "name": "notificationGroup", "kind": "pyxis.Control", "attributes": { "role": "radiogroup", "aria-label": "Notifications on the lock screen", "data-lock-notifications": "count" }, "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(150px, 100%), 1fr));gap:8px;width:100%;min-width:0", "components": [
+          { "name": "notifyHidden", "kind": "Settings.Choice", "option": "hidden", "label": "Hidden", "hint": "Nothing about them on the lock screen", "glyph": "EyeOff", "attributes": { "data-lock-notifications-option": "hidden" }, "ontap": "pickNotifications" },
+          { "name": "notifyCount", "kind": "Settings.Choice", "option": "count", "label": "Count only", "hint": "How many, not what they say", "glyph": "Hash", "attributes": { "data-lock-notifications-option": "count" }, "ontap": "pickNotifications" },
+          { "name": "notifyFull", "kind": "Settings.Choice", "option": "full", "label": "Full", "hint": "Who and what, in full", "glyph": "Eye", "attributes": { "data-lock-notifications-option": "full" }, "ontap": "pickNotifications" }
+        ] }
+      ] },
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap", "components": [
+        { "name": "statusLine", "kind": "pyxis.Control", "classes": "st-status", "showing": false },
+        { "kind": "pyxis.Control", "tag": "span", "attributes": { "data-logout-now": true }, "components": [
+          { "kind": "remochi.Button", "content": "Log out", "ontap": "logoutNow" }
+        ] },
+        { "kind": "pyxis.Control", "tag": "span", "attributes": { "data-lock-now": true }, "components": [
+          { "kind": "remochi.Button", "content": "Lock now", "ontap": "lockNow" }
+        ] }
+      ] },
+      { "name": "errorLine", "kind": "pyxis.Control", "classes": "st-error", "showing": false }
+    ] }
+  ]
+}

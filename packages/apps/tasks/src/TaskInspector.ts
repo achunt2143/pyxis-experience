@@ -1,4 +1,5 @@
 import { view, type Component } from '@duyojs/duyo';
+import { formatLocalDate, parseLocalDate } from '@pyxis/app-sdk';
 import spec from './TaskInspector.view.json';
 import { priorityPills, type Priority, type Task } from './model';
 import type { CodeBehind } from './TaskInspector.view.gen';
@@ -34,8 +35,10 @@ export default view(spec, {
     this.doEditTask({ patch: { done: !!event['value'] } });
     return true;
   },
+  // An emptied name is not saved: the task keeps the last name it had until a new one is typed.
   textInput(_sender, event) {
-    this.doEditTask({ patch: { text: String(event['value'] ?? '') } });
+    const text = String(event['value'] ?? '');
+    if (text.trim()) this.doEditTask({ patch: { text } });
     return true;
   },
   notesInput(_sender, event) {
@@ -46,9 +49,14 @@ export default view(spec, {
     this.doEditTask({ patch: { priority: (sender['item'] as { id: Priority }).id } });
     return true;
   },
+  // The picker hands back local midnight; toISOString() would be the day before west of UTC.
   dueInput(_sender, event) {
-    const d = event['value'] as Date;
-    this.doEditTask({ patch: { dueDate: d.toISOString().split('T')[0] } });
+    const day = formatLocalDate(event['value'] as Date);
+    if (day) this.doEditTask({ patch: { dueDate: day } });
+    return true;
+  },
+  clearDue() {
+    this.doEditTask({ patch: { dueDate: undefined } });
     return true;
   },
   categoryInput(_sender, event) {
@@ -64,13 +72,16 @@ export default view(spec, {
     text.setValue(task.text);
     text.addRemoveClass('done', task.done);
     priorities.setItems(priorityPills(task.priority || 'none'));
-    due.setValue(task.dueDate || '');
+    // A Date, not the string: the picker reads a 'YYYY-MM-DD' string as UTC midnight.
+    due.setValue(parseLocalDate(task.dueDate || '') ?? '');
+    this.$.clearDue.setShowing(!!task.dueDate);
     category.setValue(task.category || 'Inbox');
     notes.setValue(task.notes || '');
     created.setContent(`Created ${new Date(task.createdAt).toLocaleDateString()}`);
   },
   saveStatusChanged() {
     this.$.saving.setShowing(this.saveStatus === 'saving');
-    this.$.saved.setShowing(this.saveStatus !== 'saving');
+    // Never "Saved" after a failed save: the app shows the error and a Retry.
+    this.$.saved.setShowing(this.saveStatus === 'saved');
   },
 } satisfies CodeBehind);

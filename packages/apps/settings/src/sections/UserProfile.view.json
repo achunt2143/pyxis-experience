@@ -1,0 +1,29 @@
+{
+  "name": "Settings.UserProfile",
+  "kind": "pyxis.Control",
+  "published": { "account": null, "status": "", "error": "" },
+  "events": { "onChanged": "" },
+  "components": [
+    { "kind": "Settings.Groupbox", "title": "You", "glyph": "User", "glyphColor": "#7c6cf0", "group": "profile", "components": [
+      { "kind": "pyxis.Control", "classes": "st-mochi-card", "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;min-width:0", "components": [
+          { "name": "avatar", "kind": "pyxis.Control", "attributes": { "data-user-avatar": true, "aria-hidden": true } },
+          { "kind": "pyxis.Control", "style": "flex:1;min-width:min(200px, 100%);display:flex;flex-direction:column;gap:8px", "components": [
+            { "name": "nameField", "kind": "Settings.Field", "label": "Display name", "placeholder": "Your name", "attr": "data-profile-name", "onEnter": "saveName" },
+            { "kind": "pyxis.Control", "style": "display:flex;justify-content:flex-end", "components": [
+              { "kind": "pyxis.Control", "tag": "span", "attributes": { "data-profile-save": true }, "components": [
+                { "kind": "remochi.Button", "content": "Save name", "ontap": "saveName" }
+              ] }
+            ] }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:6px", "components": [
+          { "kind": "pyxis.Control", "classes": "st-field-label", "content": "Accent" },
+          { "name": "swatches", "kind": "pyxis.Repeater", "itemKind": "Settings.Swatch", "keyField": "hex", "itemProps": { "ontap": "pickAccent" }, "attributes": { "role": "radiogroup", "aria-label": "Accent colour" }, "style": "display:flex;gap:6px;flex-wrap:wrap" }
+        ] }
+      ] },
+      { "name": "statusLine", "kind": "pyxis.Control", "classes": "st-status", "showing": false },
+      { "name": "errorLine", "kind": "pyxis.Control", "classes": "st-error", "showing": false }
+    ] }
+  ]
+}

@@ -1,18 +1,37 @@
 {
   "name": "Notes.App",
   "kind": "pyxis.Control",
-  "style": "width:100%;height:100%;display:flex;flex-direction:column;background:var(--color-background, #f9fafb);min-height:0",
+  "style": "width:100%;height:100%;display:flex;flex-direction:column;background:var(--mochi-bg);color:var(--mochi-text);min-height:0",
   "published": { "windowId": "", "notes": [], "selectedId": null, "search": "", "category": "All", "loaded": false, "saveStatus": "saved" },
   "events": { "onClose": "" },
   "components": [
+    { "name": "saveErrorBanner", "kind": "pyxis.Control", "showing": false,
+      "style": "display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 16px;background:color-mix(in srgb, var(--mochi-error) 14%, transparent);color:var(--mochi-error);border-bottom:1px solid color-mix(in srgb, var(--mochi-error) 35%, transparent);font-size:12px;font-weight:500;flex-shrink:0;min-width:0",
+      "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;min-width:0;flex:1", "components": [
+          { "kind": "pyxis.Icon", "icon": "AlertCircle", "size": 15, "style": "flex-shrink:0" },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Could not save changes to Pyxis PIM storage.", "style": "overflow-wrap:anywhere" }
+        ] },
+        { "name": "retrySaveBtn", "kind": "remochi.Button", "variant": "warning", "ontap": "retrySave", "components": [
+          { "kind": "pyxis.Control", "tag": "span", "content": "Retry", "style": "font-size:11px;font-weight:600" }
+        ] }
+      ]
+    },
     { "kind": "pyxis.Control", "style": "flex:1;min-height:0;position:relative", "components": [
       { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 0, "peek": 280, "components": [
         { "kind": "remochi.Repanel", "components": [
           { "name": "list", "kind": "Notes.List", "onAddNote": "addNote", "onSelectNote": "selectNote", "onSearchChange": "searchEdited", "onCategoryChange": "categoryPicked" }
         ] },
         { "kind": "remochi.Repanel", "components": [
-          { "name": "editor", "kind": "Notes.Editor", "onEdit": "editNote", "onDeleteNote": "deleteNote" }
+          { "name": "editor", "kind": "Notes.Editor", "onEdit": "editNote", "onAskDelete": "askDelete", "onBack": "backToList" }
         ] }
+      ] }
+    ] },
+    { "name": "deleteDialog", "kind": "remochi.Dialog", "title": "Delete Note", "dialogType": "confirm", "confirmType": "warning", "tone": "warning", "confirmText": "Delete", "cancelText": "Cancel", "onConfirm": "deleteConfirmed", "components": [
+      { "kind": "pyxis.Control", "tag": "p", "style": "margin:0;color:var(--mochi-text);font-size:0.9rem;line-height:1.5", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "Delete ", "style": "color:var(--mochi-text)" },
+        { "name": "deleteName", "kind": "pyxis.Control", "tag": "strong", "content": "this note", "style": "color:var(--mochi-text)" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "? This cannot be undone.", "style": "color:var(--mochi-text)" }
       ] }
     ] }
   ]

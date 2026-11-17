@@ -13,7 +13,7 @@ export const screensEntry = adapt({
   name: 'Terminal.Screens',
   component: TerminalScreens as unknown as ElementType,
   published: { tabs: [], activeId: '', fontSize: 13, hub: null },
-  events: { onCloseTab: '', onSetTitle: '' },
+  events: { onCloseTab: '', onSetTitle: '', onSetMode: '' },
   props: (node) => ({
     tabs: node.get('tabs'),
     activeId: node.get('activeId'),
@@ -21,6 +21,7 @@ export const screensEntry = adapt({
     hub: node.get('hub'),
     onCloseTab: (id: string) => node['doCloseTab']({ id }),
     onSetTitle: (id: string, title: string) => node['doSetTitle']({ id, title }),
+    onSetMode: (id: string, mode: string) => node['doSetMode']({ id, mode }),
   }),
 });
 

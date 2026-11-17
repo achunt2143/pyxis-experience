@@ -9,8 +9,8 @@ export type Named = {
   city: Instance<"pyxis.Control">;
   /** pyxis.Control */
   detail: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  search: Instance<"pyxis.Control">;
+  /** remochi.Input */
+  search: Instance<"remochi.Input">;
   /** Settings.ZoneList */
   list: Instance<"Settings.ZoneList">;
   /** pyxis.Control */

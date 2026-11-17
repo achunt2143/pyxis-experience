@@ -1,4 +1,5 @@
-import { view, type Component } from '@duyojs/duyo';
+import { view, type Component, type ComponentEvent } from '@duyojs/duyo';
+import { onDestroy } from '@pyxis/app-sdk/duyo';
 import spec from './NotesList.view.json';
 import { CATEGORIES, type Note } from './model';
 import type { CodeBehind } from './NotesList.view.gen';
@@ -8,15 +9,39 @@ import './NoteRow';
 
 /**
  * The list panel: header, search, category pills, the notes. It holds no state of its own:
- * the app pushes `items`, `counts`, `category`, `selectedId`, `loaded` and `searching` in,
- * and the panel raises onAddNote / onSelectNote / onSearchChange / onCategoryChange out.
+ * the app pushes `items`, `counts`, `category`, `search`, `selectedId`, `loaded` and `searching`
+ * in, and the panel raises onAddNote / onSelectNote / onSearchChange / onCategoryChange out.
  */
 export default view(spec, {
   create() {
     this.inherited();
+    this._scrollTimer = null as ReturnType<typeof setTimeout> | null;
+    onDestroy(this, () => {
+      if (this._scrollTimer) clearTimeout(this._scrollTimer);
+    });
     this.refreshPills();
+    this.searchChanged();
     this.itemsChanged();
     this.loadedChanged();
+  },
+
+  focusSearch() {
+    const input = document.querySelector<HTMLInputElement>(
+      `input[data-duyo-id="${this.$.search.id}"], [data-duyo-id="${this.$.search.id}"] input`
+    );
+    input?.focus();
+    input?.select();
+  },
+
+  scrollToId(id: string) {
+    if (this._scrollTimer) clearTimeout(this._scrollTimer);
+    this._scrollTimer = setTimeout(() => {
+      this._scrollTimer = null;
+      if (this.destroyed) return;
+      const row = this.$.rows.rowFor(id);
+      if (!row) return;
+      document.querySelector(`[data-duyo-id="${row.id}"]`)?.scrollIntoView?.({ block: 'nearest' });
+    }, 0);
   },
 
   // Events from inside the panel, re-raised as the panel's own (the app handles those).
@@ -28,6 +53,10 @@ export default view(spec, {
     this.doSearchChange({ value: String(event['value'] ?? '') });
     return true;
   },
+  clearSearch() {
+    this.doSearchChange({ value: '' });
+    return true;
+  },
   pickCategory(sender: Component) {
     this.doCategoryChange({ category: (sender['item'] as PillItem).id });
     return true;
@@ -35,6 +64,11 @@ export default view(spec, {
   pickNote(sender: Component) {
     this.doSelectNote({ id: (sender['item'] as Note).id });
     return true;
+  },
+  noteRowKey(sender: Component, event: ComponentEvent) {
+    if (event['key'] !== 'Enter' && event['key'] !== ' ') return false;
+    event['preventDefault']?.();
+    return this.pickNote(sender);
   },
   /** Raised for every row on every refresh: where per-row state that is not the item is applied. */
   setupRow(_sender, event) {
@@ -50,6 +84,11 @@ export default view(spec, {
     heading.setContent(`${this.category} Notes`);
     empty.setShowing(this.loaded && (this.items as Note[]).length === 0);
     empty.setContent(this.searching ? 'No notes match your search.' : 'No notes in this category.');
+  },
+  searchChanged() {
+    const value = String(this.search ?? '');
+    if (this.$.search.getValue() !== value) this.$.search.setValue(value);
+    this.$.clearSearch.setShowing(value !== '');
   },
   selectedIdChanged() {
     this.$.rows.refresh();

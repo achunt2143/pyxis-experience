@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>New Tab</title>
+<link rel="icon" href="../icon.svg">
+<!--
+  Vela's start page: its homepage and every new tab (the browser profile's
+  user.js points browser.startup.homepage and pyxis.newtab.url here; Nova
+  writes it). Static and self-contained on purpose: it is opened as a file://
+  page in the ordinary browser window, so it has no bridge and needs no
+  network. The tiles are the browser app's DEFAULT_BOOKMARKS (model.ts).
+-->
+<style>
+@font-face { font-family: "Start Lato"; font-weight: 300; src: url("fonts/lato-light.woff") format("woff"); }
+@font-face { font-family: "Start Lato"; font-weight: 400; src: url("fonts/lato-regular.woff") format("woff"); }
+@font-face { font-family: "Start Lato"; font-weight: 700; src: url("fonts/lato-bold.woff") format("woff"); }
+@font-face { font-family: "Start Lato"; font-weight: 700; font-style: italic; src: url("fonts/lato-bolditalic.woff") format("woff"); }
+
+:root {
+  --sky-a: #f7c6cf; --sky-b: #c8b6f2; --sky-c: #8fb8f0; --sky-d: #fde3c8;
+  --ink: #2a2620; --ink-quiet: rgba(42, 38, 32, 0.62);
+  --glass: rgba(255, 255, 255, 0.58); --glass-strong: rgba(255, 255, 255, 0.78);
+  --rim: rgba(255, 255, 255, 0.75); --focus: #0284c7;
+  --shadow: 0 1px 2px rgba(40, 30, 60, 0.08), 0 12px 32px rgba(40, 30, 60, 0.14);
+  --drop: 18px 5px 18px 18px;
+  color-scheme: light;
+}
+:root[data-sky="night"] {
+  --ink: #ece9e3; --ink-quiet: rgba(236, 233, 227, 0.66);
+  --glass: rgba(20, 22, 44, 0.46); --glass-strong: rgba(20, 22, 44, 0.66);
+  --rim: rgba(255, 255, 255, 0.16); --focus: #69cdff;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font-family: "Start Lato", "Lato", "DejaVu Sans", sans-serif;
+  color: var(--ink);
+  background: var(--sky-b);
+  overflow: hidden;
+}
+
+/* The sky: four soft masses drifting, like Daylight. */
+.sky { position: fixed; inset: -20%; z-index: 0; filter: blur(70px); }
+.sky i { position: absolute; width: 60%; height: 60%; border-radius: 50%; opacity: 0.9; }
+.sky i:nth-child(1) { background: var(--sky-a); left: 0; top: 0; animation: drift1 38s ease-in-out infinite alternate; }
+.sky i:nth-child(2) { background: var(--sky-b); right: 0; top: 5%; animation: drift2 44s ease-in-out infinite alternate; }
+.sky i:nth-child(3) { background: var(--sky-c); right: 10%; bottom: 0; animation: drift3 50s ease-in-out infinite alternate; }
+.sky i:nth-child(4) { background: var(--sky-d); left: 8%; bottom: 4%; animation: drift4 41s ease-in-out infinite alternate; }
+@keyframes drift1 { to { transform: translate(12%, 10%) scale(1.1); } }
+@keyframes drift2 { to { transform: translate(-10%, 14%) scale(0.92); } }
+@keyframes drift3 { to { transform: translate(-14%, -8%) scale(1.08); } }
+@keyframes drift4 { to { transform: translate(10%, -12%) scale(0.95); } }
+.grain {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none; opacity: 0.07;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+main {
+  position: relative; z-index: 2; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 34px; padding: 32px 24px 72px;
+}
+
+.time { text-align: center; display: grid; gap: 6px; }
+.clock { font-weight: 300; font-size: clamp(64px, 11vw, 112px); line-height: 1; letter-spacing: 0.02em; font-variant-numeric: tabular-nums; }
+.clock .ampm { font-size: 0.26em; letter-spacing: 0.24em; margin-left: 0.4em; vertical-align: 0.9em; opacity: 0.7; }
+.greet { font-size: 19px; color: var(--ink-quiet); }
+.greet em { font-style: italic; font-weight: 700; color: var(--ink); }
+
+form.search {
+  width: min(620px, 100%); display: flex; align-items: center; gap: 12px;
+  padding: 0 8px 0 20px; height: 56px;
+  background: var(--glass-strong); border: 1px solid var(--rim);
+  border-radius: 28px 8px 28px 28px; box-shadow: var(--shadow);
+  backdrop-filter: blur(18px);
+}
+form.search:focus-within { outline: 2px solid var(--focus); outline-offset: 2px; }
+form.search svg { flex: none; opacity: 0.6; }
+form.search input {
+  flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--ink);
+  font: inherit; font-size: 18px;
+}
+form.search input::placeholder { color: var(--ink-quiet); font-style: italic; }
+form.search button {
+  flex: none; height: 40px; padding: 0 16px; border: 0; cursor: pointer;
+  font: inherit; font-weight: 700; font-style: italic; font-size: 15px; color: var(--focus);
+  background: transparent; border-radius: 20px;
+}
+form.search button::before { content: "("; font-weight: 300; font-style: normal; margin-right: 2px; }
+form.search button::after { content: ")"; font-weight: 300; font-style: normal; margin-left: 2px; }
+form.search button:hover { background: rgba(2, 132, 199, 0.1); }
+
+.dial { display: flex; flex-wrap: wrap; justify-content: center; gap: 22px 26px; max-width: 700px; }
+.dial a {
+  width: 108px; display: grid; justify-items: center; gap: 9px;
+  color: var(--ink); text-decoration: none; font-size: 13px; font-weight: 700;
+  border-radius: 14px; padding: 4px;
+}
+.dial a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.tile {
+  width: 60px; height: 60px; border-radius: var(--drop);
+  display: grid; place-items: center; color: #fff;
+  font-size: 26px; font-weight: 700; letter-spacing: 0.01em;
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  position: relative; overflow: hidden;
+  transition: transform 220ms cubic-bezier(.2, .9, .3, 1.3);
+}
+.tile::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(150deg, rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0) 55%);
+}
+.dial a:hover .tile, .dial a:focus-visible .tile { transform: translateY(-3px) scale(1.04); }
+.dial span.name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+footer {
+  position: fixed; z-index: 2; left: 0; right: 0; bottom: 18px;
+  display: flex; justify-content: center; align-items: center; gap: 9px;
+  font-size: 12px; letter-spacing: 0.32em; text-transform: uppercase; color: var(--ink-quiet);
+}
+footer img { width: 18px; height: 18px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sky i { animation: none; }
+  .tile { transition: none; }
+}
+</style>
+</head>
+<body>
+<div class="sky" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+<div class="grain" aria-hidden="true"></div>
+
+<main>
+  <div class="time">
+    <div class="clock" id="clock">--:--</div>
+    <div class="greet" id="greet">Welcome to <em>Vela</em></div>
+  </div>
+
+  <form class="search" id="search" action="https://duckduckgo.com/" method="get" role="search">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+    <input id="q" name="q" type="text" placeholder="Search DuckDuckGo or enter an address" autocomplete="off" spellcheck="false" aria-label="Search or enter an address" autofocus>
+    <button type="submit">Go</button>
+  </form>
+
+  <nav class="dial" aria-label="Pinned sites">
+    <a href="https://duckduckgo.com"><span class="tile" style="background:#de5833">D</span><span class="name">DuckDuckGo</span></a>
+    <a href="https://en.wikipedia.org"><span class="tile" style="background:#5a6573">W</span><span class="name">Wikipedia</span></a>
+    <a href="https://webosarchive.org"><span class="tile" style="background:#7a4fd6">w</span><span class="name">webOS Archive</span></a>
+    <a href="https://github.com"><span class="tile" style="background:#24292f">G</span><span class="name">GitHub</span></a>
+    <a href="https://github.com/geckos"><span class="tile" style="background:#0284c7">P</span><span class="name">Pyxis Project</span></a>
+  </nav>
+</main>
+
+<footer><img src="../icon.svg" alt="">Vela · Pyxis</footer>
+
+<script>
+(function () {
+  // The sky and the greeting follow the hour, a cheap echo of Daylight.
+  var SKIES = {
+    night: ["#2b2f6b", "#3d2a6e", "#173a63", "#4a3570"],
+    dawn:  ["#f6b3c0", "#c9a6e8", "#9db7ef", "#ffd7b0"],
+    day:   ["#bfe0ff", "#d7cbf7", "#9fd0f5", "#fff1d6"],
+    dusk:  ["#f7a8a0", "#c48fd8", "#7f8fe0", "#ffc89a"]
+  };
+  function phase(h) {
+    if (h < 5 || h >= 21) return "night";
+    if (h < 8) return "dawn";
+    if (h < 17) return "day";
+    return "dusk";
+  }
+  function greeting(h) {
+    if (h < 5) return "Good night";
+    if (h < 12) return "Good morning";
+    if (h < 18) return "Good afternoon";
+    return "Good evening";
+  }
+  var root = document.documentElement;
+  var clock = document.getElementById("clock");
+  var greet = document.getElementById("greet");
+  var lastPhase = "";
+  function tick() {
+    var d = new Date();
+    var h = d.getHours(), m = d.getMinutes();
+    var p = phase(h);
+    if (p !== lastPhase) {
+      lastPhase = p;
+      var s = SKIES[p];
+      root.style.setProperty("--sky-a", s[0]);
+      root.style.setProperty("--sky-b", s[1]);
+      root.style.setProperty("--sky-c", s[2]);
+      root.style.setProperty("--sky-d", s[3]);
+      root.setAttribute("data-sky", p === "night" ? "night" : "light");
+    }
+    var h12 = h % 12 || 12;
+    clock.innerHTML = h12 + ":" + (m < 10 ? "0" : "") + m +
+      '<span class="ampm">' + (h < 12 ? "AM" : "PM") + "</span>";
+    greet.innerHTML = greeting(h) + ". Where to in <em>Vela</em>?";
+  }
+  tick();
+  setInterval(tick, 10000);
+
+  // An address goes straight there; anything else is a search.
+  var form = document.getElementById("search");
+  var q = document.getElementById("q");
+  form.addEventListener("submit", function (e) {
+    var v = q.value.trim();
+    if (!v) { e.preventDefault(); return; }
+    var looksLikeUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ||
+      (/^[^\s]+\.[a-z]{2,}(\/\S*)?$/i.test(v) && v.indexOf(" ") < 0) ||
+      /^localhost(:\d+)?(\/\S*)?$/i.test(v);
+    if (looksLikeUrl) {
+      e.preventDefault();
+      location.href = /^[a-z][a-z0-9+.-]*:\/\//i.test(v) ? v : "https://" + v;
+    }
+  });
+})();
+</script>
+</body>
+</html>

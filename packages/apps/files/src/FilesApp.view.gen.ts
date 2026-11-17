@@ -18,7 +18,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'cycleSort' | 'dialogConfirmDelete' | 'dialogDismiss' | 'dialogSubmit' | 'dismissError' | 'entryMenu' | 'goBack' | 'goUp' | 'menuAction' | 'menuClosed' | 'navigate' | 'newFolder' | 'openEntry' | 'panelMoved' | 'pickPlace' | 'pickViewMode' | 'reload' | 'search';
+export type Handlers = 'closePlaces' | 'cycleSort' | 'deleteEntry' | 'dialogConfirmDelete' | 'dialogDismiss' | 'dialogSubmit' | 'dismissError' | 'entryMenu' | 'goBack' | 'goForward' | 'goUp' | 'menuAction' | 'menuClosed' | 'navigate' | 'newFolder' | 'openEntry' | 'openPlaces' | 'panelMoved' | 'pickPlace' | 'pickViewMode' | 'reload' | 'renameEntry' | 'requestUnlock' | 'revokeUnlock' | 'search' | 'toggleHidden';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

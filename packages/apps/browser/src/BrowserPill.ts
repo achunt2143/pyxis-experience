@@ -1,4 +1,4 @@
-import { view } from '@duyojs/duyo';
+import { view, type Component, type ComponentEvent } from '@duyojs/duyo';
 import spec from './BrowserPill.view.json';
 import type { CodeBehind } from './BrowserPill.view.gen';
 
@@ -14,6 +14,7 @@ export default view(spec, {
   create() {
     this.inherited();
     this.itemChanged();
+    this.activeChanged();
   },
   itemChanged() {
     const item = this.item as PillItem | null;
@@ -23,5 +24,14 @@ export default view(spec, {
   },
   activeChanged() {
     this.addRemoveClass('active', this.active);
+    this.setAttributes({ tabIndex: 0, 'aria-pressed': String(!!this.active) });
+  },
+  pillKeyDown(_sender: Component, event: ComponentEvent) {
+    if (event['key'] === 'Enter' || event['key'] === ' ') {
+      event['preventDefault']?.();
+      this.bubble('ontap', { type: 'tap', originator: this });
+      return true;
+    }
+    return false;
   },
 } satisfies CodeBehind);

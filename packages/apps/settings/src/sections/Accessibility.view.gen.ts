@@ -9,10 +9,30 @@ export type Named = {
   reduced: Instance<"Settings.Choice">;
   /** Settings.Choice */
   off: Instance<"Settings.Choice">;
+  /** Settings.Choice */
+  scale75: Instance<"Settings.Choice">;
+  /** Settings.Choice */
+  scale100: Instance<"Settings.Choice">;
+  /** Settings.Choice */
+  scale125: Instance<"Settings.Choice">;
+  /** Settings.Choice */
+  scale150: Instance<"Settings.Choice">;
+  /** remochi.Toggle */
+  highContrastToggle: Instance<"remochi.Toggle">;
+  /** remochi.Toggle */
+  reduceTransparencyToggle: Instance<"remochi.Toggle">;
+  /** Settings.Choice */
+  cursorDefault: Instance<"Settings.Choice">;
+  /** Settings.Choice */
+  cursorLarge: Instance<"Settings.Choice">;
+  /** Settings.Choice */
+  cursorXLarge: Instance<"Settings.Choice">;
+  /** pyxis.Control */
+  errorRow: Instance<"pyxis.Control">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'pick';
+export type Handlers = 'pick' | 'pickCursorSize' | 'pickTextScale' | 'toggleHighContrast' | 'toggleReduceTransparency';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

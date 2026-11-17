@@ -8,11 +8,13 @@ import {
   daylightSun,
   isAnimationMode,
   isWallpaperId,
+  LAUNCH_BAR_POSITIONS,
   oneOf,
   setSetting,
   type AnimationMode,
   type ClockState,
   type DeviceLocation,
+  type LaunchBarPosition,
   type SettingParser,
   type ThemePreference,
   type WallpaperMotion,
@@ -27,6 +29,7 @@ import spec from './Appearance.view.json';
 import type { CodeBehind } from './Appearance.view.gen';
 
 const parseTheme = oneOf<ThemePreference>('light', 'dark', 'auto');
+const parseBar = oneOf<LaunchBarPosition>(...LAUNCH_BAR_POSITIONS);
 const parseMotion = oneOf<WallpaperMotion>('flow', 'still');
 const parseWallpaper: SettingParser<string> = (raw) => (isWallpaperId(raw) ? raw : undefined);
 const parsePinned: SettingParser<number | null> = (raw) =>
@@ -34,7 +37,7 @@ const parsePinned: SettingParser<number | null> = (raw) =>
 const parseAnimations: SettingParser<AnimationMode> = (raw) => (isAnimationMode(raw) ? raw : undefined);
 
 /**
- * Appearance: the theme (Light / Dark / Auto), the desktop wallpaper (thumbnails, a large
+ * Appearance: the theme (Light / Dark / Auto), where the launch bar sits (Bottom / Left), the desktop wallpaper (thumbnails, a large
  * preview with a time-of-day scrubber for Daylight, follow or pin the day) and its motion.
  * Each setting is read live (bindSetting), so one changed in quick settings or by echo-cli
  * shows here; each write goes through Echo's validated `settings.set`, and a refusal is shown.
@@ -45,6 +48,7 @@ export default view(spec, {
     this._daylight = null;
     bindSetting<ThemePreference>(this, SETTING_KEYS.theme, 'theme', 'light', parseTheme);
     bindSetting<string>(this, SETTING_KEYS.wallpaper, 'wallpaper', DEFAULT_WALLPAPER_ID, parseWallpaper);
+    bindSetting<LaunchBarPosition>(this, SETTING_KEYS.launchBarPosition, 'barPosition', 'bottom', parseBar);
     bindSetting<WallpaperMotion>(this, SETTING_KEYS.wallpaperMotion, 'motion', 'flow', parseMotion);
     bindSetting<number | null>(this, SETTING_KEYS.wallpaperPinnedTime, 'pinned', null, parsePinned);
     bindSetting<boolean>(this, SETTING_KEYS.clock24h, 'hour24', false, asBoolean);
@@ -58,6 +62,9 @@ export default view(spec, {
     this.refresh();
   },
   wallpaperChanged() {
+    this.refresh();
+  },
+  barPositionChanged() {
     this.refresh();
   },
   motionChanged() {
@@ -101,6 +108,10 @@ export default view(spec, {
     this.write(SETTING_KEYS.wallpaper, event['id']);
     return true;
   },
+  pickBar(sender: Component) {
+    this.write(SETTING_KEYS.launchBarPosition, sender['option']);
+    return true;
+  },
   pickMotion(sender: Component) {
     this.write(SETTING_KEYS.wallpaperMotion, sender['option']);
     return true;
@@ -132,19 +143,22 @@ export default view(spec, {
     const theme = this.theme as ThemePreference;
     const wallpaper = this.wallpaper as string;
     const motion = this.motion as WallpaperMotion;
+    const barPosition = this.barPosition as LaunchBarPosition;
     const pinned = this.pinned as number | null;
     const hour24 = this.hour24 as boolean;
     const animationMode = this.animationMode as AnimationMode;
     const scrub = this.scrub as number | null;
     const geo = geoOf(this.location as DeviceLocation | null);
     const {
-      themeLight, themeDark, themeAuto, autoNext, autoNextText, grid, preview, daylightHost,
+      themeLight, themeDark, themeAuto, barBottom, barLeft, autoNext, autoNextText, grid, preview, daylightHost,
       motionFlow, motionStill, motionNote, errorLine,
     } = this.$;
 
     themeLight.setChecked(theme === 'light');
     themeDark.setChecked(theme === 'dark');
     themeAuto.setChecked(theme === 'auto');
+    barBottom.setChecked(barPosition === 'bottom');
+    barLeft.setChecked(barPosition === 'left');
     present(autoNext, theme === 'auto', { 'data-auto-next': true });
     if (theme === 'auto') autoNextText.setContent(autoSwitchText(clock.epochMs, clock.utcOffsetMinutes, geo, hour24));
 

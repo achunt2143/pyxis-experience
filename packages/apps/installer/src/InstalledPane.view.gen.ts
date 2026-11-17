@@ -6,13 +6,17 @@ export type Named = {
   /** remochi.Input */
   search: Instance<"remochi.Input">;
   /** pyxis.Control */
+  errorRow: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  errorText: Instance<"pyxis.Control">;
+  /** pyxis.Control */
   empty: Instance<"pyxis.Control">;
   /** pyxis.Repeater */
   rows: Instance<"pyxis.Repeater">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'searchInput' | 'setupRow';
+export type Handlers = 'askRemove' | 'cancelRemove' | 'launchRow' | 'removeRow' | 'searchInput' | 'setupRow';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

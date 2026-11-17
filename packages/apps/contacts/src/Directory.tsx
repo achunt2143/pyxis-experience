@@ -1,4 +1,5 @@
-import { adapt } from '@duyojs/duyo/react';
+import { useRef } from 'react';
+import { adaptIsland } from '@pyxis/app-sdk/duyo';
 import { Star } from 'lucide-react';
 import { Item, List, ListHeader } from 'remochi';
 import { ALPHABET, getAvatarGradient, getInitials, groupByLetter, type Contact } from './model';
@@ -10,10 +11,6 @@ interface DirectoryProps {
   onSelect: (id: string) => void;
 }
 
-function scrollToLetter(letter: string) {
-  document.getElementById(`letter-group-${letter}`)?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-}
-
 /**
  * The contact directory: A-Z sections of rows plus the scrubber rail. One adapted React
  * island, not a node per contact, so a large address book costs one node in the runtime
@@ -22,14 +19,21 @@ function scrollToLetter(letter: string) {
 export function DirectoryView({ contacts, selectedId, onSelect }: DirectoryProps) {
   const groups = groupByLetter(contacts);
   const activeLetters = new Set(groups.map((g) => g.letter));
+  // Looked up inside this island only: a second Contacts window has the same section ids.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollToLetter = (letter: string) => {
+    scrollRef.current
+      ?.querySelector(`[data-letter="${letter}"]`)
+      ?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  };
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', position: 'relative', height: '100%' }}>
-      <div className="contacts-scroll" style={{ flex: 1, overflowY: 'auto', minHeight: 0, padding: '4px 6px 12px 10px' }}>
+    <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', position: 'relative', height: '100%' }}>
+      <div ref={scrollRef} className="contacts-scroll" style={{ flex: 1, minWidth: 0, overflowY: 'auto', overflowX: 'hidden', minHeight: 0, padding: '4px 6px 12px 10px' }}>
         <List>
           {groups.map(({ letter, contacts: group }) => (
-            <div key={letter} id={`letter-group-${letter}`} style={{ scrollMarginTop: '8px' }}>
+            <div key={letter} id={`letter-group-${letter}`} data-letter={letter} style={{ scrollMarginTop: '8px' }}>
               <ListHeader>
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--mochi-primary, #2f6fed)' }}>{letter}</span>
+                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: 'var(--mochi-primary)' }}>{letter}</span>
               </ListHeader>
               {group.map((c) => (
                 <Item
@@ -50,7 +54,7 @@ export function DirectoryView({ contacts, selectedId, onSelect }: DirectoryProps
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: '#ffffff',
+                        color: 'var(--mochi-primary-text)',
                         fontSize: 13,
                         fontWeight: 700,
                         flexShrink: 0,
@@ -60,7 +64,7 @@ export function DirectoryView({ contacts, selectedId, onSelect }: DirectoryProps
                       {getInitials(c.name)}
                     </div>
                   }
-                  rightContent={c.starred ? <Star size={14} fill="#ffb80d" color="#ffb80d" style={{ flexShrink: 0 }} /> : null}
+                  rightContent={c.starred ? <Star size={14} fill="var(--mochi-selected)" color="var(--mochi-selected)" style={{ flexShrink: 0 }} /> : null}
                 />
               ))}
             </div>
@@ -77,8 +81,8 @@ export function DirectoryView({ contacts, selectedId, onSelect }: DirectoryProps
             alignItems: 'center',
             justifyContent: 'center',
             padding: '4px 0',
-            borderLeft: '1px solid var(--color-border-light, rgba(0,0,0,0.04))',
-            background: 'var(--mochi-hover, rgba(0,0,0,0.01))',
+            borderLeft: '1px solid var(--mochi-border)',
+            background: 'var(--mochi-surface)',
             userSelect: 'none',
           }}
         >
@@ -90,13 +94,14 @@ export function DirectoryView({ contacts, selectedId, onSelect }: DirectoryProps
                 type="button"
                 disabled={!hasItems}
                 onClick={() => scrollToLetter(char)}
+                aria-label={`Jump to ${char === '#' ? 'other' : char}`}
                 style={{
                   background: 'transparent',
                   border: 'none',
                   padding: '1px 0',
                   fontSize: '0.64rem',
                   fontWeight: hasItems ? 700 : 400,
-                  color: hasItems ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-text-secondary, #cbd5e1)',
+                  color: hasItems ? 'var(--mochi-primary)' : 'var(--mochi-text-faint)',
                   cursor: hasItems ? 'pointer' : 'default',
                   lineHeight: 1.1,
                   width: '100%',
@@ -114,7 +119,7 @@ export function DirectoryView({ contacts, selectedId, onSelect }: DirectoryProps
 }
 
 registerIsland(
-  adapt({
+  adaptIsland({
     name: 'Contacts.Directory',
     component: DirectoryView,
     published: { items: [], selectedId: null },

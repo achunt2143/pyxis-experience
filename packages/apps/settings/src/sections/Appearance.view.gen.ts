@@ -13,6 +13,10 @@ export type Named = {
   autoNext: Instance<"pyxis.Control">;
   /** pyxis.Control */
   autoNextText: Instance<"pyxis.Control">;
+  /** Settings.Choice */
+  barBottom: Instance<"Settings.Choice">;
+  /** Settings.Choice */
+  barLeft: Instance<"Settings.Choice">;
   /** Settings.WallpaperGrid */
   grid: Instance<"Settings.WallpaperGrid">;
   /** Settings.WallpaperPreview */
@@ -30,7 +34,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'pickMotion' | 'pickTheme' | 'wallpaperPicked';
+export type Handlers = 'pickBar' | 'pickMotion' | 'pickTheme' | 'wallpaperPicked';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

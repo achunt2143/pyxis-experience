@@ -5,142 +5,280 @@
 .st-app {
   width: 100%;
   height: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   display: flex;
   flex-direction: column;
-  background: var(--color-background, var(--mochi-bg, #f5f5f5));
-  color: var(--color-text, var(--mochi-text, #111827));
+  background: var(--mochi-bg);
+  color: var(--mochi-text);
   overflow: hidden;
   user-select: none;
 }
 
+.st-app .mochi-header {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.st-app .mochi-item {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.st-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .st-groupbox {
-  background: var(--color-surface, var(--mochi-surface, #ffffff));
-  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
-  border-radius: 14px;
-  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.st-groupbox-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 .st-groupbox-header {
-  font-size: 0.72rem;
+  font-family: "Mochi Medium", sans-serif;
+  font-size: 0.92rem;
   font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--color-text-secondary, #64748b);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: var(--mochi-text-muted);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding: 4px 2px 0;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.st-groupbox-header > svg {
+  flex-shrink: 0;
+}
+
+.st-mochi-card {
+  background: var(--mochi-panel-bg);
+  border: 1px solid var(--mochi-border);
+  border-radius: var(--mochi-corner-sm, 10px);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.st-wrap,
+.st-wrap-item .mochi-item-title,
+.st-wrap-item .mochi-item-subtitle {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.st-wrap-item.mochi-item,
+.st-wrap-item > .mochi-item {
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+.st-wrap-item .mochi-item-content {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.st-wrap-item .mochi-item-right {
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+
+.st-avatar-item .mochi-item-icon {
+  background: transparent;
+  border: none;
+  width: auto;
+  height: auto;
 }
 
 .st-section {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+  width: 100%;
   min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion='reduced']):not([data-motion='off']) .st-section {
+    animation: px-stage-enter 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
 }
 
 .st-secondary {
   font-size: 0.76rem;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--mochi-text-muted);
+  overflow-wrap: anywhere;
 }
 .st-field-label {
-  color: var(--color-text-secondary, #64748b);
+  color: var(--mochi-text-muted);
   font-size: 0.74rem;
   font-weight: 600;
 }
 .st-error {
   font-size: 0.78rem;
-  color: var(--color-error, #ef4444);
+  color: var(--mochi-error);
+  overflow-wrap: anywhere;
+}
+.st-alert-banner {
+  padding: 8px 12px;
+  border-radius: var(--mochi-corner-sm, 10px);
+  background: color-mix(in srgb, var(--mochi-error) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--mochi-error) 35%, transparent);
+}
+.st-back-btn {
+  display: none !important;
+}
+.repanel[data-narrow="true"] .st-back-btn {
+  display: inline-block !important;
+}
+@media (max-width: 768px) {
+  .st-back-btn {
+    display: inline-block !important;
+  }
+}
+.st-back-btn .mochi-button {
+  font-size: 0.85rem;
+  padding: 4px 8px;
 }
 .st-status {
   font-size: 0.78rem;
-  color: #10b981;
+  color: var(--mochi-success);
   font-weight: 600;
+  overflow-wrap: anywhere;
 }
 .st-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
   gap: 6px;
 }
 
-/* A text field: the old textInputStyle. */
+/* A text field: aligned with Remochi Input light & dark field tokens. */
 .st-input {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin-right: 0;
   padding: 8px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
-  background: var(--color-surface, var(--mochi-surface, #ffffff));
-  color: inherit;
+  border-radius: var(--mochi-corner-sm, 10px);
+  border: 1px solid var(--mochi-field-border, var(--mochi-border));
+  background: var(--mochi-field-bg, var(--mochi-surface));
+  color: var(--mochi-field-text, var(--mochi-text));
   font: inherit;
   font-size: 0.84rem;
   user-select: text;
   box-sizing: border-box;
 }
 .st-input.invalid {
-  border-color: var(--color-error, #ef4444);
+  border-color: var(--mochi-error) !important;
 }
 .st-input.search {
   padding-left: 30px;
 }
 
-/* A radio option drawn as a card. */
+/* A radio option backed by a Remochi Item inside an accessible radio button. */
 .st-choice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  display: block;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background: transparent;
   cursor: pointer;
   text-align: left;
   color: inherit;
-  background: var(--color-surface, var(--mochi-surface, #ffffff));
-  border: 2px solid var(--color-border, var(--mochi-border, #e5e7eb));
-  transition: all 0.15s ease;
   min-width: 0;
+  max-width: 100%;
   font: inherit;
 }
-.st-choice.checked {
-  border-color: var(--mochi-primary, #2f6fed);
-}
-.st-choice-main {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.st-choice .mochi-item {
+  height: 100%;
+  box-sizing: border-box;
   min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: 6px 10px;
 }
-.st-choice-label {
-  display: block;
-  font-weight: 600;
-  font-size: 0.88rem;
+.st-choice .mochi-item-content {
+  min-width: 0;
+  flex: 1 1 auto;
 }
-.st-choice-hint {
-  display: block;
-  font-size: 0.76rem;
-  margin-top: 2px;
-  color: var(--color-text-secondary, #64748b);
+.st-choice .mochi-item-title {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.st-choice .mochi-item-subtitle {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
-/* A label / value row, as About and Date & Time list facts. */
+/* A label / value row backed by Remochi compact Item. */
 .st-fact {
-  display: flex;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.st-fact .mochi-item {
   justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 4px 0;
-  border-bottom: 1px solid var(--color-border-light, rgba(0, 0, 0, 0.03));
-  font-size: 0.82rem;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.st-fact .mochi-item-content {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+.st-fact .mochi-item-right {
+  flex: 1;
+  justify-content: flex-end;
+  min-width: 0;
+  max-width: 100%;
 }
 .st-fact-label {
-  color: var(--color-text-secondary, #64748b);
-  flex-shrink: 0;
+  color: var(--mochi-text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 .st-fact-value {
+  color: var(--mochi-text);
+  font-size: 0.82rem;
   font-weight: 600;
   text-align: right;
   min-width: 0;
@@ -151,43 +289,56 @@
 }
 
 /* The section rail. */
+.st-rail-row {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
 .st-rail-row .mochi-item {
   cursor: pointer;
 }
 
 .st-power-button {
-  background: var(--color-surface, var(--mochi-surface, #ffffff));
-  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
-  border-radius: 10px;
+  background: var(--mochi-panel-bg);
+  border: 1px solid var(--mochi-border);
+  border-radius: var(--mochi-corner-sm, 10px);
   padding: 12px 8px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  transition: all 0.12s ease;
-  color: inherit;
+  transition: all 0.15s ease;
+  color: var(--mochi-text);
   font: inherit;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+.st-power-button:hover {
+  background: var(--mochi-panel-hover);
+  border-color: var(--mochi-primary);
 }
 .st-power-button.danger {
-  background: rgba(239, 68, 68, 0.08);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: color-mix(in srgb, var(--mochi-error) 10%, var(--mochi-panel-bg));
+  border: 1px solid color-mix(in srgb, var(--mochi-error) 45%, transparent);
+}
+.st-power-button.danger:hover {
+  border-color: var(--mochi-error);
 }
 
 .st-output {
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
-  background: transparent;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  transition: all 0.12s ease;
 }
-.st-output.current {
-  border-color: var(--mochi-primary, #2f6fed);
-  background: var(--mochi-primary-soft, rgba(47, 111, 237, 0.12));
+.st-output .mochi-item-content {
+  min-width: 0;
 }
 
 .st-mute {
@@ -196,8 +347,71 @@
   padding: 4px;
   cursor: pointer;
   display: flex;
-  color: var(--mochi-primary, #2f6fed);
+  flex-shrink: 0;
+  color: var(--mochi-primary);
 }
 .st-mute.muted {
-  color: var(--color-error, #ef4444);
+  color: var(--mochi-error);
+}
+
+/* Pad left/right inside flexible slider containers so the 28px thumb clears adjacent controls. */
+.st-slider-compact {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 14px;
+  box-sizing: border-box;
+}
+
+/* An accent swatch: a round dot, ringed in its own colour when chosen. */
+.st-swatch {
+  width: 30px;
+  height: 30px;
+  padding: 3px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+}
+.st-swatch.checked {
+  border-color: var(--mochi-text);
+}
+.st-swatch-dot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), inset 0 0 0 1px var(--mochi-border);
+}
+
+/* The lock group's dropdown sits at its natural width, not the row's. */
+.st-lock-after {
+  width: 180px;
+  max-width: 100%;
+  min-width: 0;
+  flex: 0 1 180px;
+}
+
+.st-wallpaper-tile .mochi-item-body {
+  margin-top: 0;
+}
+
+.st-compact-collapsable {
+  margin-bottom: 0;
+}
+.st-compact-collapsable .mochi-collapsable-header {
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-style: normal;
+  padding: 6px 8px;
+  color: var(--mochi-text-muted);
+}
+.st-compact-collapsable .mochi-collapsable-content {
+  padding: 0 8px 6px;
+}
+.st-compact-collapsable .mochi-collapsable-footer {
+  display: none;
 }

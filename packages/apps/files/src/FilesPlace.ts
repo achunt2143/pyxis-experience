@@ -48,7 +48,7 @@ export default view(spec, {
     if (this._painted === key) return;
     this._painted = key;
     const Glyph = ICONS[place.id as keyof typeof ICONS] ?? FileText;
-    const rest = place.system ? 'var(--color-text-secondary, #64748b)' : 'var(--mochi-primary, #2f6fed)';
+    const rest = place.system ? 'var(--mochi-text-muted)' : 'var(--mochi-primary)';
     this.$.item.setSelected(selected);
     this.$.item.setIcon(
       createElement(
@@ -61,8 +61,8 @@ export default view(spec, {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: selected ? 'var(--mochi-primary, #2f6fed)' : 'var(--mochi-hover, rgba(0,0,0,0.05))',
-            color: selected ? '#ffffff' : rest,
+            background: selected ? 'var(--mochi-primary)' : 'var(--mochi-hover)',
+            color: selected ? 'var(--mochi-primary-text)' : rest,
             transition: 'all 0.15s ease',
           },
         },

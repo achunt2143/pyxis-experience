@@ -22,7 +22,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'rescanTap' | 'setupRow';
+export type Handlers = 'pickRow' | 'rescanTap' | 'setupRow';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

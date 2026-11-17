@@ -1,0 +1,79 @@
+{
+  "name": "Settings.UserAccounts",
+  "kind": "pyxis.Control",
+  "published": {
+    "accounts": [],
+    "activeUser": "geckouser",
+    "busyUser": null,
+    "confirmingUser": null,
+    "status": "",
+    "error": ""
+  },
+  "events": { "onChanged": "" },
+  "components": [
+    {
+      "kind": "Settings.Groupbox",
+      "title": "Accounts",
+      "glyph": "Users",
+      "glyphColor": "#0ea5e9",
+      "attributes": { "data-users-accounts": true },
+      "components": [
+        {
+          "name": "roster",
+          "kind": "Settings.AccountRoster",
+          "onSwitch": "switchAccount",
+          "onAskDelete": "askRemoveAccount",
+          "onCancelDelete": "cancelRemoveAccount",
+          "onDelete": "removeAccount"
+        },
+        {
+          "kind": "pyxis.Control",
+          "classes": "st-mochi-card",
+          "components": [
+            { "kind": "pyxis.Control", "classes": "st-field-label", "content": "Add another person" },
+            {
+              "name": "loginField",
+              "kind": "Settings.Field",
+              "label": "Username",
+              "placeholder": "maya",
+              "attr": "data-add-user-login",
+              "onEnter": "addUser"
+            },
+            {
+              "name": "displayField",
+              "kind": "Settings.Field",
+              "label": "Display name",
+              "placeholder": "Maya",
+              "attr": "data-add-user-name",
+              "onEnter": "addUser"
+            },
+            {
+              "name": "passwordField",
+              "kind": "Settings.Field",
+              "label": "Password (optional)",
+              "inputType": "password",
+              "attr": "data-add-user-password",
+              "onEnter": "addUser"
+            },
+            {
+              "kind": "pyxis.Control",
+              "style": "display:flex;justify-content:flex-end",
+              "components": [
+                {
+                  "kind": "pyxis.Control",
+                  "tag": "span",
+                  "attributes": { "data-add-user-submit": true },
+                  "components": [
+                    { "kind": "remochi.Button", "content": "Add user", "ontap": "addUser" }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        { "name": "statusLine", "kind": "pyxis.Control", "classes": "st-status", "showing": false },
+        { "name": "errorLine", "kind": "pyxis.Control", "classes": "st-error", "showing": false }
+      ]
+    }
+  ]
+}

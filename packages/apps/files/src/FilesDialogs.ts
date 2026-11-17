@@ -1,14 +1,15 @@
 import { view } from '@duyojs/duyo';
 import spec from './FilesDialogs.view.json';
 import type { CodeBehind } from './FilesDialogs.view.gen';
+import { validateEntryName } from './model';
 
 /** What the dialogs ask the app to show: `mode` is one of these, '' for none. */
 export type DialogMode = '' | 'newFolder' | 'rename' | 'delete';
 
 /**
  * The four dialogs: New Folder, Rename (each with a name field), Delete confirmation and the
- * error alert. The app pushes `mode`, `busy`, `entryName`, `isDirectory` and `error`; this
- * raises `onSubmit {mode, value}` (Create/Rename button or Enter), `onConfirmDelete`,
+ * error alert. The app pushes `mode`, `busy`, `entryName`, `isDirectory`, `existingNames` and
+ * `error`; this raises `onSubmit {mode, value}` (Create/Rename button or Enter), `onConfirmDelete`,
  * `onDismiss` (Cancel, scrim, Escape) and `onDismissError`.
  *
  * remochi's Dialog closes itself on any way out, so after each of those the app pushes the
@@ -28,18 +29,23 @@ export default view(spec, {
   field() {
     return this.mode === 'rename' ? this.$.renameName : this.$.folderName;
   },
+  validate(rawValue: string): string | null {
+    const existingNames = (this.existingNames as string[] | undefined) ?? [];
+    const currentName = this.mode === 'rename' ? (this.entryName as string) : undefined;
+    return validateEntryName(rawValue, { existingNames, currentName });
+  },
   nameInput() {
     this.updateButtons();
     return true;
   },
-  /** Enter submits. (Not the Input's own `onchange`: that also fires on blur, which a click on Cancel causes.) */
-  nameKey(_sender, event) {
-    if (event['key'] === 'Enter') this.submit();
-    return true;
-  },
   submit() {
     const value = String(this.field().value ?? '');
-    if (this.busy || !value.trim()) return true;
+    if (this.busy) return true;
+    const error = this.validate(value);
+    if (error) {
+      this.updateButtons();
+      return true;
+    }
     this.doSubmit({ mode: this.mode, value });
     return true;
   },
@@ -61,14 +67,15 @@ export default view(spec, {
     this.entryNameChanged();
     this.updateButtons();
   },
-  /** Opens what the state says is open. The app calls this after every event too (see above). */
+  /** Opens what the state says is open, keeping error alerts mutually exclusive with other dialogs. */
   applyOpen() {
-    const mode = this.mode as string;
+    const hasError = this.error !== null;
+    const mode = hasError ? '' : (this.mode as string);
     const d = this.$;
     d.newFolder.setOpen(mode === 'newFolder');
     d.rename.setOpen(mode === 'rename');
     d.remove.setOpen(mode === 'delete');
-    d.alert.setOpen(this.error !== null);
+    d.alert.setOpen(hasError);
   },
   entryNameChanged() {
     // A rename starts from the file's current name; a new folder from nothing.
@@ -82,6 +89,9 @@ export default view(spec, {
       this.isDirectory ? ' and everything inside it? This cannot be undone.' : '? This cannot be undone.'
     );
   },
+  existingNamesChanged() {
+    this.updateButtons();
+  },
   busyChanged() {
     this.updateButtons();
   },
@@ -94,9 +104,29 @@ export default view(spec, {
   updateButtons() {
     const d = this.$;
     const busy = !!this.busy;
+    const existingNames = (this.existingNames as string[] | undefined) ?? [];
+
     d.folderCancel.setDisabled(busy);
     d.renameCancel.setDisabled(busy);
-    d.folderCreate.setDisabled(busy || this.mode !== 'newFolder' || !String(d.folderName.value ?? '').trim());
-    d.renameDo.setDisabled(busy || this.mode !== 'rename' || !String(d.renameName.value ?? '').trim());
+
+    const folderVal = String(d.folderName.value ?? '');
+    const folderBlank = !folderVal.trim() && !folderVal.includes('\0') && !folderVal.includes('/');
+    const folderErr =
+      this.mode === 'newFolder' && !folderBlank ? validateEntryName(folderVal, { existingNames }) : null;
+    d.folderError.setContent(folderErr ?? '');
+    d.folderError.setShowing(!!folderErr);
+    d.folderCreate.setDisabled(busy || this.mode !== 'newFolder' || folderBlank || !!folderErr);
+
+    const renameVal = String(d.renameName.value ?? '');
+    const renameBlank = !renameVal.trim() && !renameVal.includes('\0') && !renameVal.includes('/');
+    const renameErr =
+      this.mode === 'rename'
+        ? renameBlank
+          ? 'Name cannot be empty'
+          : validateEntryName(renameVal, { existingNames, currentName: this.entryName as string })
+        : null;
+    d.renameError.setContent(renameErr ?? '');
+    d.renameError.setShowing(!!renameErr);
+    d.renameDo.setDisabled(busy || this.mode !== 'rename' || renameBlank || !!renameErr);
   },
 } satisfies CodeBehind);

@@ -17,6 +17,8 @@ export const storage = {
   doc: { notes: [] as Note[] },
   /** Every document `saveAppData` was given, in order. */
   saves: [] as Array<{ notes: Note[] }>,
+  /** Boolean returned by mocked `saveAppData`. */
+  saveResult: true,
 };
 
 export function seedNote(i: number, over: Partial<Note> = {}): Note {
@@ -42,6 +44,7 @@ export interface Mounted {
 export async function mountNotes(notes: Note[]): Promise<Mounted> {
   storage.doc = { notes: structuredClone(notes) };
   storage.saves = [];
+  storage.saveResult = true;
   const host = document.createElement('div');
   document.body.appendChild(host);
   let app!: DuyoApp;

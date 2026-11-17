@@ -4,8 +4,8 @@
   "published": { "clock": null, "hour24": false, "clockError": "" },
   "components": [
     { "kind": "Settings.Groupbox", "title": "Clock", "glyph": "Clock", "glyphColor": "#0ea5e9", "group": "clock", "components": [
-      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap", "components": [
-        { "kind": "pyxis.Control", "components": [
+      { "kind": "pyxis.Control", "classes": "st-mochi-card", "style": "flex-direction:row;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap", "components": [
+        { "kind": "pyxis.Control", "style": "min-width:0;flex:1 1 200px", "components": [
           { "name": "time", "kind": "pyxis.Control", "attributes": { "data-clock-time": true }, "style": "font-size:2rem;font-weight:700;line-height:1.1;font-variant-numeric:tabular-nums" },
           { "kind": "pyxis.Control", "classes": "st-secondary", "style": "margin-top:4px", "components": [
             { "name": "dateText", "kind": "pyxis.Control", "tag": "span" },

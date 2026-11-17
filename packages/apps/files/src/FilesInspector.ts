@@ -14,9 +14,17 @@ const COPIED_MS = 2000;
 export default view(spec, {
   create() {
     this.inherited();
-    this._timers = new Set<ReturnType<typeof setTimeout>>();
+    this._timers = new Map<string, ReturnType<typeof setTimeout>>();
+    this._imageError = false;
+    this._boundImage = null as HTMLImageElement | null;
+    this._imageErrorHandler = null as (() => void) | null;
     onDestroy(this, () => {
-      for (const t of this._timers as Set<ReturnType<typeof setTimeout>>) clearTimeout(t);
+      for (const t of (this._timers as Map<string, ReturnType<typeof setTimeout>>).values()) clearTimeout(t);
+      if (this._boundImage && this._imageErrorHandler) {
+        (this._boundImage as HTMLImageElement).removeEventListener('error', this._imageErrorHandler);
+      }
+      this._boundImage = null;
+      this._imageErrorHandler = null;
     });
     this.previewChanged();
     this.copiedPathChanged();
@@ -29,6 +37,26 @@ export default view(spec, {
     document
       .querySelector(`[data-duyo-id="${this.$.closeButton.id}"] button`)
       ?.setAttribute('aria-label', 'Close Inspector');
+    document
+      .querySelector(`[data-duyo-id="${this.$.copyPathButton.id}"]`)
+      ?.setAttribute('aria-label', 'Copy Path');
+
+    const img = document.querySelector(`[data-duyo-id="${this.$.image.id}"]`) as HTMLImageElement | null;
+    if (img && this._boundImage !== img) {
+      if (this._boundImage && this._imageErrorHandler) {
+        (this._boundImage as HTMLImageElement).removeEventListener('error', this._imageErrorHandler);
+      }
+      const onImgError = () => {
+        if (this.destroyed) return;
+        const preview = this.preview as Preview | null;
+        if (!preview || preview.kind !== 'image' || !preview.dataUri) return;
+        this._imageError = true;
+        this.applyPreviewBoxes(preview);
+      };
+      img.addEventListener('error', onImgError);
+      this._boundImage = img;
+      this._imageErrorHandler = onImgError;
+    }
   },
 
   close() {
@@ -47,38 +75,49 @@ export default view(spec, {
   copyText() {
     const preview = this.preview as Preview | null;
     if (!preview?.text) return true;
-    void navigator.clipboard?.writeText(preview.text)?.catch(() => {});
-    this.flash('copiedText');
+    void this.writeClipboard(preview.text, 'copiedText');
     return true;
   },
   copyPath() {
     const preview = this.preview as Preview | null;
     if (!preview) return true;
-    void navigator.clipboard?.writeText(preview.entry.path)?.catch(() => {});
-    this.flash('copiedPath');
+    void this.writeClipboard(preview.entry.path, 'copiedPath');
     return true;
+  },
+  async writeClipboard(value: string, property: 'copiedText' | 'copiedPath') {
+    const clipboard = navigator.clipboard;
+    if (!clipboard || typeof clipboard.writeText !== 'function') {
+      if (!this.destroyed) this.doCopyError({ message: 'Clipboard access is unavailable' });
+      return;
+    }
+    try {
+      await clipboard.writeText(value);
+      if (!this.destroyed) this.flash(property);
+    } catch (err) {
+      if (!this.destroyed) {
+        this.doCopyError({
+          message: err instanceof Error ? err.message : 'Failed to copy to clipboard',
+        });
+      }
+    }
   },
   /** Sets a "copied" flag for two seconds. */
   flash(property: string) {
+    const timers = this._timers as Map<string, ReturnType<typeof setTimeout>>;
+    const prev = timers.get(property);
+    if (prev !== undefined) clearTimeout(prev);
     this.set(property, true);
-    const timers = this._timers as Set<ReturnType<typeof setTimeout>>;
     const timer = setTimeout(() => {
-      timers.delete(timer);
+      timers.delete(property);
       if (!this.destroyed) this.set(property, false);
     }, COPIED_MS);
-    timers.add(timer);
+    timers.set(property, timer);
   },
 
-  previewChanged() {
-    const preview = this.preview as Preview | null;
-    if (!preview) return;
-    const { entry, stat } = preview;
+  applyPreviewBoxes(preview: Preview) {
+    const { entry } = preview;
     const d = this.$;
-    d.header.setContent(entry.name);
-    d.badge.setContent(kindOf(entry).toUpperCase());
-
-    // The first branch that fits, as the React panel's chain of ternaries chose.
-    const image = !preview.loading && preview.kind === 'image' && !!preview.dataUri;
+    const image = !preview.loading && preview.kind === 'image' && !!preview.dataUri && !this._imageError;
     const text = !preview.loading && !image && preview.kind === 'text' && preview.text !== undefined;
     const audio = !preview.loading && !image && !text && preview.kind === 'audio';
     const meta = !preview.loading && !image && !text && !audio;
@@ -90,16 +129,41 @@ export default view(spec, {
     if (image) {
       d.image.setSrc(preview.dataUri ?? '');
       d.image.setAlt(entry.name);
+    } else {
+      d.image.setSrc('');
     }
     if (text) d.text.setContent(preview.text ?? '');
     d.audioSize.setContent(formatBytes(entry.size));
-    d.metaText.setContent(preview.error || 'Binary or unpreviewable file type');
+    d.metaText.setContent(
+      this._imageError
+        ? 'Failed to load image preview (corrupt or unsupported image)'
+        : preview.error || 'Binary or unpreviewable file type'
+    );
+  },
+
+  previewChanged() {
+    const preview = this.preview as Preview | null;
+    if (!preview) return;
+    this._imageError = false;
+    const { entry, stat } = preview;
+    const d = this.$;
+    d.header.setContent(entry.name);
+    d.badge.setContent(kindOf(entry).toUpperCase());
+
+    this.applyPreviewBoxes(preview);
 
     d.path.setContent(entry.path);
     d.size.setContent(formatBytes(stat?.size ?? entry.size));
     d.permissions.setContent(stat?.permissions || '—');
     d.modified.setContent(fmtDate(stat?.modified));
-    d.actions.setShowing(!isReadOnly(entry.path));
+    this.updateActions();
+  },
+  privilegedChanged() {
+    this.updateActions();
+  },
+  updateActions() {
+    const preview = this.preview as Preview | null;
+    this.$.actions.setShowing(!!preview && (!isReadOnly(preview.entry.path) || !!this.privileged));
   },
   copiedTextChanged() {
     this.$.textIcon.setIcon(this.copiedText ? 'Check' : 'Copy');

@@ -28,7 +28,7 @@ export function fakeEcho() {
   echo.network = undefined;
   vi.spyOn(echoClient, 'callMethod').mockImplementation(async (service, _iface, method, args = {}) => {
     echo.calls.push({ service, method, args });
-    if (method === 'OpenExternalBrowser') return echo.opens ? { sessionId: 's1', appId: 'browser-window', url: args['url'] } : undefined;
+    if (method === 'OpenExternalBrowser') return echo.opens ? { sessionId: 's1', appId: 'browser', url: args['url'] } : undefined;
     if (method === 'getStatus') return echo.network;
     return undefined;
   });

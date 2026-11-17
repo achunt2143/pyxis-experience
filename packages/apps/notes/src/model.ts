@@ -35,7 +35,7 @@ export function newNote(category: string = 'General'): Note {
     id: Math.random().toString(36).slice(2, 11),
     title: 'Untitled note',
     body: '',
-    pinned: false,
+    pinned: category === 'Pinned',
     category: category === 'All' || category === 'Pinned' ? 'General' : category,
     updatedAt: Date.now(),
   };
@@ -103,7 +103,7 @@ export function filterNotes(notes: readonly Note[], search: string, category: Ca
 
 /** A row's one-line preview of the body. */
 export function snippetOf(body: string): string {
-  return body.replace(/^[#\s*-_]+/gm, '').trim().slice(0, 90);
+  return body.replace(/^[#\s*_-]+/gm, '').trim().slice(0, 90);
 }
 
 export function bodyStats(body: string): string {
@@ -118,15 +118,15 @@ export function categoryColor(cat: string): string {
 /** The filter pill's dynamic look. Its fixed look is `.notes-pill` in notes.css. */
 export function pillStyle(cat: string, active: boolean): string {
   const pinned = cat === 'Pinned';
-  const color = pinned ? '#f59e0b' : CATEGORY_COLORS[cat] || '#3b82f6';
+  const color = pinned ? '#f59e0b' : CATEGORY_COLORS[cat] || 'var(--mochi-primary)';
   const background = active
     ? pinned
-      ? 'rgba(245, 158, 11, 0.12)'
-      : 'rgba(59, 130, 246, 0.12)'
-    : 'var(--color-surface, #ffffff)';
-  const text = active ? (pinned ? '#b45309' : 'var(--mochi-color-blue, #2563eb)') : 'var(--color-text, #374151)';
+      ? 'rgba(245, 158, 11, 0.16)'
+      : 'var(--mochi-primary-soft)'
+    : 'var(--mochi-surface)';
+  const text = active ? (pinned ? '#f59e0b' : 'var(--mochi-primary)') : 'var(--mochi-text)';
   return [
-    `border-color:${active ? color : 'var(--color-border, #e5e7eb)'}`,
+    `border-color:${active ? color : 'var(--mochi-border)'}`,
     `background:${background}`,
     `color:${text}`,
     `font-weight:${active ? 600 : 500}`,

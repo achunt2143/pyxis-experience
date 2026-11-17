@@ -16,6 +16,8 @@ export function stubCanvas() {
 export const storage = {
   doc: { contacts: [] as Contact[] },
   saves: [] as Array<{ contacts: Contact[] }>,
+  /** While set, saveAppData answers false (the store refused the write). */
+  fail: false,
 };
 
 export function seedContact(i: number, over: Partial<Contact> = {}): Contact {
@@ -47,6 +49,7 @@ export interface Mounted {
 export async function mountContacts(contacts: Contact[]): Promise<Mounted> {
   storage.doc = { contacts: structuredClone(contacts) };
   storage.saves = [];
+  storage.fail = false;
   const host = document.createElement('div');
   document.body.appendChild(host);
   let app!: DuyoApp;

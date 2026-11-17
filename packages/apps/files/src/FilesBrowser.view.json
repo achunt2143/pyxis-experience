@@ -1,65 +1,99 @@
 {
   "name": "Files.Browser",
   "kind": "pyxis.Control",
-  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-height:0",
+  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-width:0;min-height:0",
   "published": {
-    "folder": "~", "canBack": false, "viewMode": "list", "sortBy": "name", "sortOrder": "asc",
-    "query": "", "busy": false, "dir": null, "entries": [], "selectedPath": null
+    "folder": "~", "canBack": false, "canForward": false, "viewMode": "list", "sortBy": "name", "sortOrder": "asc",
+    "showHidden": false, "query": "", "busy": false, "dir": null, "entries": [], "selectedPath": null, "privileged": false
   },
   "events": {
-    "onGoBack": "", "onGoUp": "", "onNavigate": "", "onSearch": "", "onViewMode": "", "onCycleSort": "",
-    "onNewFolder": "", "onReload": "", "onOpenEntry": "", "onEntryMenu": ""
+    "onGoBack": "", "onGoForward": "", "onGoUp": "", "onOpenPlaces": "", "onNavigate": "", "onSearch": "",
+    "onViewMode": "", "onCycleSort": "", "onToggleHidden": "", "onNewFolder": "", "onReload": "",
+    "onOpenEntry": "", "onEntryMenu": "", "onRenameEntry": "", "onDeleteEntry": "",
+    "onRequestUnlock": "", "onRevokeUnlock": ""
   },
   "components": [
-    { "kind": "pyxis.Control", "style": "padding:10px 14px;display:flex;align-items:center;gap:10px;background:var(--color-surface, var(--mochi-surface, #ffffff));border-bottom:1px solid var(--color-border, var(--mochi-border, #e5e7eb));flex-wrap:wrap", "components": [
+    { "name": "header", "kind": "remochi.Header", "content": "Browse", "components": [
+      { "name": "newFolder", "kind": "remochi.Button", "variant": "blue", "ontap": "newFolder", "components": [
+        { "kind": "pyxis.Icon", "icon": "FolderPlus", "size": 15, "style": "margin-right:6px;vertical-align:middle" },
+        { "kind": "pyxis.Control", "tag": "span", "content": "New Folder" }
+      ] }
+    ] },
+    { "kind": "pyxis.Control", "style": "padding:0 32px", "components": [
+      { "kind": "remochi.Divider" }
+    ] },
+    { "kind": "pyxis.Control", "style": "padding:10px 24px;display:flex;align-items:center;gap:10px;background:var(--mochi-surface);border-bottom:1px solid var(--mochi-border);flex-wrap:wrap;min-width:0", "components": [
       { "kind": "pyxis.Control", "style": "display:flex;gap:4px;align-items:center", "components": [
+        { "kind": "pyxis.Control", "classes": "files-places-btn", "components": [
+          { "name": "placesBtn", "kind": "remochi.Button", "ontap": "openPlaces", "attributes": { "title": "Places" }, "components": [
+            { "kind": "pyxis.Icon", "icon": "PanelLeft", "size": 16 }
+          ] }
+        ] },
         { "name": "back", "kind": "remochi.Button", "ontap": "goBack", "disabled": true, "components": [
           { "kind": "pyxis.Icon", "icon": "ChevronLeft", "size": 16 }
+        ] },
+        { "name": "forward", "kind": "remochi.Button", "ontap": "goForward", "disabled": true, "components": [
+          { "kind": "pyxis.Icon", "icon": "ChevronRight", "size": 16 }
         ] },
         { "name": "up", "kind": "remochi.Button", "ontap": "goUp", "components": [
           { "kind": "pyxis.Icon", "icon": "ChevronUp", "size": 16 }
         ] }
       ] },
       { "name": "crumbs", "kind": "pyxis.Repeater", "itemKind": "Files.Crumb", "keyField": "path", "itemProps": { "ontap": "pickCrumb" },
-        "style": "display:flex;align-items:center;gap:4px;flex:1 1 200px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:2px 0" },
-      { "kind": "pyxis.Control", "style": "width:160px;min-width:120px", "components": [
-        { "name": "search", "kind": "remochi.Input", "type": "search", "placeholder": "Search…", "width": "100%", "classes": "files-search", "style": "display:block", "oninput": "searchInput" }
-      ] },
-      { "name": "views", "kind": "remochi.ViewSelectButton", "items": [ { "content": "☰" }, { "content": "⊞" } ], "selected": 0, "onSelect": "pickView" },
-      { "name": "sortWrap", "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Sort by name (asc)" }, "components": [
-        { "kind": "remochi.Button", "ontap": "cycleSort", "components": [
-          { "kind": "pyxis.Icon", "icon": "ArrowUpDown", "size": 14, "style": "margin-right:4px;vertical-align:middle" },
-          { "name": "sortLabel", "kind": "pyxis.Control", "tag": "span", "content": "NAME", "style": "font-size:0.78rem" }
+        "style": "display:flex;align-items:center;gap:4px;flex:1 1 160px;min-width:0;overflow-x:auto;scrollbar-width:none;padding:2px 0" },
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;flex-wrap:wrap;max-width:100%", "components": [
+        { "name": "views", "kind": "remochi.ViewSelectButton", "items": [ { "content": "☰" }, { "content": "⊞" } ], "selected": 0, "onSelect": "pickView" },
+        { "name": "sortWrap", "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Sort by name (asc)" }, "components": [
+          { "kind": "remochi.Button", "ontap": "cycleSort", "components": [
+            { "kind": "pyxis.Icon", "icon": "ArrowUpDown", "size": 14, "style": "margin-right:4px;vertical-align:middle" },
+            { "name": "sortLabel", "kind": "pyxis.Control", "tag": "span", "content": "NAME", "style": "font-size:0.78rem" }
+          ] }
+        ] },
+        { "kind": "pyxis.Control", "style": "position:relative;display:flex;align-items:center;width:160px;min-width:120px;flex:1 1 140px", "components": [
+          { "name": "search", "kind": "remochi.Input", "type": "search", "placeholder": "Search…", "width": "100%", "classes": "files-search", "style": "display:block", "oninput": "searchInput" },
+          { "name": "clearSearch", "kind": "pyxis.Control", "tag": "button", "showing": false, "classes": "files-search-clear", "ontap": "clearSearch", "attributes": { "type": "button", "aria-label": "Clear Search", "title": "Clear Search" }, "components": [
+            { "kind": "pyxis.Icon", "icon": "X", "size": 12 }
+          ] }
         ] }
-      ] },
-      { "name": "newFolder", "kind": "remochi.Button", "variant": "blue", "ontap": "newFolder", "components": [
-        { "kind": "pyxis.Icon", "icon": "FolderPlus", "size": 15, "style": "margin-right:6px;vertical-align:middle" },
-        { "kind": "pyxis.Control", "tag": "span", "content": "New Folder" }
       ] }
     ] },
-    { "kind": "pyxis.Control", "style": "padding:6px 14px;display:flex;justify-content:space-between;align-items:center;background:var(--mochi-hover, rgba(0,0,0,0.02));border-bottom:1px solid var(--color-border, var(--mochi-border, #e5e7eb));font-size:0.76rem;color:var(--color-text-secondary, #64748b)", "components": [
+    { "kind": "pyxis.Control", "style": "padding:6px 24px;display:flex;justify-content:space-between;align-items:center;gap:10px;background:var(--mochi-hover);border-bottom:1px solid var(--mochi-border);font-size:0.76rem;color:var(--mochi-text-muted);flex-wrap:wrap;min-width:0", "components": [
       { "name": "status", "kind": "pyxis.Control", "tag": "span" },
-      { "kind": "pyxis.Control", "tag": "button", "classes": "files-refresh", "ontap": "reload", "attributes": { "title": "Refresh" }, "components": [
-        { "kind": "pyxis.Icon", "icon": "RefreshCw", "size": 12 },
-        { "kind": "pyxis.Control", "tag": "span", "content": "Refresh" }
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:10px;flex-shrink:0", "components": [
+        { "name": "unlockBtn", "kind": "pyxis.Control", "tag": "button", "classes": "files-link", "showing": false, "ontap": "requestUnlock", "attributes": { "type": "button", "data-files-unlock": "" }, "components": [
+          { "kind": "pyxis.Icon", "icon": "Unlock", "size": 12 },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Unlock to make changes" }
+        ] },
+        { "name": "lockBtn", "kind": "pyxis.Control", "tag": "button", "classes": "files-link", "showing": false, "ontap": "revokeUnlock", "attributes": { "type": "button", "data-files-lock": "" }, "components": [
+          { "kind": "pyxis.Icon", "icon": "Lock", "size": 12 },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Lock" }
+        ] },
+        { "name": "hiddenBtn", "kind": "pyxis.Control", "tag": "button", "classes": "files-refresh", "ontap": "toggleHidden", "attributes": { "type": "button", "title": "Show dotfiles (Ctrl+H)", "aria-label": "Toggle hidden files", "aria-pressed": "false", "data-files-hidden-toggle": "" }, "components": [
+          { "name": "hiddenIcon", "kind": "pyxis.Icon", "icon": "EyeOff", "size": 12 },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Hidden" }
+        ] },
+        { "kind": "pyxis.Control", "tag": "button", "classes": "files-refresh", "ontap": "reload", "attributes": { "type": "button", "title": "Refresh" }, "components": [
+          { "kind": "pyxis.Icon", "icon": "RefreshCw", "size": 12 },
+          { "kind": "pyxis.Control", "tag": "span", "content": "Refresh" }
+        ] }
       ] }
     ] },
-    { "kind": "pyxis.Control", "style": "flex:1;min-height:0;overflow-y:auto;padding:10px", "components": [
+    { "kind": "pyxis.Control", "style": "flex:1;min-width:0;min-height:0;overflow-y:auto;overflow-x:hidden;padding:12px 24px", "components": [
       { "name": "loading", "kind": "pyxis.Control", "showing": false, "style": "display:flex;justify-content:center;align-items:center;height:100%", "components": [
         { "kind": "remochi.Spinner", "active": true, "size": "normal" }
       ] },
-      { "name": "error", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;align-items:center;justify-content:center;height:80%;gap:12px;color:var(--color-error, #dc2626)", "components": [
+      { "name": "error", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;align-items:center;justify-content:center;height:80%;gap:12px;color:var(--mochi-error)", "components": [
         { "name": "errorText", "kind": "pyxis.Control", "tag": "span" },
         { "kind": "remochi.Button", "ontap": "reload", "components": [
           { "kind": "pyxis.Control", "tag": "span", "content": "Try Again" }
         ] }
       ] },
-      { "name": "empty", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;align-items:center;justify-content:center;height:70%;gap:8px;color:var(--color-text-secondary, #64748b)", "components": [
+      { "name": "empty", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;align-items:center;justify-content:center;height:70%;gap:8px;color:var(--mochi-text-muted)", "components": [
         { "kind": "pyxis.Icon", "icon": "Folder", "size": 44, "style": "opacity:0.3" },
         { "name": "emptyTitle", "kind": "pyxis.Control", "tag": "span", "style": "font-size:0.9rem;font-weight:500" },
         { "name": "emptyHint", "kind": "pyxis.Control", "tag": "span", "style": "font-size:0.78rem;opacity:0.7" }
       ] },
-      { "name": "listing", "kind": "Files.Listing", "showing": false, "onOpenEntry": "openEntry", "onEntryMenu": "entryMenu" }
+      { "name": "listing", "kind": "Files.Listing", "showing": false, "onOpenEntry": "openEntry", "onEntryMenu": "entryMenu", "onRenameEntry": "renameEntry", "onDeleteEntry": "deleteEntry" }
     ] }
   ]
 }

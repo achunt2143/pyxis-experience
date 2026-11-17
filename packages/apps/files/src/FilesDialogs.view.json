@@ -1,40 +1,38 @@
 {
   "name": "Files.Dialogs",
   "kind": "pyxis.Control",
-  "published": { "mode": "", "busy": false, "entryName": "", "isDirectory": false, "error": null },
+  "published": { "mode": "", "busy": false, "entryName": "", "isDirectory": false, "error": null, "existingNames": [] },
   "events": { "onSubmit": "", "onDismiss": "", "onConfirmDelete": "", "onDismissError": "" },
   "components": [
-    { "name": "newFolder", "kind": "remochi.Dialog", "title": "New Folder", "dialogType": "default", "onClose": "dismiss", "components": [
-      { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:16px;min-width:280px;padding:8px 0", "components": [
-        { "kind": "pyxis.Control", "onkeydown": "nameKey", "components": [
-          { "name": "folderName", "kind": "remochi.Input", "placeholder": "Folder name", "width": "100%", "style": "display:block", "oninput": "nameInput" }
-        ] },
+    { "name": "newFolder", "kind": "remochi.Dialog", "title": "New Folder", "dialogType": "default", "onDismiss": "dismiss", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:16px;width:100%;min-width:0;max-width:100%;box-sizing:border-box;padding:8px 0", "components": [
+        { "name": "folderName", "kind": "remochi.Input", "placeholder": "Folder name", "width": "100%", "style": "display:block", "oninput": "nameInput", "onenter": "submit" },
+        { "name": "folderError", "kind": "pyxis.Control", "tag": "span", "showing": false, "attributes": { "role": "alert" }, "style": "font-size:0.78rem;color:var(--mochi-error);margin-top:-8px" },
         { "kind": "pyxis.Control", "style": "display:flex;justify-content:flex-end;gap:8px", "components": [
           { "name": "folderCancel", "kind": "remochi.Button", "ontap": "dismiss", "components": [ { "kind": "pyxis.Control", "tag": "span", "content": "Cancel" } ] },
           { "name": "folderCreate", "kind": "remochi.Button", "variant": "affirmative", "ontap": "submit", "disabled": true, "components": [ { "kind": "pyxis.Control", "tag": "span", "content": "Create" } ] }
         ] }
       ] }
     ] },
-    { "name": "rename", "kind": "remochi.Dialog", "title": "Rename", "dialogType": "default", "onClose": "dismiss", "components": [
-      { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:16px;min-width:280px;padding:8px 0", "components": [
-        { "kind": "pyxis.Control", "onkeydown": "nameKey", "components": [
-          { "name": "renameName", "kind": "remochi.Input", "placeholder": "New name", "width": "100%", "style": "display:block", "oninput": "nameInput" }
-        ] },
+    { "name": "rename", "kind": "remochi.Dialog", "title": "Rename", "dialogType": "default", "onDismiss": "dismiss", "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;flex-direction:column;gap:16px;width:100%;min-width:0;max-width:100%;box-sizing:border-box;padding:8px 0", "components": [
+        { "name": "renameName", "kind": "remochi.Input", "placeholder": "New name", "width": "100%", "style": "display:block", "oninput": "nameInput", "onenter": "submit" },
+        { "name": "renameError", "kind": "pyxis.Control", "tag": "span", "showing": false, "attributes": { "role": "alert" }, "style": "font-size:0.78rem;color:var(--mochi-error);margin-top:-8px" },
         { "kind": "pyxis.Control", "style": "display:flex;justify-content:flex-end;gap:8px", "components": [
           { "name": "renameCancel", "kind": "remochi.Button", "ontap": "dismiss", "components": [ { "kind": "pyxis.Control", "tag": "span", "content": "Cancel" } ] },
           { "name": "renameDo", "kind": "remochi.Button", "variant": "affirmative", "ontap": "submit", "disabled": true, "components": [ { "kind": "pyxis.Control", "tag": "span", "content": "Rename" } ] }
         ] }
       ] }
     ] },
-    { "name": "remove", "kind": "remochi.Dialog", "title": "Confirm Delete", "dialogType": "confirm", "confirmText": "Delete", "cancelText": "Cancel", "onClose": "dismiss", "onConfirm": "confirmDelete", "onCancel": "dismiss", "components": [
-      { "kind": "pyxis.Control", "tag": "p", "style": "margin:0;color:var(--color-text);font-size:0.9rem;line-height:1.5", "components": [
-        { "kind": "pyxis.Control", "tag": "span", "content": "Delete " },
-        { "name": "removeName", "kind": "pyxis.Control", "tag": "strong" },
-        { "name": "removeTail", "kind": "pyxis.Control", "tag": "span" }
+    { "name": "remove", "kind": "remochi.Dialog", "title": "Confirm Delete", "dialogType": "confirm", "confirmType": "warning", "tone": "warning", "confirmText": "Delete", "cancelText": "Cancel", "onDismiss": "dismiss", "onConfirm": "confirmDelete", "components": [
+      { "kind": "pyxis.Control", "tag": "p", "style": "margin:0;color:var(--mochi-text);font-size:0.9rem;line-height:1.5", "components": [
+        { "kind": "pyxis.Control", "tag": "span", "content": "Delete ", "style": "color:var(--mochi-text)" },
+        { "name": "removeName", "kind": "pyxis.Control", "tag": "strong", "style": "color:var(--mochi-text)" },
+        { "name": "removeTail", "kind": "pyxis.Control", "tag": "span", "style": "color:var(--mochi-text)" }
       ] }
     ] },
-    { "name": "alert", "kind": "remochi.Dialog", "title": "Files Error", "dialogType": "alert", "confirmText": "OK", "onClose": "dismissError", "onConfirm": "dismissError", "onCancel": "dismissError", "components": [
-      { "name": "errorText", "kind": "pyxis.Control", "tag": "p", "style": "margin:0;color:var(--color-error)" }
+    { "name": "alert", "kind": "remochi.Dialog", "title": "Files Error", "dialogType": "alert", "tone": "error", "confirmText": "OK", "onDismiss": "dismissError", "onConfirm": "dismissError", "components": [
+      { "name": "errorText", "kind": "pyxis.Control", "tag": "p", "style": "margin:0;color:var(--mochi-error);font-size:0.9rem;line-height:1.5" }
     ] }
   ]
 }

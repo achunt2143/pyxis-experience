@@ -8,6 +8,7 @@ export default view(spec, {
   create() {
     this.inherited();
     this.itemChanged();
+    this.selectedChanged();
   },
 
   itemChanged() {
@@ -27,5 +28,6 @@ export default view(spec, {
 
   selectedChanged() {
     this.addRemoveClass('selected', this.selected);
+    this.setAttributes({ tabIndex: 0, role: 'button', 'aria-pressed': String(!!this.selected) });
   },
 } satisfies CodeBehind);

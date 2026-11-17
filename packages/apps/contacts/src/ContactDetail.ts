@@ -1,4 +1,5 @@
 import { view, type Component, type ComponentEvent } from '@duyojs/duyo';
+import { formatLocalDate, parseLocalDate } from '@pyxis/app-sdk';
 import { onDestroy } from '@pyxis/app-sdk/duyo';
 import spec from './ContactDetail.view.json';
 import { exportVCard, getAvatarGradient, getInitials, type Contact } from './model';
@@ -12,7 +13,7 @@ const fieldKey = (name: string) => name.replace(/Field$/, '');
 /**
  * The contact card and editor. The app pushes `contact` (or null), `loaded` and
  * `saveStatus`; edits go out as onEdit {patch}, plus onAddContact (the empty state's
- * button) and onAskDelete (the app owns the dialog). Copy feedback and vCard export are
+ * button), onAskDelete (the app owns the dialog) and onBack (the narrow layout's way back). Copy feedback and vCard export are
  * the panel's own business.
  */
 export default view(spec, {
@@ -36,6 +37,10 @@ export default view(spec, {
     this.doAskDelete();
     return true;
   },
+  back() {
+    this.doBack();
+    return true;
+  },
   /** Any of the text fields: the component's name says which one. */
   fieldInput(sender: Component, event: ComponentEvent) {
     this.doEdit({ patch: { [fieldKey(sender.name ?? '')]: String(event['value'] ?? '') } });
@@ -49,8 +54,14 @@ export default view(spec, {
     this.doEdit({ patch: { category: String(event['value']) } });
     return true;
   },
+  // The picker hands back local midnight; toISOString() would be the day before west of UTC.
   birthdayInput(_sender, event) {
-    this.doEdit({ patch: { birthday: (event['value'] as Date).toISOString().split('T')[0] } });
+    const day = formatLocalDate(event['value'] as Date);
+    if (day) this.doEdit({ patch: { birthday: day } });
+    return true;
+  },
+  clearBirthday() {
+    this.doEdit({ patch: { birthday: '' } });
     return true;
   },
   toggleStar() {
@@ -85,6 +96,7 @@ export default view(spec, {
   contactChanged() {
     const c = this.contact as Contact | null;
     const d = this.$;
+    d.headerActions.setShowing(!!c);
     d.pane.setShowing(!!c);
     d.empty.setShowing(!c);
     if (!c) return;
@@ -95,8 +107,8 @@ export default view(spec, {
     d.subtitle.setContent((c.jobTitle ? `${c.jobTitle} ` : '') + (c.company ? `@ ${c.company}` : ''));
     d.starWrap.setAttributes({ title: c.starred ? 'Unstar Contact' : 'Star Contact' });
     d.starButton.setVariant(c.starred ? 'warning' : 'normal');
-    d.starIcon.setColor(c.starred ? '#ffb80d' : 'currentColor');
-    d.starIcon.setStyle(c.starred ? 'vertical-align:middle;fill:#ffb80d' : 'vertical-align:middle');
+    d.starIcon.setColor(c.starred ? 'var(--mochi-selected)' : 'currentColor');
+    d.starIcon.setStyle(c.starred ? 'vertical-align:middle;fill:var(--mochi-selected)' : 'vertical-align:middle');
 
     d.quick.setShowing(!!(c.email || c.phone));
     d.mail.setShowing(!!c.email);
@@ -112,7 +124,9 @@ export default view(spec, {
     d.jobTitleField.setValue(c.jobTitle || '');
     d.addressField.setValue(c.address || '');
     d.category.setValue(c.category || 'Personal');
-    d.birthday.setValue(c.birthday || '');
+    // A Date, not the string: the picker reads a 'YYYY-MM-DD' string as UTC midnight.
+    d.birthday.setValue(parseLocalDate(c.birthday || '') ?? '');
+    d.clearBirthday.setShowing(!!c.birthday);
     d.notes.setValue(c.notes);
   },
   loadedChanged() {
@@ -120,7 +134,8 @@ export default view(spec, {
   },
   saveStatusChanged() {
     this.$.saving.setShowing(this.saveStatus === 'saving');
-    this.$.saved.setShowing(this.saveStatus !== 'saving');
+    // Never "Saved" after a failed save: the app shows the error and a Retry.
+    this.$.saved.setShowing(this.saveStatus === 'saved');
   },
   copiedChanged() {
     const d = this.$;
@@ -130,7 +145,7 @@ export default view(spec, {
     ] as const) {
       const copied = this.copied === field;
       icon.setIcon(copied ? 'Check' : 'Copy');
-      icon.setColor(copied ? '#10b981' : undefined);
+      icon.setColor(copied ? 'var(--mochi-success)' : undefined);
       label.setContent(copied ? `Copied ${text}` : `Copy ${text}`);
     }
   },

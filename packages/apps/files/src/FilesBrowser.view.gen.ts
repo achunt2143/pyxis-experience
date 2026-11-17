@@ -3,24 +3,40 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
+  /** remochi.Header */
+  header: Instance<"remochi.Header">;
+  /** remochi.Button */
+  newFolder: Instance<"remochi.Button">;
+  /** remochi.Button */
+  placesBtn: Instance<"remochi.Button">;
   /** remochi.Button */
   back: Instance<"remochi.Button">;
+  /** remochi.Button */
+  forward: Instance<"remochi.Button">;
   /** remochi.Button */
   up: Instance<"remochi.Button">;
   /** pyxis.Repeater */
   crumbs: Instance<"pyxis.Repeater">;
-  /** remochi.Input */
-  search: Instance<"remochi.Input">;
   /** remochi.ViewSelectButton */
   views: Instance<"remochi.ViewSelectButton">;
   /** pyxis.Control */
   sortWrap: Instance<"pyxis.Control">;
   /** pyxis.Control */
   sortLabel: Instance<"pyxis.Control">;
-  /** remochi.Button */
-  newFolder: Instance<"remochi.Button">;
+  /** remochi.Input */
+  search: Instance<"remochi.Input">;
+  /** pyxis.Control */
+  clearSearch: Instance<"pyxis.Control">;
   /** pyxis.Control */
   status: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  unlockBtn: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  lockBtn: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  hiddenBtn: Instance<"pyxis.Control">;
+  /** pyxis.Icon */
+  hiddenIcon: Instance<"pyxis.Icon">;
   /** pyxis.Control */
   loading: Instance<"pyxis.Control">;
   /** pyxis.Control */
@@ -38,7 +54,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'cycleSort' | 'entryMenu' | 'goBack' | 'goUp' | 'newFolder' | 'openEntry' | 'pickView' | 'reload' | 'searchInput';
+export type Handlers = 'clearSearch' | 'cycleSort' | 'deleteEntry' | 'entryMenu' | 'goBack' | 'goForward' | 'goUp' | 'newFolder' | 'openEntry' | 'openPlaces' | 'pickCrumb' | 'pickView' | 'reload' | 'renameEntry' | 'requestUnlock' | 'revokeUnlock' | 'searchInput' | 'toggleHidden';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

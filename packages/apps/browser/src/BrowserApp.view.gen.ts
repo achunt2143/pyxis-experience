@@ -3,6 +3,12 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
+  /** remochi.Badge */
+  offline: Instance<"remochi.Badge">;
+  /** pyxis.Control */
+  shield: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  home: Instance<"remochi.Button">;
   /** pyxis.Control */
   reloadWrap: Instance<"pyxis.Control">;
   /** remochi.Button */
@@ -21,18 +27,20 @@ export type Named = {
   dropdown: Instance<"pyxis.Control">;
   /** pyxis.Repeater */
   suggestions: Instance<"pyxis.Repeater">;
-  /** remochi.Badge */
-  offline: Instance<"remochi.Badge">;
-  /** pyxis.Control */
-  shield: Instance<"pyxis.Control">;
   /** pyxis.Control */
   banner: Instance<"pyxis.Control">;
   /** pyxis.Control */
   bannerLetter: Instance<"pyxis.Control">;
   /** pyxis.Control */
   bannerUrl: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  closeBanner: Instance<"remochi.Button">;
   /** pyxis.Control */
   errorBar: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  errorText: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  closeError: Instance<"pyxis.Control">;
   /** pyxis.Repeater */
   pills: Instance<"pyxis.Repeater">;
   /** remochi.Button */
@@ -44,6 +52,8 @@ export type Named = {
   /** pyxis.Repeater */
   tiles: Instance<"pyxis.Repeater">;
   /** pyxis.Control */
+  addShortcutTile: Instance<"pyxis.Control">;
+  /** pyxis.Control */
   bookmarksPane: Instance<"pyxis.Control">;
   /** pyxis.Control */
   addForm: Instance<"pyxis.Control">;
@@ -51,6 +61,8 @@ export type Named = {
   newTitle: Instance<"remochi.Input">;
   /** remochi.Input */
   newUrl: Instance<"remochi.Input">;
+  /** pyxis.Control */
+  addError: Instance<"pyxis.Control">;
   /** pyxis.Control */
   bookmarksEmpty: Instance<"pyxis.Control">;
   /** pyxis.Repeater */
@@ -61,10 +73,14 @@ export type Named = {
   historyEmpty: Instance<"pyxis.Control">;
   /** pyxis.Repeater */
   historyRows: Instance<"pyxis.Repeater">;
+  /** remochi.Dialog */
+  clearHistoryDialog: Instance<"remochi.Dialog">;
+  /** pyxis.Control */
+  clearHistoryCount: Instance<"pyxis.Control">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'addShortcut' | 'addressFocus' | 'addressInput' | 'cancelAdd' | 'clearHistory' | 'clearInput' | 'closeBanner' | 'goHome' | 'reopen' | 'saveBookmark' | 'setupPill' | 'submitAddress' | 'toggleAdd' | 'toggleStar';
+export type Handlers = 'addShortcut' | 'addShortcutKeyDown' | 'addressFocus' | 'addressInput' | 'askClearHistory' | 'cancelAdd' | 'clearHistoryConfirmed' | 'clearInput' | 'closeBanner' | 'dismissError' | 'goHome' | 'newUrlInput' | 'openItem' | 'pickTab' | 'removeBookmark' | 'removeHistoryItem' | 'reopen' | 'saveBookmark' | 'setupPill' | 'submitAddress' | 'toggleAdd' | 'toggleStar';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

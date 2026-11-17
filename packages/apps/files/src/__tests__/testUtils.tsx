@@ -1,10 +1,10 @@
 // Shared by the Files tests: a mounted app over a fake filesystem service, and DOM finders.
 import { act, fireEvent } from '@testing-library/react';
 import { vi } from 'vitest';
-import { echoClient } from '@pyxis/app-sdk';
+import { echoClient, type StoragePartition } from '@pyxis/app-sdk';
 import { mountDuyoApp, type DuyoApp } from '@pyxis/app-sdk/duyo';
 import { islandPack } from '../islands';
-import type { FsEntry } from '../model';
+import { getParentPath, isPathOrDescendant, type FsEntry } from '../model';
 import '../FilesApp';
 
 /** remochi's Button measures its label on a canvas, which jsdom has no 2d context for. */
@@ -44,6 +44,8 @@ export const fake = {
   /** Resolves a readDirectory later: path -> release function. */
   held: {} as Record<string, () => void>,
   hold: new Set<string>(),
+  /** Optional partitions returned by deviceInfo.getStorageInfo. */
+  storage: null as StoragePartition[] | null,
 };
 
 export function resetFake(dirs: Record<string, FsEntry[]>) {
@@ -53,12 +55,17 @@ export function resetFake(dirs: Record<string, FsEntry[]>) {
   fake.failing = {};
   fake.held = {};
   fake.hold = new Set();
+  fake.storage = null;
 }
 
 export const callsOf = (method: string) => fake.calls.filter((c) => c.method === method);
 
 export function installFake() {
   vi.spyOn(echoClient, 'callMethod').mockImplementation(async (service, iface, method, args = {}) => {
+    if (service === 'deviceInfo' && iface === 'org.geckoOS.deviceInfo' && method === 'getStorageInfo') {
+      if (!fake.storage) throw new Error('storage unavailable');
+      return { partitions: structuredClone(fake.storage) };
+    }
     if (service !== 'filesystem' || iface !== 'org.geckoOS.filesystem') throw new Error(`unexpected call ${service}.${method}`);
     fake.calls.push({ method, args });
     if (fake.failing[method]) return { error: fake.failing[method] };
@@ -72,23 +79,42 @@ export function installFake() {
       case 'readFile':
         return { content: fake.files[path] ?? '' };
       case 'createDirectory': {
-        const parent = path.slice(0, path.lastIndexOf('/'));
+        const parent = getParentPath(path);
         fake.dirs[parent]?.push(dir(path));
+        fake.dirs[path] = fake.dirs[path] ?? [];
         return { success: true };
       }
       case 'move': {
         const from = String(args['source']);
         const to = String(args['destination']);
-        const parent = from.slice(0, from.lastIndexOf('/'));
+        const parent = getParentPath(from);
+        const moved = (fake.dirs[parent] ?? []).find((e) => e.path === from);
         fake.dirs[parent] = (fake.dirs[parent] ?? []).map((e) =>
           e.path === from ? { ...e, path: to, name: to.split('/').pop()! } : e
         );
+        if (moved?.isDirectory) {
+          for (const key of Object.keys(fake.dirs)) {
+            if (isPathOrDescendant(key, from)) {
+              const nextKey = to + key.slice(from.length);
+              fake.dirs[nextKey] = (fake.dirs[key] ?? []).map((e) => ({
+                ...e,
+                path: to + e.path.slice(from.length),
+              }));
+              delete fake.dirs[key];
+            }
+          }
+        }
         return { success: true };
       }
       case 'deleteFile':
       case 'deleteDirectory': {
-        const parent = path.slice(0, path.lastIndexOf('/'));
+        const parent = getParentPath(path);
         fake.dirs[parent] = (fake.dirs[parent] ?? []).filter((e) => e.path !== path);
+        if (method === 'deleteDirectory') {
+          for (const key of Object.keys(fake.dirs)) {
+            if (isPathOrDescendant(key, path)) delete fake.dirs[key];
+          }
+        }
         return { success: true };
       }
       default:
@@ -163,9 +189,9 @@ export const type = (el: HTMLInputElement, value: string) =>
   act(() => {
     fireEvent.change(el, { target: { value } });
   });
-export const press = (el: HTMLElement, key: string) =>
+export const press = (el: HTMLElement | Document, key: string, init: KeyboardEventInit = {}) =>
   act(() => {
-    fireEvent.keyDown(el, { key });
+    fireEvent.keyDown(el, { key, ...init });
   });
 
 /** Whether an element is drawn: no ancestor is `display: none` (a `showing: false` Duyo control). */

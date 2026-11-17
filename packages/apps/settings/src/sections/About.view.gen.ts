@@ -11,6 +11,8 @@ export type Named = {
   rows: Instance<"pyxis.Repeater">;
   /** pyxis.Control */
   failed: Instance<"pyxis.Control">;
+  /** Settings.SystemDiagnosticsCard */
+  diagnostics: Instance<"Settings.SystemDiagnosticsCard">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */

@@ -4,7 +4,7 @@
   "published": { "clock": null, "location": null, "stored": null, "hour24": false, "editing": false, "saveError": "" },
   "components": [
     { "kind": "Settings.Groupbox", "title": "Location", "glyph": "MapPin", "glyphColor": "#f43f5e", "group": "location", "components": [
-      { "kind": "pyxis.Control", "content": "Where the sun is for the Daylight wallpaper and the Auto theme. Nothing leaves the device.", "style": "font-size:0.78rem;color:var(--color-text-secondary, #64748b)" },
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "Where the sun is for the Daylight wallpaper and the Auto theme. Nothing leaves the device." },
       { "name": "source", "kind": "Settings.Fact", "label": "Location" },
       { "name": "coords", "kind": "Settings.Fact", "label": "Coordinates" },
       { "name": "sun", "kind": "Settings.Fact", "label": "Today", "glyph": "Sunrise", "attributes": { "data-location-sun": true } },
@@ -16,13 +16,13 @@
           { "kind": "remochi.Button", "content": "Use the time zone's location", "ontap": "revertToZone" }
         ] }
       ] },
-      { "name": "form", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;gap:10px", "components": [
+      { "name": "form", "kind": "pyxis.Control", "classes": "st-mochi-card", "showing": false, "components": [
         { "name": "fLabel", "kind": "Settings.Field", "label": "Name", "placeholder": "e.g. Home (optional)", "field": "label", "onEnter": "save" },
-        { "kind": "pyxis.Control", "style": "display:grid;grid-template-columns:1fr 1fr;gap:10px", "components": [
+        { "kind": "pyxis.Control", "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(160px, 100%), 1fr));gap:10px;width:100%;min-width:0", "components": [
           { "name": "fLat", "kind": "Settings.Field", "label": "Latitude", "placeholder": "e.g. 34.05 or 34.05 N", "field": "lat", "onEnter": "save" },
           { "name": "fLon", "kind": "Settings.Field", "label": "Longitude", "placeholder": "e.g. -118.24 or 118.24 W", "field": "lon", "onEnter": "save" }
         ] },
-        { "kind": "pyxis.Control", "style": "display:flex;gap:8px;justify-content:flex-end", "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap", "components": [
           { "kind": "pyxis.Control", "tag": "span", "attributes": { "data-location-cancel": true }, "components": [
             { "kind": "remochi.Button", "content": "Cancel", "ontap": "cancelEditing" }
           ] },

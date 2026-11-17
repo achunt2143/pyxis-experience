@@ -1,4 +1,4 @@
-import type { Terminal } from 'xterm';
+import type { Terminal } from '@xterm/xterm';
 
 /**
  * Interactive Mock Unix Shell for Dev / Browser Mode.
@@ -13,14 +13,22 @@ export function startMockShell(
   onSetTitle: (id: string, title: string) => void,
   onExit: () => void
 ): (data: string) => void {
-  const prompt = '\r\n\x1b[1;32mgeckouser@pyxis\x1b[0m:\x1b[1;34m~\x1b[0m$ ';
-  let line = '';
+  const promptVisible = '\x1b[1;32mgeckouser@pyxis\x1b[0m:\x1b[1;34m~\x1b[0m$ ';
+  const prompt = `\r\n${promptVisible}`;
+  let chars: string[] = [];
+  let cursor = 0;
   const history: string[] = [];
   let historyIdx = 0;
 
   term.writeln('\x1b[1;36mPyxis Terminal\x1b[0m (interactive dev mock shell)');
   term.writeln('Type \x1b[1mhelp\x1b[0m for available commands.\r\n');
-  term.write(prompt.trimStart());
+  term.write(promptVisible);
+
+  const redrawLine = () => {
+    const line = chars.join('');
+    const tail = chars.length - cursor;
+    term.write(`\r\x1b[K${promptVisible}${line}${tail > 0 ? `\x1b[${tail}D` : ''}`);
+  };
 
   const execute = (cmd: string) => {
     const trimmed = cmd.trim();
@@ -112,76 +120,174 @@ export function startMockShell(
     term.write(prompt);
   };
 
-  const handleInput = (e: string) => {
-    switch (e) {
-      case '\r': // Enter
-        execute(line);
-        line = '';
-        break;
-      case '\u007F': // Backspace
-        if (line.length > 0) {
-          line = line.slice(0, -1);
-          term.write('\b \b');
+  const handleInput = (data: string) => {
+    let i = 0;
+    while (i < data.length) {
+      if (data[i] === '\x1b') {
+        const rest = data.slice(i);
+        if (rest.startsWith('\x1b[A')) {
+          if (history.length > 0 && historyIdx > 0) {
+            historyIdx--;
+            chars = [...history[historyIdx]!];
+            cursor = chars.length;
+            redrawLine();
+          }
+          i += 3;
+          continue;
         }
-        break;
-      case '\u0003': // Ctrl+C
+        if (rest.startsWith('\x1b[B')) {
+          if (historyIdx < history.length - 1) {
+            historyIdx++;
+            chars = [...history[historyIdx]!];
+            cursor = chars.length;
+            redrawLine();
+          } else if (historyIdx === history.length - 1) {
+            historyIdx = history.length;
+            chars = [];
+            cursor = 0;
+            redrawLine();
+          }
+          i += 3;
+          continue;
+        }
+        if (rest.startsWith('\x1b[D')) {
+          if (cursor > 0) {
+            cursor--;
+            term.write('\x1b[D');
+          }
+          i += 3;
+          continue;
+        }
+        if (rest.startsWith('\x1b[C')) {
+          if (cursor < chars.length) {
+            cursor++;
+            term.write('\x1b[C');
+          }
+          i += 3;
+          continue;
+        }
+        if (rest.startsWith('\x1b[H') || rest.startsWith('\x1b[1~')) {
+          if (cursor > 0) {
+            cursor = 0;
+            redrawLine();
+          }
+          i += rest.startsWith('\x1b[H') ? 3 : 4;
+          continue;
+        }
+        if (rest.startsWith('\x1b[F') || rest.startsWith('\x1b[4~')) {
+          if (cursor < chars.length) {
+            cursor = chars.length;
+            redrawLine();
+          }
+          i += rest.startsWith('\x1b[F') ? 3 : 4;
+          continue;
+        }
+        if (rest.startsWith('\x1b[3~')) {
+          if (cursor < chars.length) {
+            chars.splice(cursor, 1);
+            redrawLine();
+          }
+          i += 4;
+          continue;
+        }
+        // Consume any other CSI escape sequence cleanly without inserting control garbage.
+        if (rest.startsWith('\x1b[')) {
+          const csi = /^[0-9;?]*[a-zA-Z~]/.exec(rest.slice(2));
+          if (csi) {
+            i += 2 + csi[0].length;
+            continue;
+          }
+        }
+        i += 1;
+        continue;
+      }
+
+      const cp = data.codePointAt(i);
+      if (cp === undefined) break;
+      const ch = String.fromCodePoint(cp);
+      i += ch.length;
+
+      if (ch === '\r' || ch === '\n') {
+        if (ch === '\r' && data[i] === '\n') i += 1;
+        const cmd = chars.join('');
+        chars = [];
+        cursor = 0;
+        execute(cmd);
+        continue;
+      }
+      if (ch === '\u007F' || ch === '\b') {
+        if (cursor > 0) {
+          if (cursor === chars.length) {
+            chars.pop();
+            cursor--;
+            term.write('\b \b');
+          } else {
+            chars.splice(cursor - 1, 1);
+            cursor--;
+            redrawLine();
+          }
+        }
+        continue;
+      }
+      if (ch === '\u0003') {
         term.writeln('^C');
-        line = '';
+        chars = [];
+        cursor = 0;
         term.write(prompt);
-        break;
-      case '\u0004': // Ctrl+D
-        if (line.length === 0) {
+        continue;
+      }
+      if (ch === '\u0004') {
+        if (chars.length === 0) {
           term.writeln('exit');
           onExit();
+          return;
         }
-        break;
-      case '\u000c': // Ctrl+L (clear)
+        continue;
+      }
+      if (ch === '\u000c') {
         term.clear();
         term.write(prompt);
-        if (line.length > 0) {
-          term.write(line);
+        if (chars.length > 0) {
+          term.write(chars.join(''));
+          const tail = chars.length - cursor;
+          if (tail > 0) term.write(`\x1b[${tail}D`);
         }
-        break;
-      case '\t': // Tab
-        if (line.startsWith('ca')) {
-          line = 'cat README.txt';
-          term.write('\r\x1b[K' + prompt.trimStart() + line);
+        continue;
+      }
+      if (ch === '\u0001') {
+        if (cursor > 0) {
+          cursor = 0;
+          redrawLine();
         }
-        break;
-      case '\u001b[A': // Up arrow
-        if (history.length > 0 && historyIdx > 0) {
-          historyIdx--;
-          while (line.length > 0) {
-            term.write('\b \b');
-            line = line.slice(0, -1);
-          }
-          line = history[historyIdx];
-          term.write(line);
+        continue;
+      }
+      if (ch === '\u0005') {
+        if (cursor < chars.length) {
+          cursor = chars.length;
+          redrawLine();
         }
-        break;
-      case '\u001b[B': // Down arrow
-        if (historyIdx < history.length - 1) {
-          historyIdx++;
-          while (line.length > 0) {
-            term.write('\b \b');
-            line = line.slice(0, -1);
-          }
-          line = history[historyIdx];
-          term.write(line);
-        } else if (historyIdx === history.length - 1) {
-          historyIdx = history.length;
-          while (line.length > 0) {
-            term.write('\b \b');
-            line = line.slice(0, -1);
-          }
+        continue;
+      }
+      if (ch === '\t') {
+        if (chars.join('').startsWith('ca')) {
+          chars = [...'cat README.txt'];
+          cursor = chars.length;
+          redrawLine();
         }
-        break;
-      default:
-        if (e >= ' ' && e <= '~') {
-          line += e;
-          term.write(e);
+        continue;
+      }
+      // Accept printable ASCII and all non-control UTF-8 characters.
+      if (cp >= 0x20 && cp !== 0x7f && !(cp >= 0x80 && cp <= 0x9f)) {
+        if (cursor === chars.length) {
+          chars.push(ch);
+          cursor++;
+          term.write(ch);
+        } else {
+          chars.splice(cursor, 0, ch);
+          cursor++;
+          redrawLine();
         }
-        break;
+      }
     }
   };
 

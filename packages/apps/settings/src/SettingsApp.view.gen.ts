@@ -11,10 +11,10 @@ export type Named = {
   footer: Instance<"pyxis.Control">;
   /** pyxis.Control */
   stage: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  stageBadge: Instance<"pyxis.Control">;
-  /** pyxis.Icon */
-  stageIcon: Instance<"pyxis.Icon">;
+  /** remochi.Header */
+  stageHeader: Instance<"remochi.Header">;
+  /** remochi.Button */
+  backButton: Instance<"remochi.Button">;
   /** pyxis.Control */
   stageTitle: Instance<"pyxis.Control">;
   /** pyxis.Control */
@@ -26,7 +26,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'powerCancelled' | 'powerConfirmed';
+export type Handlers = 'backToRail' | 'pickSection' | 'powerCancelled' | 'powerConfirmed' | 'railKey';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

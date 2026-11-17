@@ -7,6 +7,14 @@ export type Named = {
   statusBox: Instance<"pyxis.Control">;
   /** remochi.Badge */
   badge: Instance<"remochi.Badge">;
+  /** Settings.PowerBrightnessCard */
+  powerBrightness: Instance<"Settings.PowerBrightnessCard">;
+  /** Settings.DisplayCard */
+  displayOutputs: Instance<"Settings.DisplayCard">;
+  /** Settings.PrivilegedAccessCard */
+  privilegedAccess: Instance<"Settings.PrivilegedAccessCard">;
+  /** Settings.AppPermissionsCard */
+  appPermissions: Instance<"Settings.AppPermissionsCard">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */

@@ -3,6 +3,30 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
+  /** remochi.Header */
+  header: Instance<"remochi.Header">;
+  /** remochi.Button */
+  backButton: Instance<"remochi.Button">;
+  /** pyxis.Control */
+  headerActions: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  pinWrap: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  pinButton: Instance<"remochi.Button">;
+  /** pyxis.Icon */
+  pinIcon: Instance<"pyxis.Icon">;
+  /** remochi.Button */
+  copyButton: Instance<"remochi.Button">;
+  /** pyxis.Icon */
+  copyIcon: Instance<"pyxis.Icon">;
+  /** remochi.Button */
+  exportButton: Instance<"remochi.Button">;
+  /** pyxis.Control */
+  trashWrap: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  deleteButton: Instance<"remochi.Button">;
+  /** pyxis.Control */
+  copyErrorBar: Instance<"pyxis.Control">;
   /** pyxis.Control */
   empty: Instance<"pyxis.Control">;
   /** pyxis.Control */
@@ -13,18 +37,6 @@ export type Named = {
   title: Instance<"remochi.Input">;
   /** remochi.Dropdown */
   category: Instance<"remochi.Dropdown">;
-  /** pyxis.Control */
-  pinWrap: Instance<"pyxis.Control">;
-  /** remochi.Button */
-  pinButton: Instance<"remochi.Button">;
-  /** pyxis.Icon */
-  pinIcon: Instance<"pyxis.Icon">;
-  /** pyxis.Icon */
-  copyIcon: Instance<"pyxis.Icon">;
-  /** pyxis.Control */
-  confirmGroup: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  trashWrap: Instance<"pyxis.Control">;
   /** remochi.TextArea */
   body: Instance<"remochi.TextArea">;
   /** pyxis.Control */
@@ -32,13 +44,15 @@ export type Named = {
   /** pyxis.Control */
   saved: Instance<"pyxis.Control">;
   /** pyxis.Control */
+  saveErrorFooter: Instance<"pyxis.Control">;
+  /** pyxis.Control */
   edited: Instance<"pyxis.Control">;
   /** pyxis.Control */
   stats: Instance<"pyxis.Control">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'askDelete' | 'bodyInput' | 'cancelDelete' | 'categoryPicked' | 'confirmDelete' | 'copy' | 'exportIt' | 'titleInput' | 'togglePin';
+export type Handlers = 'askDelete' | 'back' | 'bodyInput' | 'categoryPicked' | 'copy' | 'exportIt' | 'titleInput' | 'togglePin';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

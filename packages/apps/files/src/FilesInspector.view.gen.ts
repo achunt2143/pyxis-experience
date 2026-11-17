@@ -11,8 +11,8 @@ export type Named = {
   closeButton: Instance<"remochi.Button">;
   /** pyxis.Control */
   loading: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  imageBox: Instance<"pyxis.Control">;
+  /** remochi.FloatingPanel */
+  imageBox: Instance<"remochi.FloatingPanel">;
   /** pyxis.Control */
   image: Instance<"pyxis.Control">;
   /** pyxis.Control */
@@ -23,16 +23,18 @@ export type Named = {
   textLabel: Instance<"pyxis.Control">;
   /** pyxis.Control */
   text: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  audioBox: Instance<"pyxis.Control">;
+  /** remochi.FloatingPanel */
+  audioBox: Instance<"remochi.FloatingPanel">;
   /** pyxis.Control */
   audioSize: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  metaBox: Instance<"pyxis.Control">;
+  /** remochi.FloatingPanel */
+  metaBox: Instance<"remochi.FloatingPanel">;
   /** pyxis.Control */
   metaText: Instance<"pyxis.Control">;
   /** pyxis.Control */
   path: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  copyPathButton: Instance<"pyxis.Control">;
   /** pyxis.Icon */
   pathIcon: Instance<"pyxis.Icon">;
   /** pyxis.Control */

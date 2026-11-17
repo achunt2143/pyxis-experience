@@ -1,5 +1,6 @@
-import { adapt, createPack } from '@duyojs/duyo/react';
-import type { ElementType } from 'react';
+import { createPack } from '@duyojs/duyo/react';
+import { adaptIsland } from '@pyxis/app-sdk/duyo';
+import type { ComponentType } from 'react';
 import { BookmarkRow, HistoryRow, SpeedDialTile, SuggestionRow } from './rows';
 
 /**
@@ -8,10 +9,10 @@ import { BookmarkRow, HistoryRow, SpeedDialTile, SuggestionRow } from './rows';
  * goes on the row's own root element.
  */
 const row = (name: string, component: unknown, withRemove: boolean) =>
-  adapt({
+  adaptIsland({
     name,
     kind: 'pyxis.Row',
-    component: component as ElementType,
+    component: component as ComponentType,
     host: 'props',
     events: { onOpenItem: '', ...(withRemove ? { onRemoveItem: '' } : {}) },
     props: (node) => {

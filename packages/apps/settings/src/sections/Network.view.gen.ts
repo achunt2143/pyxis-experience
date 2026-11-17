@@ -6,6 +6,8 @@ export type Named = {
   /** pyxis.Control */
   loading: Instance<"pyxis.Control">;
   /** pyxis.Control */
+  errorRow: Instance<"pyxis.Control">;
+  /** pyxis.Control */
   panel: Instance<"pyxis.Control">;
   /** pyxis.Control */
   badge: Instance<"pyxis.Control">;
@@ -19,6 +21,8 @@ export type Named = {
   ssid: Instance<"pyxis.Control">;
   /** pyxis.Control */
   iface: Instance<"pyxis.Control">;
+  /** Settings.NetworkConfigCard */
+  networkConfig: Instance<"Settings.NetworkConfigCard">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */

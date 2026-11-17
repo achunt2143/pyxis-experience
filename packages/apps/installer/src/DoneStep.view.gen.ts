@@ -17,6 +17,12 @@ export type Named = {
   open: Instance<"remochi.Button">;
   /** pyxis.Control */
   openLabel: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  again: Instance<"remochi.Button">;
+  /** pyxis.Control */
+  launchErrorRow: Instance<"pyxis.Control">;
+  /** pyxis.Control */
+  launchErrorText: Instance<"pyxis.Control">;
   /** pyxis.Control */
   logBox: Instance<"pyxis.Control">;
   /** pyxis.Control */

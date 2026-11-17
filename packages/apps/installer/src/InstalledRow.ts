@@ -14,6 +14,20 @@ export default view(spec, {
     this.inherited();
     this.itemChanged();
     this.confirmingChanged();
+    this.actionStateChanged();
+  },
+
+  rendered() {
+    this.inherited();
+    this.syncTrashLabel();
+  },
+
+  syncTrashLabel() {
+    const pkg = this.item as PackageInfo | null;
+    const name = pkg?.title ?? pkg?.package ?? 'application';
+    document
+      .querySelector(`[data-duyo-id="${this.$.trash.id}"] button`)
+      ?.setAttribute('aria-label', `Remove ${name}`);
   },
 
   itemChanged() {
@@ -28,6 +42,7 @@ export default view(spec, {
     appType.setShowing(Boolean(pkg.appType));
     appType.setContent(pkg.appType ?? '');
     meta.setContent(`${pkg.package} · ${formatSize(pkg.installedSize)} · ${pkg.architecture}`);
+    this.syncTrashLabel();
   },
 
   confirmingChanged() {
@@ -36,11 +51,24 @@ export default view(spec, {
   },
 
   removingChanged() {
-    this.$.confirm.setDisabled(this.removing);
-    this.$.confirmLabel.setContent(this.removing ? 'Removing…' : 'Confirm');
+    this.actionStateChanged();
+  },
+
+  launchingChanged() {
+    this.actionStateChanged();
+  },
+
+  actionStateChanged() {
+    const removing = Boolean(this.removing);
+    const launching = Boolean(this.launching);
+    this.$.confirm.setDisabled(removing);
+    this.$.confirmLabel.setContent(removing ? 'Removing…' : 'Confirm');
+    this.$.launchBtn.setDisabled(launching || removing);
+    this.$.launchLabel.setContent(launching ? 'Launching…' : 'Launch');
   },
 
   launch() {
+    if (this.launching || this.removing) return true;
     this.doLaunch({ package: this.item.package });
     return true;
   },

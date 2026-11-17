@@ -18,7 +18,9 @@ export default view(spec, {
     this.inherited();
     this.folderChanged();
     this.canBackChanged();
+    this.canForwardChanged();
     this.sortByChanged();
+    this.showHiddenChanged();
     this.updateStatus();
     this.updateBody();
   },
@@ -28,13 +30,31 @@ export default view(spec, {
     this.inherited();
     const label = (component: Component, text: string) =>
       document.querySelector(`[data-duyo-id="${component.id}"] button`)?.setAttribute('aria-label', text);
+    label(this.$.placesBtn, 'Places');
     label(this.$.back, 'Go Back');
+    label(this.$.forward, 'Go Forward');
     label(this.$.up, 'Parent Directory');
   },
 
+  focusSearch() {
+    const input = document.querySelector<HTMLInputElement>(
+      `input[data-duyo-id="${this.$.search.id}"], [data-duyo-id="${this.$.search.id}"] input`
+    );
+    input?.focus();
+    input?.select();
+  },
+
   // Events from the controls, re-raised for the app.
+  openPlaces() {
+    this.doOpenPlaces();
+    return true;
+  },
   goBack() {
     this.doGoBack();
+    return true;
+  },
+  goForward() {
+    this.doGoForward();
     return true;
   },
   goUp() {
@@ -49,12 +69,20 @@ export default view(spec, {
     this.doSearch({ value: String(event['value'] ?? '') });
     return true;
   },
+  clearSearch() {
+    this.doSearch({ value: '' });
+    return true;
+  },
   pickView(_sender, event) {
     this.doViewMode({ mode: event['index'] === 0 ? 'list' : 'grid' });
     return true;
   },
   cycleSort() {
     this.doCycleSort();
+    return true;
+  },
+  toggleHidden() {
+    this.doToggleHidden();
     return true;
   },
   newFolder() {
@@ -65,6 +93,14 @@ export default view(spec, {
     this.doReload();
     return true;
   },
+  requestUnlock() {
+    this.doRequestUnlock();
+    return true;
+  },
+  revokeUnlock() {
+    this.doRevokeUnlock();
+    return true;
+  },
   openEntry(_sender, event) {
     this.doOpenEntry({ entry: event['entry'] });
     return true;
@@ -73,11 +109,20 @@ export default view(spec, {
     this.doEntryMenu({ entry: event['entry'], rect: event['rect'] });
     return true;
   },
+  renameEntry(_sender, event) {
+    this.doRenameEntry({ entry: event['entry'] });
+    return true;
+  },
+  deleteEntry(_sender, event) {
+    this.doDeleteEntry({ entry: event['entry'] });
+    return true;
+  },
 
   // Published properties pushed in by the app.
   folderChanged() {
     const path = this.folder as string;
     const crumbs = getCrumbsForPath(path);
+    this.$.header.setContent(crumbs[crumbs.length - 1]?.label ?? 'Browse');
     this.$.crumbs.setItems(
       crumbs.map((c, i): CrumbItem => ({ ...c, first: i === 0, last: i === crumbs.length - 1 }))
     );
@@ -87,6 +132,9 @@ export default view(spec, {
   },
   canBackChanged() {
     this.$.back.setDisabled(!this.canBack);
+  },
+  canForwardChanged() {
+    this.$.forward.setDisabled(!this.canForward);
   },
   viewModeChanged() {
     this.$.views.setSelected(this.viewMode === 'list' ? 0 : 1);
@@ -104,8 +152,22 @@ export default view(spec, {
     this.$.sortWrap.setAttributes({ title: `Sort by ${by} (${order})` });
     this.$.sortLabel.setContent(by.toUpperCase());
   },
+  showHiddenChanged() {
+    const showing = !!this.showHidden;
+    this.$.hiddenIcon.setIcon(showing ? 'Eye' : 'EyeOff');
+    this.$.hiddenBtn.addRemoveClass('active', showing);
+    this.$.hiddenBtn.setAttributes({
+      type: 'button',
+      title: showing ? 'Hide dotfiles (Ctrl+H)' : 'Show dotfiles (Ctrl+H)',
+      'aria-label': 'Toggle hidden files',
+      'aria-pressed': String(showing),
+      'data-files-hidden-toggle': '',
+    });
+  },
   queryChanged() {
-    this.$.search.setValue(this.query as string);
+    const query = this.query as string;
+    this.$.search.setValue(query);
+    this.$.clearSearch.setShowing(query !== '');
     this.updateStatus();
     this.updateBody();
   },
@@ -124,19 +186,34 @@ export default view(spec, {
   selectedPathChanged() {
     this.$.listing.setSelectedPath(this.selectedPath as string | null);
   },
+  privilegedChanged() {
+    this.updateStatus();
+    this.updateNewFolder();
+  },
 
   updateNewFolder() {
     const dir = this.dir as DirState | null;
-    this.$.newFolder.setDisabled(!!this.busy || isReadOnly(this.folder as string) || !!dir?.error);
+    const outsideHome = isReadOnly(this.folder as string);
+    const readOnly = outsideHome && !this.privileged;
+    this.$.newFolder.setDisabled(!!this.busy || readOnly || !!dir?.error);
   },
   updateStatus() {
     const count = (this.entries as FsEntry[]).length;
     const query = this.query as string;
+    const outsideHome = isReadOnly(this.folder as string);
+    const privileged = !!this.privileged;
+    const suffix = outsideHome
+      ? privileged
+        ? ' · Privileged access unlocked'
+        : ' · Read-only: outside your home, files can be opened but not changed'
+      : '';
     this.$.status.setContent(
       `${count} ${count === 1 ? 'item' : 'items'}` +
         (query ? ` matching "${query}"` : '') +
-        (isReadOnly(this.folder as string) ? ' · Read-only: outside your home, files can be opened but not changed' : '')
+        suffix
     );
+    this.$.unlockBtn.setShowing(outsideHome && !privileged);
+    this.$.lockBtn.setShowing(outsideHome && privileged);
   },
   /** One of loading / error / empty / listing, in the order the React panel tested them. */
   updateBody() {

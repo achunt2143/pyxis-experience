@@ -5,10 +5,10 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 export type Named = {
   /** remochi.Header */
   header: Instance<"remochi.Header">;
+  /** remochi.Button */
+  backButton: Instance<"remochi.Button">;
   /** remochi.Badge */
   badge: Instance<"remochi.Badge">;
-  /** remochi.Dropdown */
-  sort: Instance<"remochi.Dropdown">;
   /** pyxis.Control */
   clearWrap: Instance<"pyxis.Control">;
   /** pyxis.Control */
@@ -19,6 +19,10 @@ export type Named = {
   addButton: Instance<"remochi.Button">;
   /** pyxis.Repeater */
   chips: Instance<"pyxis.Repeater">;
+  /** remochi.Input */
+  search: Instance<"remochi.Input">;
+  /** remochi.Dropdown */
+  sort: Instance<"remochi.Dropdown">;
   /** pyxis.Control */
   loading: Instance<"pyxis.Control">;
   /** pyxis.Control */
@@ -30,7 +34,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'clearDone' | 'draftInput' | 'setupRow' | 'sortInput' | 'submitDraft';
+export type Handlers = 'back' | 'clearDone' | 'draftInput' | 'pickChip' | 'pickTask' | 'searchInput' | 'setupRow' | 'sortInput' | 'submitDraft' | 'toggleRow';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

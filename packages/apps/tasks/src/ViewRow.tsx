@@ -1,4 +1,4 @@
-import { adapt } from '@duyojs/duyo/react';
+import { adaptIsland } from '@pyxis/app-sdk/duyo';
 import {
   AlertCircle,
   Briefcase,
@@ -42,12 +42,12 @@ export function ViewRowView({ item }: { item: ViewItem | null }) {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: sel ? 'var(--mochi-primary, #2f6fed)' : 'var(--mochi-hover, rgba(0,0,0,0.05))',
+            background: sel ? 'var(--mochi-primary)' : 'var(--mochi-hover)',
             color: sel
-              ? '#ffffff'
+              ? 'var(--mochi-primary-text)'
               : item.group === 'smart'
-                ? 'var(--mochi-primary, #2f6fed)'
-                : 'var(--color-text-secondary, #64748b)',
+                ? 'var(--mochi-primary)'
+                : 'var(--mochi-text-muted)',
             transition: 'all 0.15s ease',
           }}
         >
@@ -63,7 +63,7 @@ export function ViewRowView({ item }: { item: ViewItem | null }) {
 }
 
 registerIsland(
-  adapt({
+  adaptIsland({
     name: 'Tasks.ViewRow',
     component: ViewRowView,
     kind: 'pyxis.Row',

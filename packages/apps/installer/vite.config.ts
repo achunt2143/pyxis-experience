@@ -4,9 +4,7 @@ import { duyoViews } from '@duyojs/duyo/views/vite'
 
 export default defineConfig({
   plugins: [duyoViews(), react()],
-  // Duyo ships TS source, and its remochi/css entry is a .ts that imports
-  // remochi's CSS, whose fonts the dependency pre-bundler can't load. Serve
-  // it through Vite's own pipeline instead.
+  // Duyo ships TS source. Serve it through Vite's own pipeline rather than pre-bundling.
   optimizeDeps: { exclude: ['@duyojs/duyo'] },
   server: {
     port: 5187,

@@ -1,20 +1,14 @@
 {
   "name": "Tasks.Stream",
   "kind": "pyxis.Control",
-  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-height:0",
-  "published": { "items": [], "selectedId": null, "loaded": false, "heading": "All Tasks", "listTotal": 0, "listCompleted": 0, "doneCount": 0, "sortBy": "createdAt", "draftText": "", "draftPriority": "none", "draftDueDate": "" },
-  "events": { "onAddTask": "", "onSelectTask": "", "onToggleTask": "", "onSortChange": "", "onClearDone": "" },
+  "style": "position:absolute;inset:0;display:flex;flex-direction:column;min-width:0;min-height:0",
+  "published": { "items": [], "selectedId": null, "loaded": false, "heading": "All Tasks", "listTotal": 0, "listCompleted": 0, "doneCount": 0, "sortBy": "createdAt", "search": "", "draftText": "", "draftPriority": "none", "draftDueDate": "" },
+  "events": { "onAddTask": "", "onSelectTask": "", "onToggleTask": "", "onSortChange": "", "onClearDone": "", "onSearchChange": "", "onBack": "" },
   "components": [
     { "name": "header", "kind": "remochi.Header", "content": "All Tasks", "components": [
+      { "name": "backButton", "kind": "remochi.Button", "content": "\u2190 Lists", "classes": "tasks-back-btn", "ontap": "back", "attributes": { "aria-label": "Back to Lists" } },
       { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px", "components": [
         { "name": "badge", "kind": "remochi.Badge", "content": "0/0" },
-        { "kind": "pyxis.Control", "style": "width:130px", "components": [
-          { "name": "sort", "kind": "remochi.Dropdown", "onChange": "sortInput", "options": [
-            { "value": "createdAt", "label": "Date Added" },
-            { "value": "dueDate", "label": "Due Date" },
-            { "value": "priority", "label": "Priority" }
-          ] }
-        ] },
         { "name": "clearWrap", "kind": "pyxis.Control", "tag": "span", "showing": false, "attributes": { "title": "Clear completed tasks" }, "components": [
           { "kind": "remochi.Button", "variant": "warning", "ontap": "clearDone", "components": [
             { "kind": "pyxis.Icon", "icon": "Trash2", "size": 13, "style": "margin-right:4px;vertical-align:middle" },
@@ -23,28 +17,45 @@
         ] }
       ] }
     ] },
-    { "kind": "pyxis.Control", "style": "padding:10px 16px;background:var(--color-surface, var(--mochi-surface, #ffffff));border-bottom:1px solid var(--color-border, var(--mochi-border, #e5e7eb));display:flex;flex-direction:column;gap:8px", "components": [
+    { "kind": "pyxis.Control", "style": "padding:0 32px", "components": [
+      { "kind": "remochi.Divider" }
+    ] },
+    { "kind": "pyxis.Control", "style": "padding:10px 24px;background:var(--mochi-surface);border-bottom:1px solid var(--mochi-border);display:flex;flex-direction:column;gap:8px", "components": [
       { "name": "form", "kind": "pyxis.Control", "tag": "form", "onsubmit": "submitDraft", "style": "display:flex;gap:8px;align-items:center", "components": [
-        { "kind": "pyxis.Control", "style": "flex:1", "components": [
+        { "kind": "pyxis.Control", "style": "flex:1;min-width:0", "components": [
           { "name": "draft", "kind": "remochi.Input", "placeholder": "Add a task and press Enter…", "width": "100%", "classes": "tasks-draft", "style": "display:block", "oninput": "draftInput" }
         ] },
-        { "name": "addButton", "kind": "remochi.Button", "variant": "blue", "htmlType": "submit", "disabled": true, "components": [
+        { "name": "addButton", "kind": "remochi.Button", "variant": "blue", "htmlType": "submit", "disabled": true, "attributes": { "aria-label": "Add Task" }, "components": [
           { "kind": "pyxis.Icon", "icon": "Plus", "size": 16, "style": "vertical-align:middle" }
         ] }
       ] },
-      { "name": "chips", "kind": "pyxis.Repeater", "itemKind": "Tasks.Pill", "keyField": "id", "itemProps": { "ontap": "pickChip" },
-        "style": "display:flex;gap:6px;align-items:center;flex-wrap:wrap" }
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;min-width:0", "components": [
+        { "name": "chips", "kind": "pyxis.Repeater", "itemKind": "Tasks.Pill", "keyField": "id", "itemProps": { "ontap": "pickChip" },
+          "style": "display:flex;gap:6px;align-items:center;flex-wrap:wrap;flex:1;min-width:0" },
+        { "kind": "pyxis.Control", "style": "width:150px;flex-shrink:1;min-width:96px", "components": [
+          { "name": "search", "kind": "remochi.Input", "type": "search", "placeholder": "Search tasks…", "width": "100%", "classes": "tasks-search", "style": "display:block", "oninput": "searchInput", "attributes": { "aria-label": "Search tasks" } }
+        ] },
+        { "kind": "pyxis.Control", "style": "width:116px;flex-shrink:0", "components": [
+          { "name": "sort", "kind": "remochi.Dropdown", "onChange": "sortInput", "options": [
+            { "value": "createdAt", "label": "Date Added" },
+            { "value": "dueDate", "label": "Due Date" },
+            { "value": "priority", "label": "Priority" }
+          ] }
+        ] }
+      ] }
     ] },
-    { "kind": "pyxis.Control", "style": "flex:1;overflow-y:auto;padding:12px 16px;min-height:0", "components": [
+    { "kind": "pyxis.Control", "style": "flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 24px;min-width:0;min-height:0", "components": [
       { "name": "loading", "kind": "pyxis.Control", "style": "display:flex;justify-content:center;padding:36px", "components": [
         { "kind": "remochi.Spinner", "styleType": "light", "size": "normal", "alt": "Loading tasks" }
       ] },
-      { "name": "empty", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;align-items:center;justify-content:center;height:70%;gap:8px;color:var(--color-text-secondary, #64748b)", "components": [
+      { "name": "empty", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;align-items:center;justify-content:center;height:70%;gap:8px;color:var(--mochi-text-muted)", "components": [
         { "kind": "pyxis.Icon", "icon": "CircleCheck", "size": 42, "style": "opacity:0.3" },
         { "name": "emptyText", "kind": "pyxis.Control", "tag": "span", "style": "font-size:0.9rem;font-weight:500" }
       ] },
-      { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Tasks.Row", "keyField": "id", "showing": false, "itemProps": { "ontap": "pickTask", "onToggle": "toggleRow" }, "onSetupItem": "setupRow",
-        "style": "display:flex;flex-direction:column;gap:6px" }
+      { "kind": "remochi.List", "components": [
+        { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Tasks.Row", "keyField": "id", "showing": false, "itemProps": { "ontap": "pickTask", "onToggle": "toggleRow" }, "onSetupItem": "setupRow",
+          "style": "display:flex;flex-direction:column;gap:6px" }
+      ] }
     ] }
   ]
 }

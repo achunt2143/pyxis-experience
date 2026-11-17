@@ -7,15 +7,19 @@ export const terms: FakeTerminal[] = [];
 export class FakeTerminal {
   cols = 80;
   rows = 24;
-  options: { fontSize?: number } = {};
+  options: { fontSize?: number; scrollback?: number } = {};
   written: string[] = [];
   focused = 0;
   cleared = 0;
   disposed = false;
+  selection = '';
+  pasted: string[] = [];
   onDataCb: ((data: string) => void) | null = null;
+  onBellCb: (() => void) | null = null;
+  customKeyHandler: ((ev: KeyboardEvent) => boolean) | null = null;
 
-  constructor(opts: { fontSize?: number } = {}) {
-    this.options = { fontSize: opts.fontSize };
+  constructor(opts: { fontSize?: number; scrollback?: number } = {}) {
+    this.options = { fontSize: opts.fontSize, scrollback: opts.scrollback };
     terms.push(this);
   }
   loadAddon() {}
@@ -34,6 +38,24 @@ export class FakeTerminal {
   }
   onData(cb: (data: string) => void) {
     this.onDataCb = cb;
+    return { dispose: () => { this.onDataCb = null; } };
+  }
+  onBell(cb: () => void) {
+    this.onBellCb = cb;
+    return { dispose: () => { this.onBellCb = null; } };
+  }
+  attachCustomKeyEventHandler(cb: (ev: KeyboardEvent) => boolean) {
+    this.customKeyHandler = cb;
+  }
+  getSelection() {
+    return this.selection;
+  }
+  paste(data: string) {
+    this.pasted.push(data);
+    this.onDataCb?.(data);
+  }
+  triggerBell() {
+    this.onBellCb?.();
   }
   dispose() {
     this.disposed = true;

@@ -10,7 +10,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'closeClicked';
+export type Handlers = 'closeClicked' | 'closeKeyDown' | 'tabKeyDown';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

@@ -1,16 +1,20 @@
 {
   "name": "Installer.Installed",
   "kind": "pyxis.Control",
-  "style": "max-width:800px;margin:0 auto",
-  "published": { "packages": [], "removing": null },
+  "style": "max-width:800px;margin:0 auto;min-width:0;width:100%",
+  "published": { "packages": [], "removing": null, "launching": null, "error": "", "active": false },
   "events": { "onLaunch": "", "onRemove": "" },
   "components": [
     { "kind": "pyxis.Control", "style": "position:relative;margin-bottom:14px", "components": [
-      { "kind": "pyxis.Icon", "icon": "Search", "size": 14, "color": "var(--color-text-muted, #9ca3af)", "style": "position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1" },
-      { "name": "search", "kind": "remochi.Input", "placeholder": "Search installed applications…", "width": "100%", "classes": "inst-search", "style": "display:block", "oninput": "searchInput" }
+      { "kind": "pyxis.Icon", "icon": "Search", "size": 14, "color": "var(--mochi-text-muted)", "style": "position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;z-index:1" },
+      { "name": "search", "kind": "remochi.Input", "placeholder": "Search installed applications…", "width": "100%", "classes": "inst-search", "style": "display:block", "attributes": { "aria-label": "Search installed applications" }, "oninput": "searchInput" }
+    ] },
+    { "name": "errorRow", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:12px;border-radius:var(--mochi-corner-sm, 10px);background:color-mix(in srgb, var(--mochi-error) 12%, transparent);border:1px solid color-mix(in srgb, var(--mochi-error) 35%, transparent);color:var(--mochi-error);font-size:13px;min-width:0;overflow-wrap:anywhere", "showing": false, "components": [
+      { "kind": "pyxis.Icon", "icon": "TriangleAlert", "size": 16, "style": "flex-shrink:0" },
+      { "name": "errorText", "kind": "pyxis.Control", "tag": "span", "style": "min-width:0" }
     ] },
     { "name": "empty", "kind": "pyxis.Control", "classes": "inst-card", "showing": false,
-      "style": "padding:32px;text-align:center;color:var(--color-text-secondary, #6b7280);font-size:13px" },
+      "style": "padding:32px;text-align:center;color:var(--mochi-text-muted);font-size:13px" },
     { "name": "rows", "kind": "pyxis.Repeater", "itemKind": "Installer.InstalledRow", "keyField": "package",
       "style": "display:flex;flex-direction:column;gap:8px", "onSetupItem": "setupRow",
       "itemProps": { "onLaunch": "launchRow", "onAskRemove": "askRemove", "onCancelRemove": "cancelRemove", "onRemove": "removeRow" } }

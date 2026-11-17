@@ -1,0 +1,9 @@
+{
+  "name": "Settings.Swatch",
+  "kind": "pyxis.Row",
+  "tag": "button",
+  "classes": "st-swatch",
+  "components": [
+    { "name": "dot", "kind": "pyxis.Control", "tag": "span", "classes": "st-swatch-dot" }
+  ]
+}

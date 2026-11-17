@@ -9,11 +9,8 @@ interface QuickKeyButtonProps {
 }
 
 /**
- * One key of the helper ribbon. A React button rather than a Duyo node tree because of
- * `onMouseDown`: the old ribbon cancelled it so the xterm view kept the keyboard focus
- * while a key was pressed, and a Duyo control only maps pointer events (cancelling
- * `pointerdown` does not reliably stop the focus change). The same code, the same
- * behaviour, and the row is one node.
+ * One key of the helper ribbon: a compact single-button leaf that cancels `onMouseDown`
+ * so the xterm view keeps keyboard focus while a quick key is pressed.
  */
 export const QuickKeyButton: React.FC<QuickKeyButtonProps> = ({ item, onSend, className, style, ...rest }) => {
   if (!item) return null;

@@ -14,7 +14,7 @@ export type Named = {
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = never;
+export type Handlers = 'pickList';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

@@ -1,40 +1,43 @@
 {
   "name": "Installer.InstalledRow",
   "kind": "pyxis.Row",
-  "style": "display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.04)",
-  "classes": "inst-card",
-  "published": { "confirming": false, "removing": false },
+  "classes": "inst-card inst-item",
+  "published": { "confirming": false, "removing": false, "launching": false },
   "events": { "onLaunch": "", "onAskRemove": "", "onCancelRemove": "", "onRemove": "" },
   "components": [
-    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:12px;min-width:0;flex:1", "components": [
-      { "kind": "pyxis.Control", "style": "width:40px;height:40px;border-radius:16px 4px 16px 16px;background:linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);color:#fff;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;flex-shrink:0", "components": [
-        { "name": "letter", "kind": "pyxis.Control", "tag": "span" },
-        { "name": "glyph", "kind": "pyxis.Icon", "icon": "Package", "size": 18, "showing": false }
-      ] },
-      { "kind": "pyxis.Control", "style": "min-width:0;flex:1", "components": [
-        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px", "components": [
-          { "name": "title", "kind": "pyxis.Control", "tag": "span", "style": "font-weight:700;font-size:14px;color:var(--color-text, #111827)" },
-          { "name": "version", "kind": "remochi.Badge" },
-          { "name": "appType", "kind": "remochi.Badge", "showing": false }
+    { "kind": "remochi.Item", "hoverable": false, "components": [
+      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;gap:10px 12px;width:100%;min-width:0;flex-wrap:wrap", "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:12px;min-width:0;flex:1", "components": [
+          { "kind": "pyxis.Control", "style": "width:40px;height:40px;border-radius:var(--mochi-corner-sm, 10px);background:var(--mochi-primary);color:var(--mochi-primary-text, #ffffff);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:800;flex-shrink:0", "components": [
+            { "name": "letter", "kind": "pyxis.Control", "tag": "span" },
+            { "name": "glyph", "kind": "pyxis.Icon", "icon": "Package", "size": 18, "showing": false }
+          ] },
+          { "kind": "pyxis.Control", "style": "min-width:0;flex:1", "components": [
+            { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0", "components": [
+              { "name": "title", "kind": "pyxis.Control", "tag": "span", "style": "font-weight:700;font-size:14px;color:var(--mochi-text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" },
+              { "name": "version", "kind": "remochi.Badge" },
+              { "name": "appType", "kind": "remochi.Badge", "showing": false }
+            ] },
+            { "name": "meta", "kind": "pyxis.Control", "style": "font-size:11px;color:var(--mochi-text-muted);margin-top:2px;overflow-wrap:anywhere" }
+          ] }
         ] },
-        { "name": "meta", "kind": "pyxis.Control", "style": "font-size:11px;color:var(--color-text-muted, #9ca3af);margin-top:2px" }
-      ] }
-    ] },
-    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;flex-shrink:0", "components": [
-      { "kind": "remochi.Button", "variant": "affirmative", "ontap": "launch", "components": [
-        { "kind": "pyxis.Icon", "icon": "Play", "size": 13, "style": "vertical-align:middle;margin-right:4px" },
-        { "kind": "pyxis.Control", "tag": "span", "content": "Launch", "style": "font-size:11px" }
-      ] },
-      { "name": "confirmGroup", "kind": "pyxis.Control", "style": "display:inline-flex;align-items:center;gap:4px", "showing": false, "components": [
-        { "name": "confirm", "kind": "remochi.Button", "variant": "warning", "ontap": "confirmRemove", "components": [
-          { "name": "confirmLabel", "kind": "pyxis.Control", "tag": "span", "content": "Confirm", "style": "font-size:11px;font-weight:700" }
-        ] },
-        { "kind": "remochi.Button", "variant": "normal", "ontap": "cancelRemove", "components": [
-          { "kind": "pyxis.Control", "tag": "span", "content": "Cancel", "style": "font-size:11px" }
+        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap", "components": [
+          { "name": "launchBtn", "kind": "remochi.Button", "variant": "affirmative", "ontap": "launch", "components": [
+            { "kind": "pyxis.Icon", "icon": "Play", "size": 13, "style": "vertical-align:middle;margin-right:4px" },
+            { "name": "launchLabel", "kind": "pyxis.Control", "tag": "span", "content": "Launch", "style": "font-size:11px" }
+          ] },
+          { "name": "confirmGroup", "kind": "pyxis.Control", "style": "display:inline-flex;align-items:center;gap:4px", "showing": false, "components": [
+            { "name": "confirm", "kind": "remochi.Button", "variant": "warning", "ontap": "confirmRemove", "components": [
+              { "name": "confirmLabel", "kind": "pyxis.Control", "tag": "span", "content": "Confirm", "style": "font-size:11px;font-weight:700" }
+            ] },
+            { "name": "cancel", "kind": "remochi.Button", "variant": "normal", "ontap": "cancelRemove", "components": [
+              { "kind": "pyxis.Control", "tag": "span", "content": "Cancel", "style": "font-size:11px" }
+            ] }
+          ] },
+          { "name": "trash", "kind": "remochi.Button", "variant": "normal", "ontap": "askRemove", "components": [
+            { "kind": "pyxis.Icon", "icon": "Trash2", "size": 13, "style": "vertical-align:middle" }
+          ] }
         ] }
-      ] },
-      { "name": "trash", "kind": "remochi.Button", "variant": "normal", "ontap": "askRemove", "components": [
-        { "kind": "pyxis.Icon", "icon": "Trash2", "size": 13, "style": "vertical-align:middle" }
       ] }
     ] }
   ]

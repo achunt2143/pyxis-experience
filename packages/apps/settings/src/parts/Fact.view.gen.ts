@@ -3,12 +3,8 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
-  /** pyxis.Icon */
-  icon: Instance<"pyxis.Icon">;
-  /** pyxis.Control */
-  labelText: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  valueText: Instance<"pyxis.Control">;
+  /** remochi.Item */
+  item: Instance<"remochi.Item">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */

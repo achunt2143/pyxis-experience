@@ -1,5 +1,13 @@
-import { view, type Component } from '@duyojs/duyo';
-import { registerIcons } from '@pyxis/app-sdk/duyo';
+import { view, type Component, type ComponentEvent } from '@duyojs/duyo';
+import { onDestroy, registerIcons } from '@pyxis/app-sdk/duyo';
+import {
+  getPrivilegeState,
+  getStorageInfo,
+  onPrivilegeChanged,
+  requestPrivilege,
+  revokePrivilege,
+  type StoragePartition,
+} from '@pyxis/app-sdk';
 import {
   ArrowUpDown,
   Check,
@@ -8,12 +16,17 @@ import {
   ChevronUp,
   Copy,
   Edit3,
+  Eye,
+  EyeOff,
   File,
   Folder,
   FolderPlus,
+  Lock,
   Music,
+  PanelLeft,
   RefreshCw,
   Trash2,
+  Unlock,
   X,
 } from 'lucide-react';
 import spec from './FilesApp.view.json';
@@ -26,10 +39,15 @@ import {
   IMAGE_MIME,
   MAX_PREVIEW_BYTES,
   TEXT_EXT,
+  TOO_LARGE_PREVIEW_MSG,
   getParentPath,
+  isPathOrDescendant,
   isReadOnly,
+  joinPath,
   nextSort,
   normalizePath,
+  summarizeStorage,
+  validateEntryName,
   visibleEntries,
   type DirState,
   type FsEntry,
@@ -37,6 +55,7 @@ import {
   type Preview,
   type SortBy,
   type SortOrder,
+  type StorageSummary,
   type ViewMode,
 } from './model';
 import type { DialogMode } from './FilesDialogs';
@@ -55,14 +74,25 @@ registerIcons({
   ChevronUp,
   Copy,
   Edit3,
+  Eye,
+  EyeOff,
   File,
   Folder,
   FolderPlus,
+  Lock,
   Music,
+  PanelLeft,
   RefreshCw,
   Trash2,
+  Unlock,
   X,
 });
+
+function isEditableElement(el: HTMLElement | null): boolean {
+  if (!el) return false;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || el.isContentEditable;
+}
 
 /** What the open dialog is about. The typed name lives in the dialog's field. */
 interface DialogState {
@@ -97,6 +127,7 @@ export default view(spec, {
     this._query = '';
     this._sortBy = 'name' as SortBy;
     this._sortOrder = 'asc' as SortOrder;
+    this._showHidden = false;
     this._dirs = {} as Record<string, DirState>;
     // Which folders were asked for: a folder is fetched the first time it is shown, once.
     this._requested = new Set<string>();
@@ -107,16 +138,157 @@ export default view(spec, {
     this._busy = false;
     this._actionError = null as string | null;
     this._menu = null as MenuState | null;
-    this._visible = null as { entries: FsEntry[] | undefined; query: string; by: SortBy; order: SortOrder; result: FsEntry[] } | null;
+    this._visible = null as {
+      entries: FsEntry[] | undefined;
+      query: string;
+      by: SortBy;
+      order: SortOrder;
+      showHidden: boolean;
+      result: FsEntry[];
+    } | null;
+    this._privileged = false;
+    this._storagePartitions = [] as StoragePartition[];
+    this._storage = null as StorageSummary | null;
 
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (this.destroyed) return;
+      this.handleKeyDown(e);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    onDestroy(this, () => document.removeEventListener('keydown', onKeyDown));
+
+    const offPrivilege = onPrivilegeChanged((state) => {
+      if (this.destroyed) return;
+      const next =
+        state.grants.some((g) => g.appId === 'files' && g.remainingSecs > 0) ||
+        (state.active && state.grant?.appId === 'files');
+      if (next !== this._privileged) {
+        this._privileged = next;
+        this.sync();
+      }
+    });
+    onDestroy(this, offPrivilege);
+    void getPrivilegeState('files').then((state) => {
+      if (this.destroyed) return;
+      const next = !!state.active;
+      if (next !== this._privileged) {
+        this._privileged = next;
+        this.sync();
+      }
+    });
+
+    void this.loadStorageInfo();
     this.ensureLoaded();
     this.sync();
+  },
+
+  async loadStorageInfo() {
+    const partitions = await getStorageInfo();
+    if (this.destroyed) return;
+    this._storagePartitions = partitions;
+    const next = summarizeStorage(partitions, this._path as string);
+    this._storage = next;
+    this.sync();
+  },
+
+  handleKeyDown(e: KeyboardEvent) {
+    const target = e.target as HTMLElement | null;
+    if (
+      this._dialog ||
+      this._actionError !== null ||
+      this._menu ||
+      target?.closest?.('[role="dialog"], .mochi-dialog-overlay, .mochi-contextual-popup')
+    ) {
+      return;
+    }
+
+    const key = e.key;
+    const mod = e.ctrlKey || e.metaKey;
+    const editable = isEditableElement(target);
+
+    if (mod && !e.altKey && key.toLowerCase() === 'f') {
+      e.preventDefault();
+      this.$.browser.focusSearch();
+      return;
+    }
+    if (mod && !e.altKey && key.toLowerCase() === 'n') {
+      e.preventDefault();
+      const dir = this._dirs[this._path] as DirState | undefined;
+      if (!this._busy && !dir?.error && (!isReadOnly(this._path) || this._privileged)) {
+        this.newFolder();
+      }
+      return;
+    }
+    if (mod && !e.altKey && !e.shiftKey && key.toLowerCase() === 'h') {
+      e.preventDefault();
+      this.toggleHidden();
+      return;
+    }
+    if (!mod && !e.altKey && !e.shiftKey && key === 'F5') {
+      e.preventDefault();
+      this.reload();
+      return;
+    }
+    if (e.altKey && !mod && !e.shiftKey && key === 'ArrowLeft') {
+      e.preventDefault();
+      this.back();
+      return;
+    }
+    if (e.altKey && !mod && !e.shiftKey && key === 'ArrowRight') {
+      e.preventDefault();
+      this.forward();
+      return;
+    }
+    if (e.altKey && !mod && !e.shiftKey && key === 'ArrowUp') {
+      e.preventDefault();
+      this.goUp();
+      return;
+    }
+    if (!mod && !e.altKey && !e.shiftKey && key === 'Backspace' && !editable) {
+      e.preventDefault();
+      if (this._historyIndex > 0) this.back();
+      else this.goUp();
+      return;
+    }
+    if (!mod && !e.altKey && !e.shiftKey && key === 'Escape') {
+      const inSearch = !!target?.closest?.('.files-search');
+      if (inSearch && this._query) {
+        e.preventDefault();
+        this._query = '';
+        this.sync();
+        return;
+      }
+      if (this._preview) {
+        e.preventDefault();
+        this.endPreview(true);
+        return;
+      }
+      if (this._query) {
+        e.preventDefault();
+        this._query = '';
+        this.sync();
+        return;
+      }
+      if (this.$.stack.getActiveIndex() === 0) {
+        e.preventDefault();
+        this.$.stack.setActiveIndex(1);
+      }
+    }
   },
 
   // ---- Events from the panels ------------------------------------------------------------
 
   pickPlace(_sender, event) {
     this.navigateTo(event['path']);
+    this.$.stack.setActiveIndex(1);
+    return true;
+  },
+  openPlaces() {
+    this.$.stack.setActiveIndex(0);
+    return true;
+  },
+  closePlaces() {
+    this.$.stack.setActiveIndex(1);
     return true;
   },
   navigate(_sender, event) {
@@ -124,16 +296,37 @@ export default view(spec, {
     return true;
   },
   goBack() {
+    this.back();
+    return true;
+  },
+  goForward() {
+    this.forward();
+    return true;
+  },
+  back() {
     if (this._historyIndex > 0) {
       this._historyIndex -= 1;
       this._path = this._history[this._historyIndex];
       this._query = '';
+      this._storage = summarizeStorage(this._storagePartitions as StoragePartition[], this._path);
       this.dropPreview();
       this.$.stack.setActiveIndex(1);
       this.ensureLoaded();
       this.sync();
     }
-    return true;
+  },
+  forward() {
+    const history = this._history as string[];
+    if (this._historyIndex < history.length - 1) {
+      this._historyIndex += 1;
+      this._path = history[this._historyIndex];
+      this._query = '';
+      this._storage = summarizeStorage(this._storagePartitions as StoragePartition[], this._path);
+      this.dropPreview();
+      this.$.stack.setActiveIndex(1);
+      this.ensureLoaded();
+      this.sync();
+    }
   },
   goUp() {
     const parent = getParentPath(this._path);
@@ -157,12 +350,26 @@ export default view(spec, {
     this.sync();
     return true;
   },
+  toggleHidden() {
+    this._showHidden = !this._showHidden;
+    this.sync();
+    return true;
+  },
   newFolder() {
     this.openDialog({ type: 'newFolder', dir: this._path });
     return true;
   },
   reload() {
     void this.reloadDir(this._path);
+    void this.loadStorageInfo();
+    return true;
+  },
+  requestUnlock() {
+    void requestPrivilege('Change system files', 'files');
+    return true;
+  },
+  revokeUnlock() {
+    void revokePrivilege('files');
     return true;
   },
   openEntry(_sender, event) {
@@ -173,6 +380,18 @@ export default view(spec, {
   },
   entryMenu(_sender, event) {
     this.openMenu(event['entry'], event['rect']);
+    return true;
+  },
+  renameEntry(_sender, event) {
+    const entry = event['entry'] as FsEntry | undefined;
+    if (!entry || (isReadOnly(entry.path) && !this._privileged)) return true;
+    this.openDialog({ type: 'rename', dir: this._path, entry });
+    return true;
+  },
+  deleteEntry(_sender, event) {
+    const entry = event['entry'] as FsEntry | undefined;
+    if (!entry || (isReadOnly(entry.path) && !this._privileged)) return true;
+    this.openDialog({ type: 'delete', dir: this._path, entry });
     return true;
   },
 
@@ -195,6 +414,11 @@ export default view(spec, {
   deleteFromInspector() {
     const preview = this._preview as Preview | null;
     if (preview) this.openDialog({ type: 'delete', dir: this._path, entry: preview.entry });
+    return true;
+  },
+  inspectorCopyError(_sender: Component, event: ComponentEvent) {
+    this._actionError = String(event['message'] ?? 'Failed to copy to clipboard');
+    this.sync();
     return true;
   },
 
@@ -251,29 +475,45 @@ export default view(spec, {
     }
     this._path = next;
     this._query = '';
+    this._storage = summarizeStorage(this._storagePartitions as StoragePartition[], next);
     this.dropPreview();
     this.$.stack.setActiveIndex(1);
     this.ensureLoaded();
     this.sync();
   },
 
-  /** Fetches the current folder the first time it is shown (later visits use the cache until Refresh). */
+  /** Fetches the current folder the first time it is shown (retrying if the last fetch failed). */
   ensureLoaded() {
     const path = this._path as string;
-    if ((this._requested as Set<string>).has(path)) return;
-    (this._requested as Set<string>).add(path);
+    const requested = this._requested as Set<string>;
+    if (requested.has(path)) return;
+    requested.add(path);
     this._dirs[path] = { loading: true };
     void fetchDir(path).then((state) => {
-      if (this.destroyed) return;
+      if (this.destroyed || !requested.has(path)) return;
+      if (state.error) requested.delete(path);
       this._dirs[path] = state;
       this.sync();
     });
   },
   async reloadDir(path: string) {
+    const requested = this._requested as Set<string>;
+    requested.add(path);
     const state = await fetchDir(path);
     if (this.destroyed) return;
+    if (state.error) requested.delete(path);
     this._dirs[path] = state;
     this.sync();
+  },
+  invalidatePathTree(target: string) {
+    const dirs = this._dirs as Record<string, DirState>;
+    const requested = this._requested as Set<string>;
+    for (const key of Object.keys(dirs)) {
+      if (isPathOrDescendant(key, target)) delete dirs[key];
+    }
+    for (const key of Array.from(requested)) {
+      if (isPathOrDescendant(key, target)) requested.delete(key);
+    }
   },
 
   // ---- Preview ---------------------------------------------------------------------------
@@ -292,6 +532,7 @@ export default view(spec, {
               onClosePreview: 'closePreview',
               onRenameEntry: 'renameFromInspector',
               onDeleteEntry: 'deleteFromInspector',
+              onCopyError: 'inspectorCopyError',
             },
           ],
         },
@@ -328,13 +569,18 @@ export default view(spec, {
     }
     if (!current()) return;
 
-    const withinCap = entry.size <= MAX_PREVIEW_BYTES;
-    const isImage = IMAGE_EXT.test(entry.name) && withinCap;
-    const isText = TEXT_EXT.test(entry.name) && withinCap;
+    const effectiveSize = Math.max(entry.size, stat?.size ?? 0);
+    const withinCap = effectiveSize <= MAX_PREVIEW_BYTES;
+    const isImage = IMAGE_EXT.test(entry.name);
+    const isText = TEXT_EXT.test(entry.name);
     const isAudio = AUDIO_EXT.test(entry.name);
 
     if (isAudio) {
       this.showPreview({ entry, loading: false, kind: 'audio', stat });
+      return;
+    }
+    if (!withinCap) {
+      this.showPreview({ entry, loading: false, kind: 'meta', stat, error: TOO_LARGE_PREVIEW_MSG });
       return;
     }
     if (!isImage && !isText) {
@@ -391,7 +637,7 @@ export default view(spec, {
     const actions: Array<{ label: string; action: string; type?: string }> = [];
     if (!entry.isDirectory) actions.push({ label: 'Preview', action: 'preview' });
     if (entry.isDirectory) actions.push({ label: 'Open Folder', action: 'open' });
-    if (!isReadOnly(entry.path)) {
+    if (!isReadOnly(entry.path) || this._privileged) {
       actions.push({ label: 'Rename', action: 'rename' }, { label: 'Delete', action: 'delete', type: 'warning' });
     }
     const menu = this.$.menu;
@@ -414,7 +660,10 @@ export default view(spec, {
     try {
       await fn();
     } catch (err) {
-      if (!this.destroyed) this._actionError = err instanceof Error ? err.message : String(err);
+      if (!this.destroyed) {
+        this._dialog = null;
+        this._actionError = err instanceof Error ? err.message : String(err);
+      }
     } finally {
       if (!this.destroyed) {
         this._busy = false;
@@ -427,25 +676,47 @@ export default view(spec, {
   async submitDialog(value: string) {
     const dialog = this._dialog as DialogState | null;
     if (!dialog) return;
+    const existingNames = ((this._dirs[dialog.dir] as DirState | undefined)?.entries ?? []).map((e) => e.name);
+
     if (dialog.type === 'newFolder') {
+      const validationError = validateEntryName(value, { existingNames });
+      if (validationError) {
+        this._dialog = null;
+        this._actionError = validationError;
+        this.sync();
+        return;
+      }
       const name = value.trim();
-      if (!name) return;
+      const targetPath = joinPath(dialog.dir, name);
       await this.runAction(async () => {
-        await fsCall('createDirectory', { path: `${dialog.dir}/${name}` });
+        await fsCall('createDirectory', { path: targetPath });
         await this.reloadDir(dialog.dir);
         this._dialog = null;
       });
     } else if (dialog.type === 'rename' && dialog.entry) {
       const entry = dialog.entry;
+      const validationError = validateEntryName(value, { existingNames, currentName: entry.name });
+      if (validationError) {
+        this._dialog = null;
+        this._actionError = validationError;
+        this.sync();
+        return;
+      }
       const name = value.trim();
-      if (!name || name === entry.name) {
+      if (name === entry.name) {
         this._dialog = null;
         this.sync();
         return;
       }
+      const destination = joinPath(dialog.dir, name);
       await this.runAction(async () => {
-        await fsCall('move', { source: entry.path, destination: `${dialog.dir}/${name}` });
-        if ((this._preview as Preview | null)?.entry.path === entry.path) this.endPreview(true);
+        await fsCall('move', { source: entry.path, destination });
+        if (entry.isDirectory) {
+          this.invalidatePathTree(entry.path);
+          this.invalidatePathTree(destination);
+        }
+        const preview = this._preview as Preview | null;
+        if (preview && isPathOrDescendant(preview.entry.path, entry.path)) this.endPreview(true);
         await this.reloadDir(dialog.dir);
         this._dialog = null;
       });
@@ -454,10 +725,12 @@ export default view(spec, {
       await this.runAction(async () => {
         if (entry.isDirectory) {
           await fsCall('deleteDirectory', { path: entry.path, recursive: true });
+          this.invalidatePathTree(entry.path);
         } else {
           await fsCall('deleteFile', { path: entry.path });
         }
-        if ((this._preview as Preview | null)?.entry.path === entry.path) this.endPreview(true);
+        const preview = this._preview as Preview | null;
+        if (preview && isPathOrDescendant(preview.entry.path, entry.path)) this.endPreview(true);
         await this.reloadDir(dialog.dir);
         this._dialog = null;
       });
@@ -470,11 +743,25 @@ export default view(spec, {
   visible(dir: DirState | undefined): FsEntry[] {
     const last = this._visible;
     const entries = dir?.entries;
-    if (last && last.entries === entries && last.query === this._query && last.by === this._sortBy && last.order === this._sortOrder) {
+    if (
+      last &&
+      last.entries === entries &&
+      last.query === this._query &&
+      last.by === this._sortBy &&
+      last.order === this._sortOrder &&
+      last.showHidden === this._showHidden
+    ) {
       return last.result;
     }
-    const result = visibleEntries(entries, this._query, this._sortBy, this._sortOrder);
-    this._visible = { entries, query: this._query, by: this._sortBy, order: this._sortOrder, result };
+    const result = visibleEntries(entries, this._query, this._sortBy, this._sortOrder, this._showHidden);
+    this._visible = {
+      entries,
+      query: this._query,
+      by: this._sortBy,
+      order: this._sortOrder,
+      showHidden: this._showHidden,
+      result,
+    };
     return result;
   },
 
@@ -485,27 +772,39 @@ export default view(spec, {
     const path = this._path as string;
     const dir = this._dirs[path] as DirState | undefined;
     const preview = this._preview as Preview | null;
+    const history = this._history as string[];
 
     sidebar.setFolder(path);
+    sidebar.setStorageInfo(this._storage as StorageSummary | null);
 
     browser.setFolder(path);
     browser.setCanBack(this._historyIndex > 0);
+    browser.setCanForward(this._historyIndex < history.length - 1);
     browser.setViewMode(this._viewMode);
     browser.setSortBy(this._sortBy);
     browser.setSortOrder(this._sortOrder);
+    browser.setShowHidden(this._showHidden);
     browser.setQuery(this._query);
     browser.setBusy(this._busy);
     browser.setDir(dir ?? null);
     browser.setEntries(this.visible(dir));
     browser.setSelectedPath(preview?.entry.path ?? null);
+    browser.setPrivileged(this._privileged);
 
     const inspector = (this._panel as Component | null)?.children[0];
-    if (inspector && preview) inspector.set('preview', preview);
+    if (inspector) {
+      inspector.set('privileged', this._privileged);
+      if (preview) inspector.set('preview', preview);
+    }
 
     // Dialog fields first, then the mode that opens it (it reads them).
     const dialog = this._dialog as DialogState | null;
+    const existingNames = dialog
+      ? ((this._dirs[dialog.dir] as DirState | undefined)?.entries ?? []).map((e) => e.name)
+      : [];
     dialogs.setEntryName(dialog?.entry?.name ?? '');
     dialogs.setIsDirectory(!!dialog?.entry?.isDirectory);
+    dialogs.setExistingNames(existingNames);
     dialogs.setBusy(this._busy);
     dialogs.setError(this._actionError);
     dialogs.setMode(dialog?.type ?? '');

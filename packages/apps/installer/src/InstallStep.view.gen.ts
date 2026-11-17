@@ -17,10 +17,12 @@ export type Named = {
   failed: Instance<"pyxis.Control">;
   /** pyxis.Control */
   failText: Instance<"pyxis.Control">;
+  /** remochi.Button */
+  retry: Instance<"remochi.Button">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = never;
+export type Handlers = 'retryTap';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

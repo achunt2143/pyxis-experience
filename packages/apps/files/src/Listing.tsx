@@ -1,7 +1,7 @@
 // The directory listing: an adapted React island, because a folder can hold hundreds of
 // entries (a Duyo row is several nodes, and every change re-renders every node). One `div`
 // per entry here, memoised, so typing in the search box or a dialog redraws none of them.
-import { memo, type ComponentType, type CSSProperties } from 'react';
+import { memo, type ComponentType, type CSSProperties, type KeyboardEvent } from 'react';
 import {
   Archive,
   ChevronRight,
@@ -33,11 +33,65 @@ interface RowProps {
   selected: boolean;
   onOpen: (entry: FsEntry) => void;
   onMenu: (entry: FsEntry, rect: DOMRect) => void;
+  onRename?: (entry: FsEntry) => void;
+  onDelete?: (entry: FsEntry) => void;
 }
 
 const contextMenu = (props: RowProps) => (e: React.MouseEvent<HTMLDivElement>) => {
   e.preventDefault();
   props.onMenu(props.entry, e.currentTarget.getBoundingClientRect());
+};
+
+const rowKeyDown = (props: RowProps, isGrid: boolean) => (e: KeyboardEvent<HTMLDivElement>) => {
+  const mod = e.ctrlKey || e.metaKey || e.altKey;
+  if (e.key === 'Enter' && !mod && !e.shiftKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    props.onOpen(props.entry);
+    return;
+  }
+  if (e.key === 'Delete' && !mod && !e.shiftKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    props.onDelete?.(props.entry);
+    return;
+  }
+  if (e.key === 'F2' && !mod && !e.shiftKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    props.onRename?.(props.entry);
+    return;
+  }
+  if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && !mod) {
+    e.preventDefault();
+    e.stopPropagation();
+    props.onMenu(props.entry, e.currentTarget.getBoundingClientRect());
+    return;
+  }
+  if (mod || e.shiftKey) return;
+  const moveNext = e.key === 'ArrowDown' || (isGrid && e.key === 'ArrowRight');
+  const movePrev = e.key === 'ArrowUp' || (isGrid && e.key === 'ArrowLeft');
+  if (!moveNext && !movePrev && e.key !== 'Home' && e.key !== 'End') return;
+
+  const parent = e.currentTarget.parentElement;
+  if (!parent) return;
+  const rows = Array.from(parent.querySelectorAll<HTMLElement>('.files-entry'));
+  const idx = rows.indexOf(e.currentTarget);
+  if (idx === -1) return;
+
+  let nextIdx = idx;
+  if (moveNext) nextIdx = Math.min(rows.length - 1, idx + 1);
+  else if (movePrev) nextIdx = Math.max(0, idx - 1);
+  else if (e.key === 'Home') nextIdx = 0;
+  else if (e.key === 'End') nextIdx = rows.length - 1;
+
+  e.preventDefault();
+  e.stopPropagation();
+  const target = rows[nextIdx];
+  if (target && target !== e.currentTarget) {
+    target.focus();
+    target.scrollIntoView?.({ block: 'nearest' });
+  }
 };
 
 const ListRow = memo(function ListRow(props: RowProps) {
@@ -48,17 +102,23 @@ const ListRow = memo(function ListRow(props: RowProps) {
   return (
     <div
       className="files-entry"
+      role="option"
+      aria-selected={selected}
+      tabIndex={0}
       data-path={entry.path}
       onClick={() => props.onOpen(entry)}
       onContextMenu={contextMenu(props)}
+      onKeyDown={rowKeyDown(props, false)}
       style={{
         display: 'flex',
         alignItems: 'center',
         padding: '9px 12px',
-        borderBottom: '1px solid var(--color-border-light, #f1f5f9)',
+        borderBottom: '1px solid var(--mochi-border)',
         cursor: 'pointer',
-        background: selected ? 'var(--mochi-primary-soft, rgba(47, 111, 237, 0.12))' : 'transparent',
+        background: selected ? 'var(--mochi-primary-soft)' : 'transparent',
         transition: 'background 0.12s ease',
+        minWidth: 0,
+        boxSizing: 'border-box',
       }}
     >
       <div
@@ -85,7 +145,7 @@ const ListRow = memo(function ListRow(props: RowProps) {
           style={{
             fontSize: '0.85rem',
             fontWeight: entry.isDirectory ? 600 : 500,
-            color: selected ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-text, var(--mochi-text, #111827))',
+            color: selected ? 'var(--mochi-primary)' : 'var(--mochi-text)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -101,7 +161,7 @@ const ListRow = memo(function ListRow(props: RowProps) {
           alignItems: 'center',
           gap: '16px',
           fontSize: '0.78rem',
-          color: 'var(--color-text-secondary, #64748b)',
+          color: 'var(--mochi-text-muted)',
           flexShrink: 0,
           marginLeft: '12px',
         }}
@@ -121,9 +181,13 @@ const GridCell = memo(function GridCell(props: RowProps) {
   return (
     <div
       className="files-entry"
+      role="option"
+      aria-selected={selected}
+      tabIndex={0}
       data-path={entry.path}
       onClick={() => props.onOpen(entry)}
       onContextMenu={contextMenu(props)}
+      onKeyDown={rowKeyDown(props, true)}
       title={entry.name}
       style={{
         display: 'flex',
@@ -135,14 +199,12 @@ const GridCell = memo(function GridCell(props: RowProps) {
         borderRadius: '14px',
         cursor: 'pointer',
         userSelect: 'none',
-        background: selected
-          ? 'var(--mochi-primary-soft, rgba(47, 111, 237, 0.14))'
-          : 'var(--color-surface, var(--mochi-surface, #ffffff))',
-        border: `1.5px solid ${
-          selected ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-border, var(--mochi-border, #e5e7eb))'
-        }`,
+        background: selected ? 'var(--mochi-primary-soft)' : 'var(--mochi-panel-bg)',
+        border: `1.5px solid ${selected ? 'var(--mochi-primary)' : 'var(--mochi-border)'}`,
         transition: 'all 0.15s ease',
-        boxShadow: selected ? '0 2px 8px rgba(47, 111, 237, 0.2)' : '0 1px 3px rgba(0,0,0,0.03)',
+        boxShadow: selected ? '0 2px 8px var(--mochi-primary-soft)' : 'none',
+        minWidth: 0,
+        boxSizing: 'border-box',
       }}
     >
       <div
@@ -170,14 +232,14 @@ const GridCell = memo(function GridCell(props: RowProps) {
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
-          color: selected ? 'var(--mochi-primary, #2f6fed)' : 'var(--color-text, var(--mochi-text, #111827))',
+          color: selected ? 'var(--mochi-primary)' : 'var(--mochi-text)',
           fontWeight: 500,
         }}
       >
         {entry.name}
       </span>
 
-      <span style={{ fontSize: '0.72rem', color: 'var(--color-text-secondary, #64748b)' }}>
+      <span style={{ fontSize: '0.72rem', color: 'var(--mochi-text-muted)' }}>
         {entry.isDirectory ? 'Folder' : formatBytes(entry.size)}
       </span>
     </div>
@@ -187,16 +249,20 @@ const GridCell = memo(function GridCell(props: RowProps) {
 const LIST_STYLE: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
-  background: 'var(--color-surface, var(--mochi-surface, #ffffff))',
+  background: 'var(--mochi-surface)',
   borderRadius: '12px',
-  border: '1px solid var(--color-border, var(--mochi-border, #e5e7eb))',
+  border: '1px solid var(--mochi-border)',
   overflow: 'hidden',
+  minWidth: 0,
+  boxSizing: 'border-box',
 };
 
 const GRID_STYLE: CSSProperties = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
   gap: '12px',
+  minWidth: 0,
+  boxSizing: 'border-box',
 };
 
 export interface ListingProps extends Omit<RowProps, 'entry' | 'selected'> {
@@ -206,12 +272,26 @@ export interface ListingProps extends Omit<RowProps, 'entry' | 'selected'> {
 }
 
 /** Memoised on its props: the app passes the same `entries` array until the listing changes. */
-export const Listing = memo(function Listing({ entries, viewMode, selectedPath, onOpen, onMenu }: ListingProps) {
+export const Listing = memo(function Listing({ entries, viewMode, selectedPath, onOpen, onMenu, onRename, onDelete }: ListingProps) {
   const Cell = viewMode === 'list' ? ListRow : GridCell;
   return (
-    <div className="files-listing" data-view={viewMode} style={viewMode === 'list' ? LIST_STYLE : GRID_STYLE}>
+    <div
+      className="files-listing"
+      role="listbox"
+      aria-label="Folder contents"
+      data-view={viewMode}
+      style={viewMode === 'list' ? LIST_STYLE : GRID_STYLE}
+    >
       {entries.map((entry) => (
-        <Cell key={entry.path} entry={entry} selected={selectedPath === entry.path} onOpen={onOpen} onMenu={onMenu} />
+        <Cell
+          key={entry.path}
+          entry={entry}
+          selected={selectedPath === entry.path}
+          onOpen={onOpen}
+          onMenu={onMenu}
+          onRename={onRename}
+          onDelete={onDelete}
+        />
       ))}
     </div>
   );

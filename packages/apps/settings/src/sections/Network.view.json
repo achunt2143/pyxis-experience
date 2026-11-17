@@ -1,35 +1,40 @@
 {
   "name": "Settings.Network",
   "kind": "pyxis.Control",
-  "published": { "status": null },
+  "published": { "status": null, "loadState": "loading", "error": "" },
   "components": [
     { "kind": "Settings.Groupbox", "title": "Connection status", "glyph": "Wifi", "glyphColor": "#10b981", "components": [
       { "name": "loading", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:8px;padding:12px 0", "components": [
         { "kind": "remochi.Spinner", "styleType": "light", "size": "normal" },
-        { "kind": "pyxis.Control", "tag": "span", "content": "Detecting network hardware…", "style": "font-size:0.82rem;color:var(--color-text-secondary)" }
+        { "kind": "pyxis.Control", "tag": "span", "classes": "st-secondary", "content": "Detecting network hardware…" }
       ] },
-      { "name": "panel", "kind": "pyxis.Control", "showing": false, "style": "display:flex;flex-direction:column;gap:10px", "components": [
-        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:12px;padding:6px 0", "components": [
-          { "name": "badge", "kind": "pyxis.Control", "style": "width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center", "components": [
+      { "name": "errorRow", "kind": "pyxis.Control", "classes": "st-error st-alert-banner", "showing": false },
+      { "name": "panel", "kind": "pyxis.Control", "classes": "st-mochi-card", "showing": false, "components": [
+        { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:12px;padding:2px 0;min-width:0;flex-wrap:wrap", "components": [
+          { "name": "badge", "kind": "pyxis.Control", "style": "width:42px;height:42px;flex-shrink:0;border-radius:12px;display:flex;align-items:center;justify-content:center", "components": [
             { "name": "netIcon", "kind": "pyxis.Icon", "icon": "Wifi", "size": 22 }
           ] },
-          { "kind": "pyxis.Control", "components": [
-            { "name": "headline", "kind": "pyxis.Control", "style": "font-weight:700;font-size:0.92rem" },
-            { "name": "detail", "kind": "pyxis.Control", "style": "font-size:0.78rem;color:var(--color-text-secondary, #64748b)" }
+          { "kind": "pyxis.Control", "style": "min-width:0;flex:1 1 160px", "components": [
+            { "name": "headline", "kind": "pyxis.Control", "style": "font-weight:700;font-size:0.92rem;overflow-wrap:anywhere" },
+            { "name": "detail", "kind": "pyxis.Control", "classes": "st-secondary" }
           ] }
         ] },
         { "kind": "remochi.Divider" },
-        { "kind": "pyxis.Control", "style": "display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:0.82rem", "components": [
-          { "kind": "pyxis.Control", "components": [
+        { "kind": "pyxis.Control", "style": "display:grid;grid-template-columns:repeat(auto-fit, minmax(min(160px, 100%), 1fr));gap:12px;font-size:0.82rem;width:100%;min-width:0", "components": [
+          { "kind": "pyxis.Control", "style": "min-width:0", "components": [
             { "kind": "pyxis.Control", "tag": "span", "classes": "st-field-label", "content": "NETWORK NAME (SSID)" },
-            { "name": "ssid", "kind": "pyxis.Control", "style": "margin-top:2px;font-weight:500" }
+            { "name": "ssid", "kind": "pyxis.Control", "style": "margin-top:2px;font-weight:500;overflow-wrap:anywhere" }
           ] },
-          { "kind": "pyxis.Control", "components": [
+          { "kind": "pyxis.Control", "style": "min-width:0", "components": [
             { "kind": "pyxis.Control", "tag": "span", "classes": "st-field-label", "content": "INTERFACE TYPE" },
-            { "name": "iface", "kind": "pyxis.Control", "style": "margin-top:2px;font-weight:500" }
+            { "name": "iface", "kind": "pyxis.Control", "style": "margin-top:2px;font-weight:500;overflow-wrap:anywhere" }
           ] }
         ] }
       ] }
+    ] },
+    { "kind": "Settings.Groupbox", "title": "Wi-Fi, interfaces & DNS", "glyph": "Globe", "glyphColor": "#0ea5e9", "components": [
+      { "kind": "pyxis.Control", "classes": "st-secondary", "content": "Scan and join Wi-Fi networks, inspect interfaces, and configure DNS or hostname." },
+      { "name": "networkConfig", "kind": "Settings.NetworkConfigCard" }
     ] }
   ]
 }

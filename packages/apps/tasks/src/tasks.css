@@ -1,26 +1,48 @@
 /* Tasks: what a Duyo `style` string cannot say (a library's inner elements, state classes). */
-.tasks-draft input {
+input.tasks-draft {
   height: 36px;
   font-size: 0.86rem;
 }
-.tasks-name-input input {
+input.tasks-name-input {
   font-size: 0.96rem;
   font-weight: 600;
 }
-.tasks-name-input.done input {
+input.tasks-name-input.done {
   text-decoration: line-through;
 }
 .tasks-group {
-  background: var(--mochi-hover, rgba(0, 0, 0, 0.02));
-  border-radius: 12px;
-  padding: 12px;
-  border: 1px solid var(--color-border, var(--mochi-border, #e5e7eb));
+  box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+}
+.tasks-group > .mochi-floating-panel {
+  padding: 12px 14px;
+  border: 1px solid var(--mochi-border);
   display: flex;
   flex-direction: column;
+  gap: 10px;
+  box-sizing: border-box;
+  min-width: 0;
 }
 .tasks-group-label {
   font-size: 0.72rem;
   font-weight: 700;
-  color: var(--color-text-secondary, #64748b);
+  color: var(--mochi-text-muted);
 }
 /* The row's tap target is the island's wrapper; keep it a plain block. */
+
+.tasks-back-btn {
+  display: none !important;
+}
+.repanel[data-narrow="true"] .tasks-back-btn {
+  display: inline-block !important;
+}
+@media (max-width: 768px) {
+  .tasks-back-btn {
+    display: inline-block !important;
+  }
+}
+.tasks-back-btn .mochi-button {
+  font-size: 0.82rem;
+  padding: 4px 8px;
+}

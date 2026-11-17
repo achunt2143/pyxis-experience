@@ -1,4 +1,4 @@
-import type { Terminal } from 'xterm';
+import type { Terminal } from '@xterm/xterm';
 
 /**
  * The handle the chrome (a kind) has on the terminal views (the React island).
@@ -37,5 +37,44 @@ export class TerminalHub {
   sendKey(id: string, data: string): void {
     this.senders.get(id)?.(data);
     this.terms.get(id)?.focus();
+  }
+
+  /** Copies the active selection (if any) to the system clipboard safely. */
+  async copySelection(id: string): Promise<boolean> {
+    const term = this.terms.get(id);
+    if (!term) return false;
+    const text = typeof term.getSelection === 'function' ? term.getSelection() : '';
+    if (!text) {
+      term.focus();
+      return false;
+    }
+    try {
+      await navigator.clipboard?.writeText?.(text);
+    } catch {
+      /* clipboard denied or unavailable */
+    }
+    term.focus();
+    return true;
+  }
+
+  /** Reads from the system clipboard safely and pastes into the terminal's shell. */
+  async pasteClipboard(id: string): Promise<boolean> {
+    const term = this.terms.get(id);
+    if (!term) return false;
+    let text = '';
+    try {
+      text = (await navigator.clipboard?.readText?.()) ?? '';
+    } catch {
+      /* clipboard denied or unavailable */
+    }
+    if (text) {
+      if (typeof term.paste === 'function') {
+        term.paste(text);
+      } else {
+        this.senders.get(id)?.(text);
+      }
+    }
+    term.focus();
+    return !!text;
   }
 }
