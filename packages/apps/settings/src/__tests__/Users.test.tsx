@@ -365,13 +365,15 @@ describe('Settings: Users & Lock, the lock', () => {
 
   it('offers Never and 1, 5, 10, 15, 30 and 60 minutes, and writes the one picked (Never is null)', async () => {
     const host = await openUsers();
+    // remochi 0.6 prefixes the chosen option with a check mark.
+    const labelOf = (o: HTMLElement) => o.textContent!.replace(/^✓/, '');
     const labels = async () => {
       await click($(host, '[data-lock-after] [role="combobox"]')!);
-      return $$(document.body, '[role="option"]').map((o) => o.textContent);
+      return $$(document.body, '[role="option"]').map(labelOf);
     };
     expect(await labels()).toEqual(['Never', '1 minute', '5 minutes', '10 minutes', '15 minutes', '30 minutes', '1 hour']);
     const pick = async (label: string) => {
-      const option = $$(document.body, '[role="option"]').find((o) => o.textContent === label)!;
+      const option = $$(document.body, '[role="option"]').find((o) => labelOf(o) === label)!;
       await click(option);
     };
     await pick('5 minutes');

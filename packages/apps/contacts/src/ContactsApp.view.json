@@ -18,7 +18,7 @@
       ]
     },
     { "kind": "pyxis.Control", "style": "flex:1;min-height:0;position:relative", "components": [
-      { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 0, "peek": 280, "components": [
+      { "name": "stack", "kind": "remochi.RepanelStack", "keepPast": false, "activeIndex": 0, "peek": 280, "components": [
         { "kind": "remochi.Repanel", "components": [
           { "name": "list", "kind": "Contacts.List", "onAddContact": "addContact", "onExportAll": "exportAll", "onSearchChange": "searchEdited", "onCategoryChange": "categoryPicked", "onSelectContact": "selectContact", "onImportFile": "importFile" }
         ] },

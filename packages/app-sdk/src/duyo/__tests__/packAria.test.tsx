@@ -5,10 +5,12 @@ import { kind } from '@duyojs/duyo';
 import { mountDuyoApp, type DuyoApp } from '../mount';
 
 // remochi's Button measures its label on a canvas, which jsdom has no 2d context for.
-HTMLCanvasElement.prototype.getContext = (() => ({
-  font: '',
-  measureText: (text: string) => ({ width: text.length * 8 }),
-})) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+// The slider's bubble draws on it too, so every other call is a no-op.
+const noop2d = new Proxy(
+  { font: '', measureText: (text: string) => ({ width: text.length * 8 }) } as Record<string, unknown>,
+  { get: (target, key) => (key in target ? target[key as string] : () => {}), set: () => true },
+);
+HTMLCanvasElement.prototype.getContext = (() => noop2d) as unknown as typeof HTMLCanvasElement.prototype.getContext;
 
 kind({
   name: 'PackAriaTest.App',

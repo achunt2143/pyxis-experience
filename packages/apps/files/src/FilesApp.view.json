@@ -6,7 +6,7 @@
   "events": { "onClose": "" },
   "components": [
     { "kind": "pyxis.Control", "style": "flex:1;min-height:0;position:relative", "components": [
-      { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 1, "peek": 260, "snapPoints": [1, 2, 3], "onActiveIndexChange": "panelMoved", "components": [
+      { "name": "stack", "kind": "remochi.RepanelStack", "keepPast": false, "activeIndex": 1, "peek": 260, "snapPoints": [1, 2, 3], "onActiveIndexChange": "panelMoved", "components": [
         { "kind": "remochi.Repanel", "components": [
           { "name": "sidebar", "kind": "Files.Sidebar", "onPickPlace": "pickPlace", "onClosePlaces": "closePlaces" }
         ] },

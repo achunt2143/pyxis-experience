@@ -18,7 +18,7 @@
       ]
     },
     { "kind": "pyxis.Control", "style": "flex:1;min-height:0;position:relative", "components": [
-      { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 0, "peek": 280, "components": [
+      { "name": "stack", "kind": "remochi.RepanelStack", "keepPast": false, "activeIndex": 0, "peek": 280, "components": [
         { "kind": "remochi.Repanel", "components": [
           { "name": "list", "kind": "Notes.List", "onAddNote": "addNote", "onSelectNote": "selectNote", "onSearchChange": "searchEdited", "onCategoryChange": "categoryPicked" }
         ] },

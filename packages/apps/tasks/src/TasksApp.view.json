@@ -18,7 +18,7 @@
       ]
     },
     { "kind": "pyxis.Control", "style": "flex:1;min-height:0;position:relative", "components": [
-      { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 1, "peek": 260, "onActiveIndexChange": "stackMoved", "components": [
+      { "name": "stack", "kind": "remochi.RepanelStack", "keepPast": false, "activeIndex": 1, "peek": 260, "onActiveIndexChange": "stackMoved", "components": [
         { "kind": "remochi.Repanel", "components": [
           { "name": "lists", "kind": "Tasks.Lists", "onPickList": "listPicked" }
         ] },

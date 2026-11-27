@@ -84,8 +84,17 @@ function srcFile(rel: string): string {
 }
 
 const originalResizeObserver = globalThis.ResizeObserver;
+const originalGetContext = HTMLCanvasElement.prototype.getContext;
 
 beforeAll(() => {
+  // remochi's Button measures on a canvas and its Slider bubble draws on one;
+  // jsdom has no 2d context for either.
+  const noop2d = new Proxy({} as Record<string, unknown>, {
+    get: (_t, key) => (key === 'measureText' ? (text: string) => ({ width: text.length * 8 }) : () => {}),
+    set: () => true,
+  });
+  HTMLCanvasElement.prototype.getContext = (() => noop2d) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+
   if (typeof globalThis.ResizeObserver === 'undefined') {
     globalThis.ResizeObserver = class {
       observe() {}
@@ -96,6 +105,7 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  HTMLCanvasElement.prototype.getContext = originalGetContext;
   if (originalResizeObserver === undefined) {
     delete (globalThis as { ResizeObserver?: typeof ResizeObserver }).ResizeObserver;
   } else {
@@ -111,7 +121,7 @@ afterEach(() => {
   delete document.documentElement.dataset.motion;
 });
 
-describe('Theme and Remochi 0.5.1 consistency across Bloom shell', () => {
+describe('Theme and Remochi 0.6 consistency across Bloom shell', () => {
   it('guards index.css media dark overrides behind :not([data-mochi-theme]) and exposes dark/light extensions cleanly', () => {
     const css = srcFile('index.css');
     expect(css).toMatch(/@media\s*\(prefers-color-scheme:\s*dark\)\s*\{\s*:root:not\(\[data-mochi-theme\]\)/);
