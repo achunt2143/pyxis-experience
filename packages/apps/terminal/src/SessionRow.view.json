@@ -1,0 +1,20 @@
+{
+  "name": "Terminal.SessionRow",
+  "kind": "pyxis.Row",
+  "classes": "term-row",
+  "published": { "index": 0, "current": false, "now": 0 },
+  "attributes": { "role": "button", "tabIndex": 0 },
+  "handlers": { "onkeydown": "rowKeyDown" },
+  "components": [
+    { "name": "num", "kind": "pyxis.Control", "tag": "span", "classes": "term-row-num" },
+    { "kind": "pyxis.Control", "classes": "term-row-text", "components": [
+      { "name": "title", "kind": "pyxis.Control", "tag": "span", "classes": "term-row-title" },
+      { "name": "caption", "kind": "pyxis.Control", "tag": "span", "classes": "term-row-caption" }
+    ] },
+    { "kind": "pyxis.Control", "tag": "span", "classes": "term-row-state", "components": [
+      { "name": "spinner", "kind": "remochi.Spinner", "styleType": "light", "size": "normal", "alt": "Running", "classes": "term-row-spinner", "showing": false },
+      { "name": "bells", "kind": "remochi.Badge", "showing": false },
+      { "name": "state", "kind": "pyxis.Control", "tag": "span" }
+    ] }
+  ]
+}

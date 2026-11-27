@@ -1,263 +1,500 @@
 import { view, type Component, type ComponentEvent } from '@duyojs/duyo';
-import { onDestroy, registerIcons } from '@pyxis/app-sdk/duyo';
-import {
-  ClipboardPaste,
-  Copy,
-  Keyboard,
-  Plus,
-  Terminal as TerminalIcon,
-  Trash2,
-  X,
-  ZoomIn,
-  ZoomOut,
-} from 'lucide-react';
+import { loadAppData, playSystemSound, saveAppData } from '@pyxis/app-sdk';
+import { onDestroy } from '@pyxis/app-sdk/duyo';
 import spec from './TerminalApp.view.json';
 import {
+  DEFAULT_PROFILE,
   FONT_DEFAULT,
   FONT_MAX,
   FONT_MIN,
   QUICK_KEYS,
+  STORE,
   matchTerminalShortcut,
+  normalizeProfile,
   type TabInfo,
+  type TerminalDoc,
   type TerminalMode,
+  type TerminalProfile,
 } from './model';
+import {
+  applyClosed,
+  applyStatus,
+  markSeen,
+  newSession,
+  peekLabel,
+  predictPeek,
+  rememberFolder,
+  ringBell,
+  sessionName,
+  stateWord,
+  subheader,
+  summary,
+  type Session,
+  type SessionJob,
+} from './sessions';
 import { TerminalHub } from './terminalHub';
 import type { CodeBehind } from './TerminalApp.view.gen';
-import './TerminalTab';
+import './SessionRow';
+import './FolderRow';
 import './terminal.css';
 
-registerIcons({ ClipboardPaste, Copy, Keyboard, Plus, Terminal: TerminalIcon, Trash2, X, ZoomIn, ZoomOut });
+/** The stack's panels, in order (Sessions is 0). */
+const SCREEN = 1;
+const PROFILE = 2;
+
+/** How long the pane edge stays lit for a bell (in, hold, out are CSS). */
+const BELL_GLOW_MS = 400;
 
 /**
- * Terminal: Enhanced Multi-Tab Terminal Emulator for Pyxis OS with tactile Mochi tabs,
- * the Palm webOS touch helper ribbon (quick keys), font scaling, and native/mock shell
- * support.
+ * Terminal: sessions as panes on Remochi's time line. The Sessions pane lists every shell
+ * with what it is doing; the front pane is the active session's screen; a session whose job
+ * finished while you were elsewhere waits as a peek at the right edge; Profile opens to the
+ * right of the screen.
  *
- * This kind owns the chrome's state (the tabs, which is active, the font size, the
- * ribbon) and none of the terminals: those live in the `Terminal.Screens` island, which
- * the app reaches only through `hub` (focus, clear, type a key) and which tells it two
- * things (a shell exited, a mock shell was given a title).
+ * This kind owns the state (the sessions, which is active, the profile, recent folders) and
+ * none of the terminals: those live in the `Terminal.Screens` island, reached only through
+ * `hub`, which reports back what each shell is doing (status, bells, exit codes). Every word
+ * a row or the Subheader shows comes from `sessions.ts`.
  */
 export default view(spec, {
   create() {
     this.inherited();
     this.setAttributes({ 'data-window-id': this.windowId });
     this._hub = new TerminalHub();
-    this._nextTab = 2;
-    this._modes = new Map<string, TerminalMode>();
-    this.$.tabStrip.setAttributes({ role: 'tablist', 'aria-label': 'Terminal tabs' });
+    this._nextId = 1;
+    this._starts = new Map<string, string | undefined>();
+    this._peekId = null as string | null;
+    this._peekKey = '';
+    this._closing = null as string | null;
+    this._glowTimer = null as ReturnType<typeof setTimeout> | null;
+    this._loaded = false;
+    this.setProfile({ ...DEFAULT_PROFILE });
     this.$.screens.setHub(this._hub);
     this.$.keys.setItems(QUICK_KEYS);
+    (this._hub as TerminalHub).onResize = (id) => {
+      if (id === this.activeId) this.syncScreenText();
+    };
+
+    const first = this.makeSession();
+    this.setSessions([first]);
+    this.setActiveId(first.id);
+
+    // Running shows only after a job has been in front for 2 s: a tick moves `now` while one is.
+    const tick = setInterval(() => {
+      if (this.destroyed) return;
+      if ((this.sessions as Session[]).some((s) => s.state === 'running')) {
+        this.setNow(Date.now());
+        this.syncRows();
+      }
+    }, 1000);
+
+    const narrow = typeof matchMedia === 'function' ? matchMedia('(max-width: 768px), (pointer: coarse)') : null;
+    const onMedia = () => this.syncKeys();
+    narrow?.addEventListener?.('change', onMedia);
+    this._touchy = narrow;
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (this.destroyed) return;
       const action = matchTerminalShortcut(e);
       if (!action) return;
       e.preventDefault();
-      if (e.repeat && (action === 'newTab' || action === 'closeTab' || action === 'copy' || action === 'paste')) {
-        return;
-      }
+      if (e.repeat && action !== 'zoomIn' && action !== 'zoomOut') return;
       switch (action) {
         case 'newTab':
-          this.newTab();
+          this.openSession();
           break;
         case 'closeTab':
-          this.closeById(this.activeId);
+          this.requestClose(this.activeId);
           break;
         case 'copy':
-          void this.copyActive();
+          void this._hub.copySelection(this.activeId);
           break;
         case 'paste':
-          void this.pasteActive();
+          void this._hub.pasteClipboard(this.activeId);
+          break;
+        case 'clear':
+          this._hub.clear(this.activeId);
           break;
         case 'zoomIn':
-          this.zoomIn();
+          this.updateProfile({ fontSize: Math.min(FONT_MAX, (this.profile as TerminalProfile).fontSize + 1) });
           break;
         case 'zoomOut':
-          this.zoomOut();
+          this.updateProfile({ fontSize: Math.max(FONT_MIN, (this.profile as TerminalProfile).fontSize - 1) });
           break;
         case 'zoomReset':
-          this.zoomReset();
+          this.updateProfile({ fontSize: FONT_DEFAULT });
           break;
         case 'nextTab':
-          this.cycleTab(1);
+          this.cycle(1);
           break;
         case 'prevTab':
-          this.cycleTab(-1);
+          this.cycle(-1);
           break;
       }
     };
     document.addEventListener('keydown', onKeyDown);
     onDestroy(this, () => {
+      clearInterval(tick);
+      narrow?.removeEventListener?.('change', onMedia);
       document.removeEventListener('keydown', onKeyDown);
+      if (this._glowTimer) clearTimeout(this._glowTimer as ReturnType<typeof setTimeout>);
+    });
+
+    void loadAppData<TerminalDoc>(STORE, { profile: DEFAULT_PROFILE, recent: [] }).then((doc) => {
+      if (this.destroyed) return;
+      this._loaded = true;
+      this.setProfile(normalizeProfile(doc?.profile));
+      this.setRecent(Array.isArray(doc?.recent) ? doc.recent.filter((c) => typeof c === 'string') : []);
+      this.sync();
     });
 
     this.sync();
   },
 
-  /** remochi.Button takes no aria attributes: label the inner <button> elements once drawn. */
+  /** remochi.Button takes no aria attributes: label the inner <button> once drawn. */
   rendered() {
     this.inherited();
-    const labelButton = (comp: Component, label: string) => {
-      const host = document.querySelector(`[data-duyo-id="${comp.id}"]`);
-      host?.querySelector('button')?.setAttribute('aria-label', label);
-    };
-    labelButton(this.$.keysButton, 'Toggle Palm Touch Quick Keys Ribbon');
-    labelButton(this.$.copyButton, 'Copy selection');
-    labelButton(this.$.pasteButton, 'Paste from clipboard');
-    labelButton(this.$.clearButton, 'Clear terminal screen');
-    labelButton(this.$.zoomOutBtn, 'Zoom Out');
-    labelButton(this.$.zoomInBtn, 'Zoom In');
+    const host = document.querySelector(`[data-duyo-id="${this.$.sessionButton.id}"]`);
+    host?.querySelector('button')?.setAttribute('aria-label', 'Session menu');
   },
 
-  // Tabs.
-  newTab() {
-    const seq = this._nextTab++;
-    const id = `tab-${Date.now()}-${seq}`;
-    const title = `bash ${seq}`;
-    this.setTabs([...(this.tabs as TabInfo[]), { id, title }]);
+  // Sessions.
+  makeSession(cwd?: string): Session {
+    const id = `session-${Date.now()}-${(this._nextId as number)++}`;
+    (this._starts as Map<string, string | undefined>).set(id, cwd);
+    return newSession(id, cwd ?? '~');
+  },
+  newSession() {
+    this.openSession();
+    return true;
+  },
+  /** A new session in `cwd`, or where the profile says (the last folder, else home). */
+  openSession(cwd?: string) {
+    const profile = this.profile as TerminalProfile;
+    const start = typeof cwd === 'string' ? cwd : profile.startInLastFolder ? (this.recent as string[])[0] : undefined;
+    const s = this.makeSession(start);
+    this.setSessions([...(this.sessions as Session[]), s]);
+    this.activate(s.id);
+  },
+  startIn(sender: Component) {
+    const folder = sender['item'] as { cwd: string } | null;
+    if (folder) this.openSession(folder.cwd);
+    return true;
+  },
+  pickSession(sender: Component) {
+    const s = sender['item'] as Session | null;
+    if (s) this.activate(s.id);
+    return true;
+  },
+  /** Makes `id` the front session: clears what it held for you and brings its screen forward. */
+  activate(id: string) {
     this.setActiveId(id);
+    this.updateSession(id, markSeen);
+    this.$.stack.setActiveIndex(SCREEN);
+    this.sync();
+    // The screen is shown on the next render; give it the keyboard once it is, after the
+    // tapped row has taken focus for itself.
+    setTimeout(() => {
+      if (!this.destroyed && this.activeId === id) this._hub.focus(id);
+    }, 80);
+  },
+  cycle(delta: 1 | -1) {
+    const sessions = this.sessions as Session[];
+    if (sessions.length <= 1) return;
+    const idx = Math.max(0, sessions.findIndex((s) => s.id === this.activeId));
+    this.activate(sessions[(idx + delta + sessions.length) % sessions.length]!.id);
+  },
+  updateSession(id: string, change: (s: Session) => Session) {
+    this.setSessions((this.sessions as Session[]).map((s) => (s.id === id ? change(s) : s)));
+  },
+  sessionById(id: string): Session | undefined {
+    return (this.sessions as Session[]).find((s) => s.id === id);
+  },
+
+  // What the screens report.
+  statusChanged(_sender: Component, event: ComponentEvent) {
+    const { id, cwd, job } = event as { id: string; cwd: string; job: SessionJob | null };
+    const now = Date.now();
+    this.setNow(now);
+    this.updateSession(id, (s: Session) => applyStatus(s, { terminalId: s.terminalId ?? '', cwd, job }, id === this.activeId, now));
+    const recent = rememberFolder(this.recent as string[], cwd);
+    if (recent.join('\n') !== (this.recent as string[]).join('\n')) {
+      this.setRecent(recent);
+      this.save();
+    }
     this.sync();
     return true;
   },
-  pickTab(sender: Component) {
-    const id = (sender['item'] as TabInfo).id;
-    this.setActiveId(id);
-    this.sync();
-    this._hub.focus(id);
-    return true;
-  },
-  cycleTab(delta: 1 | -1) {
-    const tabs = this.tabs as TabInfo[];
-    if (tabs.length <= 1) return;
-    const idx = tabs.findIndex((t) => t.id === this.activeId);
-    const cur = idx >= 0 ? idx : 0;
-    const next = tabs[(cur + delta + tabs.length) % tabs.length]!;
-    this.setActiveId(next.id);
-    this.sync();
-    this._hub.focus(next.id);
-  },
-  /** The X of a tab. */
-  closeTab(_sender: Component, event: ComponentEvent) {
-    this.closeById(event['id']);
-    return true;
-  },
-  /** A tab's shell ended (`[process exited]`, or the mock shell's `exit`). */
-  tabExited(_sender, event) {
-    this.closeById(event['id']);
-    return true;
-  },
-  titled(_sender, event) {
-    const { id, title } = event as { id: string; title: string };
-    this.setTabs((this.tabs as TabInfo[]).map((t) => (t.id === id ? { ...t, title } : t)));
+  bellRang(_sender: Component, event: ComponentEvent) {
+    const id = event['id'] as string;
+    const active = id === this.activeId;
+    this.updateSession(id, (s: Session) => ringBell(s, active));
+    if (active) {
+      const bell = (this.profile as TerminalProfile).bell;
+      if (bell === 'light') this.glow();
+      else if (bell === 'sound') void playSystemSound('notification');
+    }
     this.sync();
     return true;
   },
-  modeChanged(_sender, event) {
+  /** The front pane's edge lights in the Terminal green, then fades (motion modes are CSS). */
+  glow() {
+    const panel = this.$.screens;
+    panel.addRemoveClass('term-bell', true);
+    if (this._glowTimer) clearTimeout(this._glowTimer as ReturnType<typeof setTimeout>);
+    this._glowTimer = setTimeout(() => {
+      if (!this.destroyed) panel.addRemoveClass('term-bell', false);
+    }, BELL_GLOW_MS);
+  },
+  /** A shell ended: code 0 (or unknown) closes its session; any other keeps it for Enter to restart. */
+  shellEnded(_sender: Component, event: ComponentEvent) {
+    const { id, exitCode } = event as { id: string; exitCode: number | null };
+    const s = this.sessionById(id);
+    if (!s) return true;
+    const kept = applyClosed(s, exitCode ?? null);
+    if (kept) {
+      this.updateSession(id, () => kept);
+      this.sync();
+    } else {
+      this.closeById(id);
+    }
+    return true;
+  },
+  modeChanged(_sender: Component, event: ComponentEvent) {
     const { id, mode } = event as { id: string; mode: TerminalMode };
-    (this._modes as Map<string, TerminalMode>).set(id, mode);
+    this.updateSession(id, (s: Session) => ({ ...s, mock: mode === 'mock' }));
     this.sync();
     return true;
   },
-  /** Last tab gone closes the app (the tab stays, as it did); else the neighbour takes over. */
+  /** The mock shell names its last command; the session's name comes from its folder instead. */
+  titled() {
+    return true;
+  },
+  selectionMenu(_sender: Component, event: ComponentEvent) {
+    const menu = this.$.selectionMenu;
+    menu.setAnchorRect(event['rect']);
+    menu.setOpen(true);
+    return true;
+  },
+
+  // Closing.
+  /** Asks first when a job is running and the profile says to; otherwise closes at once. */
+  requestClose(id: string) {
+    const s = this.sessionById(id);
+    if (!s) return;
+    if (s.state === 'running' && (this.profile as TerminalProfile).askBeforeClose && s.job) {
+      this._closing = id;
+      const name = sessionName(s);
+      const job = s.job.command.split(/\s+/).slice(0, 2).join(' ');
+      this.$.closeDialog.setTitle(`Close ${name}?`);
+      this.$.closeText.setContent(`${job} is still running in this session. Closing the session stops it.`);
+      this.$.closeDialog.setOpen(true);
+      return;
+    }
+    this.closeById(id);
+  },
+  closeConfirmed() {
+    const id = this._closing as string | null;
+    this._closing = null;
+    if (id) this.closeById(id);
+    return true;
+  },
+  closeCancelled() {
+    this._closing = null;
+    return true;
+  },
+  /** The last session gone closes the app; else the one before it comes to the front. */
   closeById(id: string) {
-    const tabs = this.tabs as TabInfo[];
-    const remaining = tabs.filter((t) => t.id !== id);
+    const sessions = this.sessions as Session[];
+    const idx = sessions.findIndex((s) => s.id === id);
+    if (idx < 0) return;
+    const remaining = sessions.filter((s) => s.id !== id);
     if (remaining.length === 0) {
       this.doClose();
       return;
     }
-    (this._modes as Map<string, TerminalMode>).delete(id);
-    if (this.activeId === id) this.setActiveId(remaining[remaining.length - 1].id);
-    this.setTabs(remaining);
+    (this._starts as Map<string, string | undefined>).delete(id);
+    this.setSessions(remaining);
+    if (this.activeId === id) this.setActiveId(remaining[Math.max(0, idx - 1)]!.id);
     this.sync();
+    this._hub.focus(this.activeId);
   },
 
-  // Toolbar.
-  toggleRibbon() {
-    this.setShowRibbon(!this.showRibbon);
-    this.sync();
+  // The Session menu, and the selection's.
+  /** Opened a tick later: the popup closes on any click outside it, the opening one included. */
+  openSessionMenu() {
+    setTimeout(() => {
+      if (!this.destroyed) this.$.sessionMenu.setOpen(true);
+    }, 0);
     return true;
   },
-  copyActive() {
-    void this._hub.copySelection(this.activeId);
-    return true;
-  },
-  pasteActive() {
-    void this._hub.pasteClipboard(this.activeId);
-    return true;
-  },
-  clearActive() {
-    this._hub.clear(this.activeId);
-    return true;
-  },
-  zoomIn() {
-    this.setFontSize(Math.min(FONT_MAX, this.fontSize + 1));
-    this.sync();
-    return true;
-  },
-  zoomOut() {
-    this.setFontSize(Math.max(FONT_MIN, this.fontSize - 1));
-    this.sync();
-    return true;
-  },
-  zoomReset() {
-    this.setFontSize(FONT_DEFAULT);
-    this.sync();
+  sessionMenuAction(sender: Component, event: ComponentEvent) {
+    (sender as Component & { setOpen(open: boolean): void }).setOpen(false);
+    switch (event['action']) {
+      case 'copy':
+        void this._hub.copySelection(this.activeId);
+        break;
+      case 'paste':
+        void this._hub.pasteClipboard(this.activeId);
+        break;
+      case 'clear':
+        this._hub.clear(this.activeId);
+        break;
+      case 'profile':
+        this.openProfile();
+        break;
+      case 'close':
+        this.requestClose(this.activeId);
+        break;
+    }
     return true;
   },
 
-  // Ribbon.
-  sendQuick(_sender, event) {
+  // The right-hand peek and the stack.
+  peekOpened() {
+    const id = this._peekId as string | null;
+    this.$.peek.setShowing(false);
+    if (id) this.activate(id);
+    return true;
+  },
+  panelMoved() {
+    return true;
+  },
+  openProfile() {
+    this.$.profilePanel.setShowing(true);
+    this.$.stack.setActiveIndex(PROFILE);
+    return true;
+  },
+
+  // Profile.
+  updateProfile(change: Partial<TerminalProfile>) {
+    this.setProfile(normalizeProfile({ ...(this.profile as TerminalProfile), ...change }));
+    this.save();
+    this.sync();
+  },
+  sizePicked(_sender: Component, event: ComponentEvent) {
+    this.updateProfile({ fontSize: Number(event['value']) });
+    return true;
+  },
+  cursorPicked(_sender: Component, event: ComponentEvent) {
+    this.updateProfile({ cursor: event['value'] as TerminalProfile['cursor'] });
+    return true;
+  },
+  bellPicked(_sender: Component, event: ComponentEvent) {
+    this.updateProfile({ bell: event['value'] as TerminalProfile['bell'] });
+    return true;
+  },
+  keysPicked(_sender: Component, event: ComponentEvent) {
+    this.updateProfile({ keys: event['value'] ? 'on' : 'auto' });
+    return true;
+  },
+  lastFolderPicked(_sender: Component, event: ComponentEvent) {
+    this.updateProfile({ startInLastFolder: !!event['value'] });
+    return true;
+  },
+  askPicked(_sender: Component, event: ComponentEvent) {
+    this.updateProfile({ askBeforeClose: !!event['value'] });
+    return true;
+  },
+  /** Saves the profile and recent folders; never before the stored copy has been read. */
+  save() {
+    if (!this._loaded) return;
+    void saveAppData(STORE, { profile: this.profile, recent: this.recent } satisfies TerminalDoc);
+  },
+
+  // Keys.
+  sendQuick(_sender: Component, event: ComponentEvent) {
     this._hub.sendKey(this.activeId, event['value']);
     return true;
   },
 
-  /** Per-row state that is not the item: which tab is active, whether one can be closed. */
-  setupTab(_sender, event) {
-    const tabs = this.tabs as TabInfo[];
-    event['component'].setActive(event['item'].id === this.activeId);
-    event['component'].setClosable(tabs.length > 1);
+  /** Per-row state that is not the item. */
+  setupRow(_sender: Component, event: ComponentEvent) {
+    const sessions = this.sessions as Session[];
+    const item = event['item'] as Session;
+    const row = event['component'];
+    row.setIndex(sessions.findIndex((s) => s.id === item.id));
+    row.setCurrent(item.id === this.activeId);
+    row.setNow(this.now);
     return true;
   },
 
-  /** Pushes what the chrome shows. Setting a value a child already has changes nothing. */
+  // Pushing what the panes show. Setting a value a child already has changes nothing.
   sync() {
-    const {
-      tabStrip,
-      screens,
-      ribbon,
-      modeBadge,
-      sizeLabel,
-      keysButton,
-      keysIcon,
-      keysLabel,
-      zoomOutBtn,
-      zoomInBtn,
-    } = this.$;
-    const tabs = this.tabs as TabInfo[];
-    const mode = (this._modes as Map<string, TerminalMode>).get(this.activeId);
-    tabStrip.setItems(tabs);
-    tabStrip.refresh();
-    screens.setTabs(tabs);
+    this.syncRows();
+    this.syncScreenText();
+    this.syncPeek();
+    this.syncKeys();
+    this.syncProfile();
+    const { screens } = this.$;
+    const starts = this._starts as Map<string, string | undefined>;
+    screens.setTabs(
+      (this.sessions as Session[]).map((s): TabInfo => ({ id: s.id, title: '', cwd: starts.get(s.id) }))
+    );
     screens.setActiveId(this.activeId);
-    screens.setFontSize(this.fontSize);
-    if (mode && mode !== 'connecting') {
-      modeBadge.setShowing(true);
-      modeBadge.setContent(mode === 'pty' ? 'PTY' : 'Mock Shell');
-      modeBadge.setAttributes({
-        'data-mode': mode,
-        title: mode === 'pty' ? 'Connected to native PTY shell' : 'Interactive mock shell',
-      });
-    } else {
-      modeBadge.setShowing(false);
+    screens.setFontSize((this.profile as TerminalProfile).fontSize);
+    screens.setCursor((this.profile as TerminalProfile).cursor);
+  },
+  syncRows() {
+    const { sessionList, recentList, recentLabel, summary: line } = this.$;
+    const sessions = this.sessions as Session[];
+    sessionList.setItems(sessions);
+    sessionList.refresh();
+    line.setContent(summary(sessions, this.now as number));
+    // Folders a session is already in are one tap away in the list above.
+    const open = new Set(sessions.map((s) => s.cwd));
+    const recent = (this.recent as string[])
+      .filter((cwd) => !open.has(cwd))
+      .slice(0, 3)
+      .map((cwd) => ({ cwd }));
+    recentList.setItems(recent);
+    recentLabel.setShowing(recent.length > 0);
+    recentList.setShowing(recent.length > 0);
+  },
+  syncScreenText() {
+    const s = this.sessionById(this.activeId);
+    if (!s) return;
+    const size = (this._hub as TerminalHub).size(s.id) ?? { cols: 80, rows: 24 };
+    this.$.screenHeader.setContent(sessionName(s));
+    this.$.screenSub.setContent(subheader(s, 'Shell', size.cols, size.rows));
+  },
+  /** One peek, or none: the first session whose job finished while you were elsewhere. */
+  syncPeek() {
+    const sessions = this.sessions as Session[];
+    const next = predictPeek(sessions, this.activeId);
+    const { stack, peek, peekHeader } = this.$;
+    const key = next ? `${next.id}:${stateWord(next, 0)}` : '';
+    if (key === this._peekKey) return;
+    this._peekKey = key;
+    this._peekId = next?.id ?? null;
+    if (!next) {
+      stack.setUpcoming('');
+      return;
     }
-    sizeLabel.setContent(`${this.fontSize}px`);
-    zoomOutBtn.setDisabled(this.fontSize <= FONT_MIN);
-    zoomInBtn.setDisabled(this.fontSize >= FONT_MAX);
-    ribbon.setShowing(this.showRibbon);
-    keysButton.setVariant(this.showRibbon ? 'affirmative' : 'normal');
-    keysIcon.setStyle(`vertical-align:middle;margin-right:${this.showRibbon ? '4px' : '0'}`);
-    keysLabel.setShowing(this.showRibbon);
+    const index = sessions.indexOf(next);
+    peekHeader.setContent(sessionName(next));
+    peek.setSequence({ index: index + 1, label: stateWord(next, 0) });
+    peek.setPeekLabel(peekLabel(next));
+    stack.setUpcoming('peek');
+  },
+  syncKeys() {
+    const mode = (this.profile as TerminalProfile).keys;
+    const touchy = !!(this._touchy as MediaQueryList | null)?.matches;
+    this.$.keys.setShowing(mode === 'on' || (mode === 'auto' && touchy));
+  },
+  syncProfile() {
+    const p = this.profile as TerminalProfile;
+    const $ = this.$;
+    $.sizeSlider.setValue(p.fontSize);
+    $.sizeValue.setContent(`${p.fontSize} px`);
+    $.cursorBlock.setChecked(p.cursor === 'block');
+    $.cursorBar.setChecked(p.cursor === 'bar');
+    $.cursorUnderline.setChecked(p.cursor === 'underline');
+    $.bellLight.setChecked(p.bell === 'light');
+    $.bellSound.setChecked(p.bell === 'sound');
+    $.bellNone.setChecked(p.bell === 'none');
+    $.keysToggle.setValue(p.keys === 'on');
+    $.lastFolderToggle.setValue(p.startInLastFolder);
+    $.askToggle.setValue(p.askBeforeClose);
   },
 } satisfies CodeBehind);

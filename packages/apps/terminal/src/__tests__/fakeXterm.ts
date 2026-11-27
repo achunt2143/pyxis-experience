@@ -7,19 +7,20 @@ export const terms: FakeTerminal[] = [];
 export class FakeTerminal {
   cols = 80;
   rows = 24;
-  options: { fontSize?: number; scrollback?: number } = {};
+  options: { fontSize?: number; scrollback?: number; cursorStyle?: string } = {};
   written: string[] = [];
   focused = 0;
   cleared = 0;
   disposed = false;
   selection = '';
   pasted: string[] = [];
-  onDataCb: ((data: string) => void) | null = null;
+  /** Every onData listener, as xterm keeps them (the shell view's and the mock shell's). */
+  private dataListeners: Array<(data: string) => void> = [];
   onBellCb: (() => void) | null = null;
   customKeyHandler: ((ev: KeyboardEvent) => boolean) | null = null;
 
-  constructor(opts: { fontSize?: number; scrollback?: number } = {}) {
-    this.options = { fontSize: opts.fontSize, scrollback: opts.scrollback };
+  constructor(opts: { fontSize?: number; scrollback?: number; cursorStyle?: string } = {}) {
+    this.options = { fontSize: opts.fontSize, scrollback: opts.scrollback, cursorStyle: opts.cursorStyle };
     terms.push(this);
   }
   loadAddon() {}
@@ -37,8 +38,12 @@ export class FakeTerminal {
     this.cleared++;
   }
   onData(cb: (data: string) => void) {
-    this.onDataCb = cb;
-    return { dispose: () => { this.onDataCb = null; } };
+    this.dataListeners.push(cb);
+    return { dispose: () => { this.dataListeners = this.dataListeners.filter((l) => l !== cb); } };
+  }
+  /** Types `data` as the person would: every listener hears it. Null while none is attached. */
+  get onDataCb(): ((data: string) => void) | null {
+    return this.dataListeners.length ? (data) => this.dataListeners.slice().forEach((l) => l(data)) : null;
   }
   onBell(cb: () => void) {
     this.onBellCb = cb;

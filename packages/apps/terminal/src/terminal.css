@@ -1,145 +1,272 @@
 /* Terminal: what a Duyo `style` string cannot say (pseudo-classes, the active tab) and the
    fixed look of the tab and key rows, whose dynamic parts are set from code. */
 
-.term-tab {
+/* Mochi ANSI: the screen's tokens, read by terminalTheme.ts. Every colour reads at 4.5:1 or
+   more on --mochi-panel-bg in its theme. Declared on every themed element, not only :root,
+   so the aliases resolve against that element's theme. Light is the primary theme. */
+:root,
+[data-mochi-theme] {
+  /* The Terminal's Pyxis accent: light, never text, and kept off --mochi-accent. */
+  --term-accent: #34d399;
+  --term-ground: var(--mochi-panel-bg, #f5f5f5);
+  --term-ink: var(--color-text, #1a1a1a);
+  --term-black: #1a1a1a;
+  --term-red: #c62828;
+  --term-green: #2e7d32;
+  --term-yellow: #5d4305;
+  --term-blue: #357099;
+  --term-magenta: #8a3b8f;
+  --term-cyan: #1f6f78;
+  --term-white: #555555;
+  --term-bright-black: #6b6b6b;
+  --term-bright-red: #a12c2c;
+  --term-bright-green: #256b29;
+  --term-bright-yellow: #7a5a00;
+  --term-bright-blue: #285780;
+  --term-bright-magenta: #743079;
+  --term-bright-cyan: #185d64;
+  --term-bright-white: #333333;
+  /* The cursor is where focus is: the focus ring in light (the accent is 1.8:1 there). */
+  --term-cursor: var(--mochi-focus-ring, #357099);
+  --term-cursor-ink: #ffffff;
+  --term-selection: var(--mochi-primary-soft, rgba(53, 112, 153, 0.12));
+  --term-font: ui-monospace, 'SFMono-Regular', 'DejaVu Sans Mono', Menlo, Consolas, monospace;
+}
+
+[data-mochi-theme='dark'] {
+  --term-black: #b4b4b4;
+  --term-red: #ff8a85;
+  --term-green: #7fd18a;
+  --term-yellow: #ffb80d;
+  --term-blue: #7cc8f8;
+  --term-magenta: #e0a2e6;
+  --term-cyan: #6fd6d6;
+  --term-white: #e0e0e0;
+  --term-bright-black: #c0c0c0;
+  --term-bright-red: #ffaba6;
+  --term-bright-green: #a3e0ab;
+  --term-bright-yellow: #ffd166;
+  --term-bright-blue: #69cdff;
+  --term-bright-magenta: #ecbdf0;
+  --term-bright-cyan: #9be5e5;
+  --term-bright-white: #ffffff;
+  --term-cursor: var(--term-accent);
+  --term-cursor-ink: #1a1a1a;
+}
+
+/* ---- Panes ---- */
+
+/* Everything below a pane's Header and Subheader: the rows, or the screen. */
+.term-pane-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-top: 16px;
+}
+/* Controls sit at the bottom of a pane, on the 32px edge, never in the Header. */
+.term-pane-foot {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px 6px 0 0;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 24px 16px 24px;
+}
+.term-pane-foot > :last-child {
+  margin-left: auto;
+}
+
+/* ---- Rows: Mochi's flat rows, a tint for the current one ---- */
+.term-rows {
+  display: flex;
+  flex-direction: column;
+}
+.term-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 0 24px 0 32px;
+  box-sizing: border-box;
+  border-radius: var(--mochi-corner-xs, 4px);
   cursor: pointer;
   user-select: none;
-  font-size: 12px;
-  font-weight: 400;
-  flex-shrink: 0;
-  white-space: nowrap;
-  background: var(--mochi-hover);
-  color: var(--mochi-text-muted);
-  border-top: 2px solid transparent;
-  border-left: 1px solid var(--mochi-border);
-  border-right: 1px solid var(--mochi-border);
-  border-bottom: 1px solid var(--mochi-border);
-  transition: all 0.15s ease;
-  box-shadow: none;
-}
-.term-tab.active {
-  font-weight: 600;
-  background: var(--mochi-bg, #1a1b26);
-  color: var(--mochi-text, #f8f9fc);
-  border-top-color: var(--mochi-primary, #3388ff);
-  border-bottom: none;
-  box-shadow: 0 -1px 4px var(--mochi-shadow, rgba(0, 0, 0, 0.2));
-}
-
-.term-tab-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--mochi-text-muted);
-}
-.term-tab.active .term-tab-dot {
-  background: var(--mochi-success, #9ece6a);
-}
-
-.term-tab-close {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  margin-left: 2px;
-  color: inherit;
-  opacity: 0.6;
-  background: transparent;
-  transition: opacity 0.15s, background 0.15s;
-}
-.term-tab-close:hover {
-  opacity: 1;
-  background: var(--mochi-active);
-}
-.term-tab.active .term-tab-close:hover {
-  background: var(--mochi-active);
-}
-
-.term-newtab {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 26px;
-  height: 26px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--mochi-text-muted);
-  cursor: pointer;
-  transition: background 0.15s, color 0.15s;
-}
-.term-newtab:hover {
-  background: var(--mochi-hover);
   color: var(--mochi-text);
 }
-
-.term-tab:focus-visible,
-.term-tab-close:focus-visible,
-.term-newtab:focus-visible,
-.term-key:focus-visible {
-  outline: 2px solid var(--mochi-primary);
-  outline-offset: 2px;
+.term-row:hover {
+  background: var(--mochi-hover);
 }
-
-.term-mode-badge {
+.term-row.on {
+  background: var(--mochi-primary-soft);
+}
+.term-row:focus-visible {
+  outline: 2px solid var(--mochi-focus-ring);
+  outline-offset: -2px;
+}
+.term-row-num {
+  width: 30px;
+  flex-shrink: 0;
+  font-family: var(--mochi-font-display, 'Mochi Light', 'Lato', sans-serif);
+  font-weight: 300;
+  font-size: 22px;
+  line-height: 24px;
+}
+.term-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.term-row-title {
+  font-family: 'Mochi Medium', 'Lato', sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 14px;
+  line-height: 20px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.term-row-caption {
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--mochi-panel-text-muted, var(--mochi-text-muted));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.term-row-state {
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  padding: 2px 7px;
-  border-radius: var(--mochi-corner-pill, 9999px);
-  border: 1px solid var(--mochi-border);
-  background: var(--mochi-hover);
-  color: var(--mochi-text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--mochi-panel-text-muted, var(--mochi-text-muted));
 }
-.term-mode-badge[data-mode='pty'] {
-  color: var(--mochi-success, #9ece6a);
-  border-color: color-mix(in srgb, var(--mochi-success, #9ece6a) 40%, var(--mochi-border));
+.term-row.failed .term-row-state {
+  color: var(--mochi-error);
 }
-.term-mode-badge[data-mode='mock'] {
-  color: var(--mochi-warning, #e0af68);
-  border-color: color-mix(in srgb, var(--mochi-warning, #e0af68) 40%, var(--mochi-border));
+/* The Spinner at row size. */
+.term-row-spinner {
+  width: 20px;
+  height: 20px;
+  overflow: hidden;
+}
+.term-row-spinner svg {
+  width: 20px;
+  height: 20px;
 }
 
+/* ---- The screen ---- */
+.term-screens {
+  flex: 1 1 auto;
+  min-height: 0;
+  position: relative;
+  margin: 12px 24px 0 32px;
+  overflow: hidden;
+}
 .term-screen {
-  border-radius: 4px;
-  transition: box-shadow 0.12s ease;
+  transition: none;
 }
-.term-screen.term-bell-active {
-  box-shadow: inset 0 0 0 2px var(--mochi-warning, #e0af68);
+/* A bell lights the pane edge in the Terminal green, not a box around the screen. */
+.repanel__panel:has(.term-screens.term-bell) .mochi-panel {
+  box-shadow: inset 2px 0 0 var(--term-accent);
+  transition: box-shadow var(--mochi-duration-focus, 120ms) ease-out;
+}
+.repanel__panel .mochi-panel {
+  transition: box-shadow var(--mochi-duration-stack, 260ms) var(--mochi-ease-forward, ease);
+}
+[data-motion='off'] .repanel__panel .mochi-panel {
+  transition: none;
+}
+.term-screens .xterm {
+  height: 100%;
+}
+.term-screens .xterm-viewport {
+  background-color: var(--term-ground) !important;
 }
 
+/* ---- Keys ---- */
+.term-keys {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.term-keys::-webkit-scrollbar {
+  display: none;
+}
 .term-key {
   display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  height: 26px;
-  min-width: 28px;
-  padding: 0 8px;
-  background: var(--mochi-hover);
-  border: 1px solid var(--mochi-border);
-  border-radius: 6px;
-  color: var(--mochi-text);
-  font-family: Menlo, Monaco, 'Courier New', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.1s ease;
-  box-shadow: 0 1px 2px var(--mochi-shadow, rgba(0, 0, 0, 0.2));
+  flex-shrink: 0;
 }
-.term-key:hover {
-  background: var(--mochi-active);
+/* Narrow: the keys take their own line above the Session button, toward the thumb. */
+@media (max-width: 768px) {
+  .term-pane-foot {
+    flex-wrap: wrap;
+  }
+  .term-keys {
+    flex-basis: 100%;
+  }
+  .term-screens {
+    margin: 8px 16px 0 24px;
+  }
+}
+
+/* ---- Profile ---- */
+.term-profile {
+  padding-bottom: 32px;
+}
+.term-field {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 54px;
+  padding: 0 32px;
+}
+.term-field-wrap {
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+.term-field-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 32px 0;
+}
+.term-field-name {
+  width: 72px;
+  flex-shrink: 0;
+  font-family: 'Mochi Medium', 'Lato', sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  font-size: 14px;
+}
+.term-field-grow {
+  width: auto;
+  flex: 1;
+}
+.term-field-value {
+  width: 44px;
+  text-align: right;
+  font-size: 12px;
+  color: var(--mochi-panel-text-muted, var(--mochi-text-muted));
+}
+.term-note {
+  margin: 4px 32px 0;
+  max-width: 440px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--mochi-panel-text-muted, var(--mochi-text-muted));
+}
+.term-dialog-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--mochi-text);
-  border-color: var(--mochi-primary);
 }

@@ -1,0 +1,14 @@
+{
+  "name": "Terminal.FolderRow",
+  "kind": "pyxis.Row",
+  "classes": "term-row term-folder",
+  "attributes": { "role": "button", "tabIndex": 0 },
+  "handlers": { "onkeydown": "rowKeyDown" },
+  "components": [
+    { "kind": "pyxis.Control", "tag": "span", "classes": "term-row-num" },
+    { "kind": "pyxis.Control", "classes": "term-row-text", "components": [
+      { "name": "title", "kind": "pyxis.Control", "tag": "span", "classes": "term-row-title" },
+      { "name": "caption", "kind": "pyxis.Control", "tag": "span", "classes": "term-row-caption" }
+    ] }
+  ]
+}

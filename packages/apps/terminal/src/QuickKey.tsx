@@ -1,4 +1,5 @@
 import React from 'react';
+import { Button } from 'remochi';
 import type { QuickKeyDef } from './model';
 
 interface QuickKeyButtonProps {
@@ -9,24 +10,23 @@ interface QuickKeyButtonProps {
 }
 
 /**
- * One key of the helper ribbon: a compact single-button leaf that cancels `onMouseDown`
- * so the xterm view keeps keyboard focus while a quick key is pressed.
+ * One key of the keys row: Remochi's caps Button inside a span that cancels `mousedown`,
+ * so the xterm view keeps keyboard focus while a key is pressed.
  */
 export const QuickKeyButton: React.FC<QuickKeyButtonProps> = ({ item, onSend, className, style, ...rest }) => {
   if (!item) return null;
   return (
-    <button
+    <span
       {...rest}
-      type="button"
       className={className}
       style={style}
-      title={item.hint || `Send ${item.label}`}
       onMouseDown={(e) => {
         e.preventDefault();
       }}
-      onClick={() => onSend(item.value)}
     >
-      {item.label}
-    </button>
+      <Button title={item.hint || `Send ${item.label}`} aria-label={item.hint || item.label} onClick={() => onSend(item.value)}>
+        {item.label}
+      </Button>
+    </span>
   );
 };

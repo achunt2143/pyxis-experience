@@ -1,63 +1,105 @@
 {
   "name": "Terminal.App",
   "kind": "pyxis.Control",
-  "style": "width:100%;height:100%;background-color:var(--mochi-bg, #1a1b26);display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden",
-  "published": { "windowId": "", "tabs": [{ "id": "tab-1", "title": "bash 1" }], "activeId": "tab-1", "fontSize": 13, "showRibbon": true },
+  "classes": "term-app",
+  "style": "width:100%;height:100%;background:var(--mochi-bg);color:var(--mochi-text);display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;position:relative",
+  "published": { "windowId": "", "sessions": [], "activeId": "", "recent": [], "profile": null, "now": 0 },
   "events": { "onClose": "" },
   "components": [
-    { "kind": "pyxis.Control", "style": "display:flex;align-items:center;justify-content:space-between;background:var(--mochi-surface, #24283b);border-bottom:1px solid var(--mochi-border, #1f2335);padding-left:8px;padding-right:8px;height:38px;user-select:none;gap:8px;min-width:0;flex-shrink:0;box-sizing:border-box", "components": [
-      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;overflow-x:auto;flex:1;min-width:0;scrollbar-width:none;padding-top:4px", "components": [
-        { "name": "tabStrip", "kind": "pyxis.Repeater", "itemKind": "Terminal.Tab", "keyField": "id",
-          "itemProps": { "ontap": "pickTab", "onCloseTab": "closeTab" }, "onSetupItem": "setupTab",
-          "style": "display:flex;align-items:center;gap:4px;flex-shrink:0" },
-        { "name": "newTabBtn", "kind": "pyxis.Control", "tag": "button", "classes": "term-newtab", "attributes": { "title": "New tab (Ctrl+Shift+T)", "aria-label": "New tab" }, "ontap": "newTab", "components": [
-          { "kind": "pyxis.Icon", "icon": "Plus", "size": 14 }
+    { "name": "stack", "kind": "remochi.RepanelStack", "activeIndex": 1, "peek": 320, "keepPast": true, "upcoming": "",
+      "onUpcomingOpen": "peekOpened", "onActiveIndexChange": "panelMoved", "components": [
+
+      { "name": "sessionsPanel", "kind": "remochi.Repanel", "components": [
+        { "kind": "remochi.Header", "content": "Sessions" },
+        { "name": "summary", "kind": "remochi.Subheader", "content": "" },
+        { "kind": "pyxis.Control", "classes": "term-pane-body", "components": [
+          { "name": "sessionList", "kind": "pyxis.Repeater", "itemKind": "Terminal.SessionRow", "keyField": "id",
+            "itemProps": { "ontap": "pickSession" }, "onSetupItem": "setupRow", "classes": "term-rows" },
+          { "name": "recentLabel", "kind": "remochi.Label", "content": "Start In" },
+          { "name": "recentList", "kind": "pyxis.Repeater", "itemKind": "Terminal.FolderRow", "keyField": "cwd",
+            "itemProps": { "ontap": "startIn" }, "classes": "term-rows" }
+        ] },
+        { "kind": "pyxis.Control", "classes": "term-pane-foot", "components": [
+          { "name": "newButton", "kind": "remochi.Button", "content": "New Session", "ontap": "newSession" }
         ] }
       ] },
-      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;flex-shrink:0", "components": [
-        { "name": "modeBadge", "kind": "pyxis.Control", "tag": "span", "classes": "term-mode-badge", "showing": false },
-        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Toggle Palm Touch Quick Keys Ribbon" }, "components": [
-          { "name": "keysButton", "kind": "remochi.Button", "variant": "affirmative", "ontap": "toggleRibbon", "components": [
-            { "name": "keysIcon", "kind": "pyxis.Icon", "icon": "Keyboard", "size": 13, "style": "vertical-align:middle;margin-right:4px" },
-            { "name": "keysLabel", "kind": "pyxis.Control", "tag": "span", "content": "Keys", "style": "font-size:11px;font-weight:600" }
-          ] }
-        ] },
-        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Copy selection (Ctrl+Shift+C)" }, "components": [
-          { "name": "copyButton", "kind": "remochi.Button", "variant": "normal", "ontap": "copyActive", "components": [
-            { "kind": "pyxis.Icon", "icon": "Copy", "size": 13, "style": "vertical-align:middle" }
-          ] }
-        ] },
-        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Paste from clipboard (Ctrl+Shift+V)" }, "components": [
-          { "name": "pasteButton", "kind": "remochi.Button", "variant": "normal", "ontap": "pasteActive", "components": [
-            { "kind": "pyxis.Icon", "icon": "ClipboardPaste", "size": 13, "style": "vertical-align:middle" }
-          ] }
-        ] },
-        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Clear terminal screen" }, "components": [
-          { "name": "clearButton", "kind": "remochi.Button", "variant": "normal", "ontap": "clearActive", "components": [
-            { "kind": "pyxis.Icon", "icon": "Trash2", "size": 13, "style": "vertical-align:middle" }
-          ] }
-        ] },
-        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Zoom Out" }, "components": [
-          { "name": "zoomOutBtn", "kind": "remochi.Button", "variant": "normal", "ontap": "zoomOut", "components": [
-            { "kind": "pyxis.Icon", "icon": "ZoomOut", "size": 13, "style": "vertical-align:middle" }
-          ] }
-        ] },
-        { "name": "sizeLabel", "kind": "pyxis.Control", "tag": "span", "style": "font-size:0.7rem;color:var(--mochi-text-muted, #7a88cf);min-width:24px;text-align:center" },
-        { "kind": "pyxis.Control", "tag": "span", "attributes": { "title": "Zoom In" }, "components": [
-          { "name": "zoomInBtn", "kind": "remochi.Button", "variant": "normal", "ontap": "zoomIn", "components": [
-            { "kind": "pyxis.Icon", "icon": "ZoomIn", "size": 13, "style": "vertical-align:middle" }
+
+      { "name": "screenPanel", "kind": "remochi.Repanel", "components": [
+        { "name": "screenHeader", "kind": "remochi.Header", "content": "Home" },
+        { "name": "screenSub", "kind": "remochi.Subheader", "content": "" },
+        { "name": "screens", "kind": "Terminal.Screens", "classes": "term-screens",
+          "onCloseTab": "shellEnded", "onSetTitle": "titled", "onSetMode": "modeChanged", "onStatus": "statusChanged", "onBell": "bellRang",
+          "onSelectionMenu": "selectionMenu" },
+        { "kind": "pyxis.Control", "classes": "term-pane-foot", "components": [
+          { "name": "keys", "kind": "pyxis.Repeater", "itemKind": "Terminal.Key", "keyField": "label", "onSend": "sendQuick",
+            "classes": "term-keys", "attributes": { "role": "toolbar", "aria-label": "Keys" } },
+          { "name": "sessionButton", "kind": "remochi.Button", "variant": "dropdown", "content": "Session", "ontap": "openSessionMenu" }
+        ] }
+      ] },
+
+      { "name": "profilePanel", "kind": "remochi.Repanel", "showing": false, "components": [
+        { "kind": "remochi.Header", "content": "Profile" },
+        { "kind": "remochi.Subheader", "content": "Every session uses this profile" },
+        { "kind": "pyxis.Control", "classes": "term-pane-body term-profile", "components": [
+          { "kind": "remochi.Label", "content": "Text" },
+          { "kind": "pyxis.Control", "classes": "term-field", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "classes": "term-field-name", "content": "Size" },
+            { "name": "sizeSlider", "kind": "remochi.Slider", "min": 10, "max": 22, "step": 1, "width": "240px", "onChange": "sizePicked" },
+            { "name": "sizeValue", "kind": "pyxis.Control", "tag": "span", "classes": "term-field-value" }
+          ] },
+          { "kind": "pyxis.Control", "classes": "term-field term-field-wrap", "attributes": { "role": "radiogroup", "aria-label": "Cursor" }, "components": [
+            { "kind": "pyxis.Control", "tag": "span", "classes": "term-field-name", "content": "Cursor" },
+            { "name": "cursorBlock", "kind": "remochi.Radio", "group": "term-cursor", "value": "block", "content": "Block", "onChange": "cursorPicked" },
+            { "name": "cursorBar", "kind": "remochi.Radio", "group": "term-cursor", "value": "bar", "content": "Bar", "onChange": "cursorPicked" },
+            { "name": "cursorUnderline", "kind": "remochi.Radio", "group": "term-cursor", "value": "underline", "content": "Underline", "onChange": "cursorPicked" }
+          ] },
+          { "kind": "pyxis.Control", "tag": "p", "classes": "term-note", "content": "The cursor fills when this window has focus and becomes an outline when it doesn't, like the window controls." },
+
+          { "kind": "remochi.Label", "content": "Bell" },
+          { "kind": "pyxis.Control", "classes": "term-field-column", "attributes": { "role": "radiogroup", "aria-label": "Bell" }, "components": [
+            { "name": "bellLight", "kind": "remochi.Radio", "group": "term-bell", "value": "light", "content": "Light the pane edge", "onChange": "bellPicked" },
+            { "name": "bellSound", "kind": "remochi.Radio", "group": "term-bell", "value": "sound", "content": "Play the Pyxis sound", "onChange": "bellPicked" },
+            { "name": "bellNone", "kind": "remochi.Radio", "group": "term-bell", "value": "none", "content": "Nothing", "onChange": "bellPicked" }
+          ] },
+          { "kind": "pyxis.Control", "tag": "p", "classes": "term-note", "content": "A bell in another session puts a count on its row, whichever you choose." },
+
+          { "kind": "remochi.Label", "content": "Sessions" },
+          { "kind": "pyxis.Control", "classes": "term-field", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "classes": "term-field-name term-field-grow", "content": "Always show the keys" },
+            { "name": "keysToggle", "kind": "remochi.Toggle", "onChange": "keysPicked" }
+          ] },
+          { "kind": "pyxis.Control", "classes": "term-field", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "classes": "term-field-name term-field-grow", "content": "Start in the last folder" },
+            { "name": "lastFolderToggle", "kind": "remochi.Toggle", "onChange": "lastFolderPicked" }
+          ] },
+          { "kind": "pyxis.Control", "classes": "term-field", "components": [
+            { "kind": "pyxis.Control", "tag": "span", "classes": "term-field-name term-field-grow", "content": "Ask before closing a busy session" },
+            { "name": "askToggle", "kind": "remochi.Toggle", "onChange": "askPicked" }
           ] }
         ] }
+      ] },
+
+      { "name": "peek", "kind": "remochi.Repanel", "showing": false, "components": [
+        { "name": "peekHeader", "kind": "remochi.Header", "content": "" }
       ] }
     ] },
-    { "name": "screens", "kind": "Terminal.Screens", "style": "flex:1;min-height:0;min-width:0;padding:8px;position:relative;overflow:hidden", "onCloseTab": "tabExited", "onSetTitle": "titled", "onSetMode": "modeChanged" },
-    { "name": "ribbon", "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:6px;padding:5px 10px;background:var(--mochi-surface, #13141f);border-top:1px solid var(--mochi-border, rgba(255, 255, 255, 0.08));overflow-x:auto;scrollbar-width:none;flex-shrink:0;min-width:0;width:100%;box-sizing:border-box;user-select:none", "components": [
-      { "kind": "pyxis.Control", "style": "display:flex;align-items:center;gap:4px;margin-right:4px;opacity:0.75", "components": [
-        { "kind": "pyxis.Icon", "icon": "Terminal", "size": 12, "color": "var(--mochi-primary, #7aa2f7)" },
-        { "kind": "pyxis.Control", "tag": "span", "content": "Keys", "style": "font-size:9px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--mochi-primary, #7aa2f7)" }
+
+    { "name": "sessionMenu", "kind": "remochi.PopupPanel", "anchor": "sessionButton", "onAction": "sessionMenuAction",
+      "actions": [
+        { "label": "Copy", "action": "copy" },
+        { "label": "Paste", "action": "paste" },
+        { "label": "Clear", "action": "clear" },
+        { "label": "Profile", "action": "profile" },
+        { "label": "Close Session", "action": "close", "type": "warning" }
       ] },
-      { "name": "keys", "kind": "pyxis.Repeater", "itemKind": "Terminal.Key", "keyField": "label", "onSend": "sendQuick",
-        "style": "display:flex;align-items:center;gap:6px" }
+    { "name": "selectionMenu", "kind": "remochi.PopupPanel", "onAction": "sessionMenuAction",
+      "actions": [
+        { "label": "Copy", "action": "copy" },
+        { "label": "Paste", "action": "paste" }
+      ] },
+    { "name": "closeDialog", "kind": "remochi.Dialog", "dialogType": "confirm", "confirmType": "warning", "tone": "warning",
+      "confirmText": "Close Session", "cancelText": "Cancel", "onConfirm": "closeConfirmed", "onCancel": "closeCancelled", "onDismiss": "closeCancelled", "components": [
+      { "name": "closeText", "kind": "pyxis.Control", "tag": "p", "classes": "term-dialog-text" }
     ] }
   ]
 }

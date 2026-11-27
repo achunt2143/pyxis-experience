@@ -2,19 +2,37 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
-import { useEcho, TERMINAL_IFACE, TERMINAL_SIGNALS } from '@pyxis/app-sdk';
+import {
+  useEcho,
+  TERMINAL_IFACE,
+  TERMINAL_SIGNALS,
+  type TerminalClosedPayload,
+  type TerminalStatusPayload,
+} from '@pyxis/app-sdk';
 import { startMockShell } from './mockShell';
 import type { TerminalHub } from './terminalHub';
-import { matchTerminalShortcut, type TabInfo, type TerminalMode } from './model';
+import { matchTerminalShortcut, type CursorShape, type TabInfo, type TerminalMode } from './model';
+import { readTerminalFont, readTerminalTheme, watchTheme } from './terminalTheme';
+
+/** What a session's shell reports: its folder, and its foreground job (null: the shell itself). */
+export type ScreenStatus = Omit<TerminalStatusPayload, 'terminalId'>;
 
 interface SingleTerminalProps {
   tabId: string;
+  /** Where the session's first shell starts (and where Enter restarts an ended one). */
+  cwd?: string;
   isActive: boolean;
   fontSize: number;
+  cursor: CursorShape;
   hub: TerminalHub | null;
-  onCloseTab: (id: string) => void;
+  /** The shell ended; `exitCode` null when Echo didn't say. The chrome decides whether the session stays. */
+  onCloseTab: (id: string, exitCode: number | null) => void;
   onSetTitle: (id: string, title: string) => void;
   onSetMode: (id: string, mode: TerminalMode) => void;
+  onStatus: (id: string, status: ScreenStatus) => void;
+  onBell: (id: string) => void;
+  /** Right-click (or a long press) on a selection: where to point the selection menu. */
+  onSelectionMenu: (id: string, rect: { left: number; top: number; width: number; height: number }) => void;
 }
 
 /**
@@ -28,14 +46,20 @@ interface SingleTerminalProps {
  */
 const SingleTerminal: React.FC<SingleTerminalProps> = ({
   tabId,
+  cwd,
   isActive,
   fontSize,
+  cursor,
   hub,
   onCloseTab,
   onSetTitle,
   onSetMode,
+  onStatus,
+  onBell,
+  onSelectionMenu,
 }) => {
   const echo = useEcho();
+  const startCwdRef = useRef(cwd);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -51,6 +75,7 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
     (force = false) => {
       const tid = terminalIdRef.current;
       const term = termRef.current;
+      if (term) hub?.reportSize(tabId, term.cols, term.rows);
       if (!tid || !term) return;
       const prev = lastSizeRef.current;
       if (force || !prev || prev.cols !== term.cols || prev.rows !== term.rows) {
@@ -58,8 +83,12 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
         void echo.resizeTerminal(tid, term.cols, term.rows);
       }
     },
-    [echo]
+    [echo, hub, tabId]
   );
+
+  useEffect(() => {
+    if (termRef.current) termRef.current.options.cursorStyle = cursor;
+  }, [cursor]);
 
   // Update font size when changed from toolbar
   useEffect(() => {
@@ -96,31 +125,16 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
     const term = new Terminal({
       cursorBlink: true,
       scrollback: 5000,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      fontFamily: readTerminalFont(containerEl),
       fontSize,
-      theme: {
-        background: '#1a1b26',
-        foreground: '#c0caf5',
-        cursor: '#c0caf5',
-        selectionBackground: '#33467c',
-        black: '#15161e',
-        red: '#f7768e',
-        green: '#9ece6a',
-        yellow: '#e0af68',
-        blue: '#7aa2f7',
-        magenta: '#bb9af7',
-        cyan: '#7dcfff',
-        white: '#a9b1d6',
-        brightBlack: '#414868',
-        brightRed: '#f7768e',
-        brightGreen: '#9ece6a',
-        brightYellow: '#e0af68',
-        brightBlue: '#7aa2f7',
-        brightMagenta: '#bb9af7',
-        brightCyan: '#7dcfff',
-        brightWhite: '#c0caf5',
-      },
+      cursorStyle: cursor,
+      // Filled while the window has focus, an outline when it doesn't, like the window controls.
+      cursorInactiveStyle: 'outline',
+      theme: readTerminalTheme(containerEl),
       convertEol: true,
+    });
+    const stopWatchingTheme = watchTheme(containerEl, () => {
+      term.options.theme = readTerminalTheme(containerEl);
     });
 
     // Defer app-level shortcuts to TerminalApp's keydown listener instead of letting xterm emit control chars.
@@ -138,11 +152,21 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
     termRef.current = term;
     fitRef.current = fit;
     hub?.registerTerm(tabId, term);
+    hub?.reportSize(tabId, term.cols, term.rows);
+
+    // A selection's own menu, pointed at where the pointer is.
+    const onContextMenu = (e: MouseEvent) => {
+      if (!term.hasSelection?.()) return;
+      e.preventDefault();
+      onSelectionMenu(tabId, { left: e.clientX, top: e.clientY, width: 1, height: 1 });
+    };
+    containerEl.addEventListener('contextmenu', onContextMenu);
 
     let disposed = false;
     let bellTimer: ReturnType<typeof setTimeout> | undefined;
     const bellDisposable = term.onBell?.(() => {
       if (disposed) return;
+      onBell(tabId);
       setBellActive(true);
       if (bellTimer) clearTimeout(bellTimer);
       bellTimer = setTimeout(() => {
@@ -150,69 +174,97 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
       }, 220);
     });
 
-    let unsubOutput: (() => void) | undefined;
-    let unsubClosed: (() => void) | undefined;
-    let dataDisposable: { dispose?: () => void } | undefined;
+    /** The shell ended with a code the chrome kept the session for: Enter starts it again. */
+    let ended = false;
 
-    const start = async () => {
-      // 1. Subscribe to signals before opening terminal to avoid race conditions
-      unsubOutput = echo.onSignal(TERMINAL_IFACE, TERMINAL_SIGNALS.output, (raw) => {
-        const data = raw as { terminalId?: string; data?: string };
-        if (data.terminalId === terminalIdRef.current && typeof data.data === 'string') {
-          term.write(data.data);
-        }
-      });
+    // Subscribe before opening a shell, so nothing it says first is missed. A session may
+    // open several shells over its life (Enter after one ends), all into this one view.
+    const unsubOutput = echo.onSignal(TERMINAL_IFACE, TERMINAL_SIGNALS.output, (raw) => {
+      const data = raw as { terminalId?: string; data?: string };
+      if (data.terminalId === terminalIdRef.current && typeof data.data === 'string') {
+        term.write(data.data);
+      }
+    });
+    const unsubStatus = echo.onSignal(TERMINAL_IFACE, TERMINAL_SIGNALS.status, (raw) => {
+      const data = raw as TerminalStatusPayload;
+      if (data.terminalId === terminalIdRef.current) onStatus(tabId, { cwd: data.cwd, job: data.job ?? null });
+    });
+    const unsubClosed = echo.onSignal(TERMINAL_IFACE, TERMINAL_SIGNALS.closed, (raw) => {
+      const data = raw as TerminalClosedPayload;
+      if (data.terminalId !== terminalIdRef.current) return;
+      terminalIdRef.current = null;
+      const code = typeof data.exitCode === 'number' ? data.exitCode : null;
+      if (code !== null && code !== 0) {
+        ended = true;
+        term.writeln(`\r\n\x1b[2mThe shell ended with code ${code}. Press Enter to start it again.\x1b[0m`);
+      } else {
+        term.writeln('\r\n\x1b[2mThe shell ended.\x1b[0m');
+      }
+      onCloseTab(tabId, code);
+    });
 
-      unsubClosed = echo.onSignal(TERMINAL_IFACE, TERMINAL_SIGNALS.closed, (raw) => {
-        const data = raw as { terminalId?: string };
-        if (data.terminalId === terminalIdRef.current) {
-          term.writeln('\r\n\x1b[1;33m[process exited]\x1b[0m');
-          onCloseTab(tabId);
-        }
-      });
-
+    const openShell = async (cwd?: string) => {
       let opened: { terminalId: string } | null = null;
       try {
-        opened = await echo.openTerminal(term.cols, term.rows);
+        opened = await echo.openTerminal(term.cols, term.rows, cwd ? { cwd } : {});
       } catch {
         opened = null;
       }
-
       if (disposed) {
-        if (opened?.terminalId) {
-          void echo.closeTerminal(opened.terminalId);
-        }
+        if (opened?.terminalId) void echo.closeTerminal(opened.terminalId);
         return;
       }
-
       if (opened && opened.terminalId) {
-        // Native PTY mode
-        const terminalId = opened.terminalId;
-        terminalIdRef.current = terminalId;
+        terminalIdRef.current = opened.terminalId;
         lastSizeRef.current = { cols: term.cols, rows: term.rows };
         setMode('pty');
         onSetMode(tabId, 'pty');
-
-        dataDisposable = term.onData((data) => {
-          void echo.writeTerminal(terminalId, data);
-        }) as unknown as { dispose?: () => void };
       } else {
-        // Dev / Browser Mock Shell mode (or fallback if openTerminal failed)
+        // Dev / browser: no Echo shell, so the mock one.
         setMode('mock');
         onSetMode(tabId, 'mock');
-        mockInputRef.current = startMockShell(term, tabId, onSetTitle, () => onCloseTab(tabId));
+        mockInputRef.current = startMockShell(
+          term,
+          tabId,
+          onSetTitle,
+          (code) => {
+            // As a PTY's TerminalClosed: a nonzero code keeps the session for Enter to restart.
+            mockInputRef.current = null;
+            if (code !== 0) {
+              ended = true;
+              term.writeln(`\x1b[2mThe shell ended with code ${code}. Press Enter to start it again.\x1b[0m`);
+            }
+            onCloseTab(tabId, code);
+          },
+          (dir, job) => onStatus(tabId, { cwd: dir, job })
+        );
       }
-
-      hub?.registerSendInput(tabId, (data: string) => {
-        if (terminalIdRef.current) {
-          void echo.writeTerminal(terminalIdRef.current, data);
-        } else if (mockInputRef.current) {
-          mockInputRef.current(data);
-        }
-      });
     };
 
-    void start();
+    // What is typed goes to the PTY, or restarts an ended shell; the mock shell reads the
+    // view's keystrokes itself. The keys row (`sendInput`) reaches all three.
+    const typed = (data: string) => {
+      if (terminalIdRef.current) {
+        void echo.writeTerminal(terminalIdRef.current, data);
+        return true;
+      }
+      if (ended) {
+        if (data.includes('\r')) {
+          ended = false;
+          term.writeln('');
+          void openShell(startCwdRef.current);
+        }
+        return true;
+      }
+      return false;
+    };
+    const sendInput = (data: string) => {
+      if (!typed(data)) mockInputRef.current?.(data);
+    };
+    const dataDisposable = term.onData(typed) as unknown as { dispose?: () => void };
+    hub?.registerSendInput(tabId, sendInput);
+
+    void openShell(startCwdRef.current);
 
     const onResize = () => {
       if (!isActiveRef.current) return;
@@ -241,15 +293,18 @@ const SingleTerminal: React.FC<SingleTerminalProps> = ({
 
     return () => {
       disposed = true;
+      stopWatchingTheme();
+      containerEl.removeEventListener('contextmenu', onContextMenu);
       if (bellTimer) clearTimeout(bellTimer);
       bellDisposable?.dispose?.();
       dataDisposable?.dispose?.();
+      unsubStatus();
       hub?.registerTerm(tabId, null);
       hub?.registerSendInput(tabId, null);
       window.removeEventListener('resize', onResize);
       resizeObserver?.disconnect();
-      unsubOutput?.();
-      unsubClosed?.();
+      unsubOutput();
+      unsubClosed();
       if (terminalIdRef.current) {
         void echo.closeTerminal(terminalIdRef.current);
       }
@@ -283,10 +338,14 @@ export interface TerminalScreensProps {
   tabs: readonly TabInfo[];
   activeId: string;
   fontSize: number;
+  cursor: CursorShape;
   hub: TerminalHub | null;
-  onCloseTab: (id: string) => void;
+  onCloseTab: (id: string, exitCode: number | null) => void;
   onSetTitle: (id: string, title: string) => void;
   onSetMode: (id: string, mode: TerminalMode) => void;
+  onStatus: (id: string, status: ScreenStatus) => void;
+  onBell: (id: string) => void;
+  onSelectionMenu: (id: string, rect: { left: number; top: number; width: number; height: number }) => void;
 }
 
 /**
@@ -303,16 +362,26 @@ export const TerminalScreens: React.FC<TerminalScreensProps> = ({
   tabs,
   activeId,
   fontSize,
+  cursor,
   hub,
   onCloseTab,
   onSetTitle,
   onSetMode,
+  onStatus,
+  onBell,
+  onSelectionMenu,
 }) => {
-  const latest = useRef({ onCloseTab, onSetTitle, onSetMode });
+  const latest = useRef({ onCloseTab, onSetTitle, onSetMode, onStatus, onBell, onSelectionMenu });
   useEffect(() => {
-    latest.current = { onCloseTab, onSetTitle, onSetMode };
+    latest.current = { onCloseTab, onSetTitle, onSetMode, onStatus, onBell, onSelectionMenu };
   });
-  const closeTab = useCallback((id: string) => latest.current.onCloseTab(id), []);
+  const selectionMenu = useCallback(
+    (id: string, rect: { left: number; top: number; width: number; height: number }) => latest.current.onSelectionMenu(id, rect),
+    []
+  );
+  const closeTab = useCallback((id: string, code: number | null) => latest.current.onCloseTab(id, code), []);
+  const setStatus = useCallback((id: string, status: ScreenStatus) => latest.current.onStatus(id, status), []);
+  const bell = useCallback((id: string) => latest.current.onBell(id), []);
   const setTitle = useCallback((id: string, title: string) => latest.current.onSetTitle(id, title), []);
   const setMode = useCallback((id: string, mode: TerminalMode) => latest.current.onSetMode(id, mode), []);
 
@@ -322,12 +391,17 @@ export const TerminalScreens: React.FC<TerminalScreensProps> = ({
         <SingleTerminal
           key={tab.id}
           tabId={tab.id}
+          cwd={tab.cwd}
           isActive={tab.id === activeId}
           fontSize={fontSize}
+          cursor={cursor}
           hub={hub}
           onCloseTab={closeTab}
           onSetTitle={setTitle}
           onSetMode={setMode}
+          onStatus={setStatus}
+          onBell={bell}
+          onSelectionMenu={selectionMenu}
         />
       ))}
     </>

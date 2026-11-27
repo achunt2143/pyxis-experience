@@ -3,40 +3,72 @@ import type { Component, ComponentEvent, Instance, ViewComponent } from '@duyojs
 
 /** `this.$` in the code-behind: every named component in the spec. */
 export type Named = {
+  /** remochi.RepanelStack */
+  stack: Instance<"remochi.RepanelStack">;
+  /** remochi.Repanel */
+  sessionsPanel: Instance<"remochi.Repanel">;
+  /** remochi.Subheader */
+  summary: Instance<"remochi.Subheader">;
   /** pyxis.Repeater */
-  tabStrip: Instance<"pyxis.Repeater">;
-  /** pyxis.Control */
-  newTabBtn: Instance<"pyxis.Control">;
-  /** pyxis.Control */
-  modeBadge: Instance<"pyxis.Control">;
+  sessionList: Instance<"pyxis.Repeater">;
+  /** remochi.Label */
+  recentLabel: Instance<"remochi.Label">;
+  /** pyxis.Repeater */
+  recentList: Instance<"pyxis.Repeater">;
   /** remochi.Button */
-  keysButton: Instance<"remochi.Button">;
-  /** pyxis.Icon */
-  keysIcon: Instance<"pyxis.Icon">;
-  /** pyxis.Control */
-  keysLabel: Instance<"pyxis.Control">;
-  /** remochi.Button */
-  copyButton: Instance<"remochi.Button">;
-  /** remochi.Button */
-  pasteButton: Instance<"remochi.Button">;
-  /** remochi.Button */
-  clearButton: Instance<"remochi.Button">;
-  /** remochi.Button */
-  zoomOutBtn: Instance<"remochi.Button">;
-  /** pyxis.Control */
-  sizeLabel: Instance<"pyxis.Control">;
-  /** remochi.Button */
-  zoomInBtn: Instance<"remochi.Button">;
+  newButton: Instance<"remochi.Button">;
+  /** remochi.Repanel */
+  screenPanel: Instance<"remochi.Repanel">;
+  /** remochi.Header */
+  screenHeader: Instance<"remochi.Header">;
+  /** remochi.Subheader */
+  screenSub: Instance<"remochi.Subheader">;
   /** Terminal.Screens */
   screens: Instance<"Terminal.Screens">;
-  /** pyxis.Control */
-  ribbon: Instance<"pyxis.Control">;
   /** pyxis.Repeater */
   keys: Instance<"pyxis.Repeater">;
+  /** remochi.Button */
+  sessionButton: Instance<"remochi.Button">;
+  /** remochi.Repanel */
+  profilePanel: Instance<"remochi.Repanel">;
+  /** remochi.Slider */
+  sizeSlider: Instance<"remochi.Slider">;
+  /** pyxis.Control */
+  sizeValue: Instance<"pyxis.Control">;
+  /** remochi.Radio */
+  cursorBlock: Instance<"remochi.Radio">;
+  /** remochi.Radio */
+  cursorBar: Instance<"remochi.Radio">;
+  /** remochi.Radio */
+  cursorUnderline: Instance<"remochi.Radio">;
+  /** remochi.Radio */
+  bellLight: Instance<"remochi.Radio">;
+  /** remochi.Radio */
+  bellSound: Instance<"remochi.Radio">;
+  /** remochi.Radio */
+  bellNone: Instance<"remochi.Radio">;
+  /** remochi.Toggle */
+  keysToggle: Instance<"remochi.Toggle">;
+  /** remochi.Toggle */
+  lastFolderToggle: Instance<"remochi.Toggle">;
+  /** remochi.Toggle */
+  askToggle: Instance<"remochi.Toggle">;
+  /** remochi.Repanel */
+  peek: Instance<"remochi.Repanel">;
+  /** remochi.Header */
+  peekHeader: Instance<"remochi.Header">;
+  /** remochi.PopupPanel */
+  sessionMenu: Instance<"remochi.PopupPanel">;
+  /** remochi.PopupPanel */
+  selectionMenu: Instance<"remochi.PopupPanel">;
+  /** remochi.Dialog */
+  closeDialog: Instance<"remochi.Dialog">;
+  /** pyxis.Control */
+  closeText: Instance<"pyxis.Control">;
 };
 
 /** Handlers the spec names. The code-behind must implement every one. */
-export type Handlers = 'clearActive' | 'closeTab' | 'copyActive' | 'modeChanged' | 'newTab' | 'pasteActive' | 'pickTab' | 'sendQuick' | 'setupTab' | 'tabExited' | 'titled' | 'toggleRibbon' | 'zoomIn' | 'zoomOut';
+export type Handlers = 'askPicked' | 'bellPicked' | 'bellRang' | 'closeCancelled' | 'closeConfirmed' | 'cursorPicked' | 'keysPicked' | 'lastFolderPicked' | 'modeChanged' | 'newSession' | 'openSessionMenu' | 'panelMoved' | 'peekOpened' | 'pickSession' | 'selectionMenu' | 'sendQuick' | 'sessionMenuAction' | 'setupRow' | 'shellEnded' | 'sizePicked' | 'startIn' | 'statusChanged' | 'titled';
 
 /** `this` inside the code-behind. */
 export type Self = ViewComponent<Named>;

@@ -13,15 +13,33 @@ import type { Terminal } from '@xterm/xterm';
 export class TerminalHub {
   private readonly terms = new Map<string, Terminal>();
   private readonly senders = new Map<string, (data: string) => void>();
+  private readonly sizes = new Map<string, { cols: number; rows: number }>();
+  /** Set by the chrome: a session's grid changed size (its Subheader says it). */
+  onResize: ((id: string, cols: number, rows: number) => void) | null = null;
 
   registerTerm(id: string, term: Terminal | null): void {
     if (term) this.terms.set(id, term);
-    else this.terms.delete(id);
+    else {
+      this.terms.delete(id);
+      this.sizes.delete(id);
+    }
   }
 
   registerSendInput(id: string, send: ((data: string) => void) | null): void {
     if (send) this.senders.set(id, send);
     else this.senders.delete(id);
+  }
+
+  /** A view's grid is now `cols` × `rows`. */
+  reportSize(id: string, cols: number, rows: number): void {
+    const prev = this.sizes.get(id);
+    if (prev && prev.cols === cols && prev.rows === rows) return;
+    this.sizes.set(id, { cols, rows });
+    this.onResize?.(id, cols, rows);
+  }
+
+  size(id: string): { cols: number; rows: number } | undefined {
+    return this.sizes.get(id);
   }
 
   focus(id: string): void {

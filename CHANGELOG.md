@@ -12,12 +12,25 @@ need the matching Evo, Echo and vela bridge entries from that changelog.
 
 ### SDK (`@pyxis/app-sdk`)
 
+#### Added
+- Terminal session status: `TERMINAL_SIGNALS.status` (`TerminalStatus {terminalId, cwd, job}`), the `TerminalStatusPayload` and `TerminalClosedPayload` types (`exitCode` on `TerminalClosed`), and `openTerminal(cols, rows, { cwd })`. Needs the matching Echo change and a vela rebuild for the bridge allowlist.
+
 #### Changed
 - Amber means "on" in every app. `appAccentTokens` (so `createPyxisPacks` and `AppShell`) now sets `--px-accent` only, not `--mochi-accent` / `--mochi-accent-soft`; since Remochi 0.5 those had turned every app's Toggle, Radio and Checkbox "on" into the app's colour (Notes yellow, Tasks purple) instead of Remochi's amber `--mochi-selected`. Controls follow the design system's colours; the app colour stays available to shell-side code as `--px-accent`.
 
 ### Apps
 
 #### Changed
+- Terminal is rebuilt on Remochi (`docs/terminal-makeover-plan.md`):
+  - Sessions, not tabs. A `RepanelStack` holds a Sessions pane (a numbered row per shell with its folder, its job and a state word: Running after 2 s, Done, Exited N, a bell count; "Start In" recent folders; `( New Session )`), the active session's pane (its folder as the nameplate, a Subheader with folder, shell and size, the keys row and `( Session ⌄ )` at the bottom), and Profile.
+  - A session whose job finished while you were elsewhere waits as the right-hand peek.
+  - The shell's exit code decides: 0 closes the session, any other code keeps it ("The shell ended with code N. Press Enter to start it again.").
+  - Closing a session with a running job asks first.
+  - Mochi ANSI colours (`--term-*` in `terminal.css`, 4.5:1 or more on the pane in both themes) replace the Tokyo Night theme. The screen follows `pyxis.theme`; the forced dark default is gone. The cursor is filled with focus and an outline without, and the face is the system monospace.
+  - A bell lights the pane edge in the Terminal green, plays the notification sound, or does nothing (Profile); in another session it counts on the row.
+  - Profile (text size, cursor, bell, keys, start in the last folder, ask before closing) and recent folders are saved in the app's store.
+  - The keys row is Remochi Buttons, shown on touch or narrow windows or from Profile. The mock shell gains `cd`, `sleep` and `exit N`.
+  - Removed: the tab strip, the icon toolbar and the PTY / Mock badge.
 - Remochi 0.6.0. Notes, Contacts, Files, Settings and Tasks set `keepPast: false` on their `RepanelStack` to keep today's single front panel (0.6 defaults it on, and the peeking panel then draws only a direct `Header`).
 
 ## [0.1.0-alpha.5] - 2026-11-16

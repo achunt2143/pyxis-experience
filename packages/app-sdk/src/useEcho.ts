@@ -60,7 +60,22 @@ export const TERMINAL_IFACE = 'org.geckoOS.terminal';
 export const TERMINAL_SIGNALS = {
   output: 'TerminalOutput',
   closed: 'TerminalClosed',
+  status: 'TerminalStatus',
 } as const;
+
+/** `TerminalClosed`: the shell ended. `exitCode` is 128 + signal for a killed shell, null when unknown. */
+export interface TerminalClosedPayload {
+  terminalId: string;
+  exitCode?: number | null;
+}
+
+/** `TerminalStatus`: sent on open and whenever the shell's folder or foreground job changes. */
+export interface TerminalStatusPayload {
+  terminalId: string;
+  cwd: string;
+  /** The foreground job, or null while the shell itself is in front. */
+  job: { pid: number; command: string } | null;
+}
 
 /**
  * useEcho
@@ -357,12 +372,17 @@ export function useEcho() {
 
       // ---------- Terminal (real PTY-backed shell, echo/src/services/terminal.rs) ----------
 
-      async openTerminal(cols = 80, rows = 24): Promise<{ terminalId: string } | null> {
+      /** `cwd` is where the shell starts; Echo falls back to home if the session user can't enter it. */
+      async openTerminal(
+        cols = 80,
+        rows = 24,
+        options: { cwd?: string } = {}
+      ): Promise<{ terminalId: string } | null> {
         const res = (await echoClient.callMethod(
           TERMINAL_SERVICE,
           TERMINAL_IFACE,
           'Open',
-          { cols, rows }
+          options.cwd ? { cols, rows, cwd: options.cwd } : { cols, rows }
         )) as { terminalId: string } | undefined;
         return res && res.terminalId ? res : null;
       },

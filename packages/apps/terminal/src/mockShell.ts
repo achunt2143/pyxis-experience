@@ -11,10 +11,20 @@ export function startMockShell(
   term: Terminal,
   tabId: string,
   onSetTitle: (id: string, title: string) => void,
-  onExit: () => void
+  onExit: (exitCode: number) => void,
+  onStatus: (cwd: string, job: { pid: number; command: string } | null) => void = () => {}
 ): (data: string) => void {
-  const promptVisible = '\x1b[1;32mgeckouser@pyxis\x1b[0m:\x1b[1;34m~\x1b[0m$ ';
-  const prompt = `\r\n${promptVisible}`;
+  const HOME = '/home/geckouser';
+  /** False once `exit` has run: this shell reads nothing more (Enter may start another). */
+  let alive = true;
+  let cwd = HOME;
+  /** A `sleep` in front: input waits until it finishes, as a real foreground job would. */
+  let busy = false;
+  let nextPid = 4000;
+  const shownCwd = () => (cwd === HOME ? '~' : cwd.startsWith(HOME + '/') ? '~' + cwd.slice(HOME.length) : cwd);
+  const promptFor = () => `\x1b[1;32mgeckouser@pyxis\x1b[0m:\x1b[1;34m${shownCwd()}\x1b[0m$ `;
+  let promptVisible = promptFor();
+  let prompt = `\r\n${promptVisible}`;
   let chars: string[] = [];
   let cursor = 0;
   const history: string[] = [];
@@ -23,6 +33,7 @@ export function startMockShell(
   term.writeln('\x1b[1;36mPyxis Terminal\x1b[0m (interactive dev mock shell)');
   term.writeln('Type \x1b[1mhelp\x1b[0m for available commands.\r\n');
   term.write(promptVisible);
+  onStatus(cwd, null);
 
   const redrawLine = () => {
     const line = chars.join('');
@@ -57,7 +68,9 @@ export function startMockShell(
         term.writeln('  ps         - List active system processes');
         term.writeln('  neofetch   - Display Pyxis OS summary & ASCII logo');
         term.writeln('  clear      - Clear terminal screen');
-        term.writeln('  exit       - Close this terminal tab');
+        term.writeln('  cd <dir>   - Change directory');
+        term.writeln('  sleep <s>  - Wait, as a foreground job');
+        term.writeln('  exit [n]   - End this shell with code n');
         break;
       case 'uname':
         term.writeln('\r\nLinux pyxis 6.6.0-gecko #1 SMP PREEMPT x86_64 GNU/Linux');
@@ -66,8 +79,34 @@ export function startMockShell(
         term.writeln('\r\ngeckouser');
         break;
       case 'pwd':
-        term.writeln('\r\n/home/geckouser');
+        term.writeln(`\r\n${cwd}`);
         break;
+      case 'cd': {
+        const target = args[0] ?? '~';
+        const joined = target === '~' ? HOME : target.startsWith('~/') ? HOME + target.slice(1) : target.startsWith('/') ? target : `${cwd}/${target}`;
+        const parts: string[] = [];
+        for (const part of joined.split('/')) {
+          if (part === '' || part === '.') continue;
+          if (part === '..') parts.pop();
+          else parts.push(part);
+        }
+        cwd = '/' + parts.join('/');
+        promptVisible = promptFor();
+        prompt = `\r\n${promptVisible}`;
+        onStatus(cwd, null);
+        break;
+      }
+      case 'sleep': {
+        const seconds = Math.max(0, Number(args[0]) || 0);
+        busy = true;
+        onStatus(cwd, { pid: nextPid++, command: trimmed });
+        setTimeout(() => {
+          busy = false;
+          onStatus(cwd, null);
+          term.write(prompt);
+        }, seconds * 1000);
+        return;
+      }
       case 'date':
         term.writeln(`\r\n${new Date().toUTCString()}`);
         break;
@@ -111,7 +150,8 @@ export function startMockShell(
         return;
       case 'exit':
         term.writeln('\r\nexit');
-        onExit();
+        alive = false;
+        onExit(Number(args[0]) || 0);
         return;
       default:
         term.writeln(`\r\nbash: ${command}: command not found`);
@@ -121,6 +161,7 @@ export function startMockShell(
   };
 
   const handleInput = (data: string) => {
+    if (busy || !alive) return;
     let i = 0;
     while (i < data.length) {
       if (data[i] === '\x1b') {
@@ -239,7 +280,8 @@ export function startMockShell(
       if (ch === '\u0004') {
         if (chars.length === 0) {
           term.writeln('exit');
-          onExit();
+          alive = false;
+          onExit(0);
           return;
         }
         continue;

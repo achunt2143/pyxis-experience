@@ -2,5 +2,5 @@ import { mountDuyoApp } from '@pyxis/app-sdk/duyo';
 import './TerminalApp';
 import { terminalPack } from './pack';
 
-// Terminal defaults to the dark theme — a light terminal is a war crime.
-mountDuyoApp('Terminal.App', { defaultTheme: 'dark', packs: [terminalPack] });
+// Follows pyxis.theme like every app; the screen's Mochi ANSI colours have both themes.
+mountDuyoApp('Terminal.App', { packs: [terminalPack] });
