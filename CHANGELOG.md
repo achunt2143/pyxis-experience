@@ -8,6 +8,18 @@ The compositor, bus, Nova, vela patches and image live in the sibling repo; see
 [`../geckos/CHANGELOG.md`](../geckos/CHANGELOG.md). Many shell features here
 need the matching Evo, Echo and vela bridge entries from that changelog.
 
+## [Unreleased]
+
+### SDK (`@pyxis/app-sdk`)
+
+#### Changed
+- Amber means "on" in every app. `appAccentTokens` (so `createPyxisPacks` and `AppShell`) now sets `--px-accent` only, not `--mochi-accent` / `--mochi-accent-soft`; since Remochi 0.5 those had turned every app's Toggle, Radio and Checkbox "on" into the app's colour (Notes yellow, Tasks purple) instead of Remochi's amber `--mochi-selected`. Controls follow the design system's colours; the app colour stays available to shell-side code as `--px-accent`.
+
+### Apps
+
+#### Changed
+- Remochi 0.6.0. Notes, Contacts, Files, Settings and Tasks set `keepPast: false` on their `RepanelStack` to keep today's single front panel (0.6 defaults it on, and the peeking panel then draws only a direct `Header`).
+
 ## [0.1.0-alpha.5] - 2026-11-16
 
 ### Shell (Bloom)

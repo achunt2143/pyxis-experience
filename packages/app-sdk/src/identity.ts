@@ -362,9 +362,12 @@ export function resolveAppAccent(
 }
 
 /**
- * Build the `ThemeWrapper` `tokens` map for an app's accent (`--px-accent`,
- * `--mochi-accent`, `--mochi-accent-soft`). Deliberately does not override
- * `--mochi-primary` (Notes' `#eab308` on white fails text contrast).
+ * Build the `ThemeWrapper` `tokens` map for an app's accent: `--px-accent`
+ * only. Deliberately does not override `--mochi-accent` (since Remochi 0.5 the
+ * "on" of every Toggle, Radio and Checkbox is amber `--mochi-selected`, and the
+ * sky-blue `--mochi-accent` marks interaction; an app colour there would turn
+ * every "on" into that app's colour) nor `--mochi-primary` (Notes' `#eab308`
+ * on white fails text contrast).
  */
 export function appAccentTokens(
   accent?: string | null,
@@ -374,8 +377,6 @@ export function appAccentTokens(
   if (!resolved) return undefined;
   return {
     '--px-accent': resolved,
-    '--mochi-accent': resolved,
-    '--mochi-accent-soft': rgba(hexToRgb(resolved), 0.16, true),
   };
 }
 

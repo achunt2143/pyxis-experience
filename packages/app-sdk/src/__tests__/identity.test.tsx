@@ -10,6 +10,7 @@ import {
   cornerCss,
   materialBases,
   paletteMean,
+  appAccentTokens,
   resolveAppAccent,
   shellTint,
   waterdrop,
@@ -200,6 +201,15 @@ describe('font weight, accents, and accessibility attributes', () => {
       installer: '#ea580c',
     });
     expect(resolveAppAccent(undefined, 'browser-window')).toBe('#0284c7');
+  });
+
+  it('appAccentTokens sets --px-accent only, so Remochi keeps amber for "on" and sky blue for interaction', () => {
+    expect(appAccentTokens(undefined, 'notes')).toEqual({ '--px-accent': '#eab308' });
+    expect(appAccentTokens('#7C3AED')).toEqual({ '--px-accent': '#7c3aed' });
+    expect(appAccentTokens(undefined, 'unknown-app')).toBeUndefined();
+    for (const id of Object.keys(BUILTIN_APP_ACCENTS)) {
+      expect(Object.keys(appAccentTokens(undefined, id)!)).toEqual(['--px-accent']);
+    }
   });
 
   it('usePyxisAccessibility syncs accessibility traits including cursorSize onto root and body', async () => {
